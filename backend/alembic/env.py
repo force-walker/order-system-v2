@@ -3,6 +3,7 @@ from __future__ import annotations
 from logging.config import fileConfig
 import os
 
+from dotenv import load_dotenv
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
@@ -13,6 +14,9 @@ config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Load backend/.env automatically when running Alembic from backend directory.
+load_dotenv()
 
 if os.getenv("DATABASE_URL"):
     config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL"))
