@@ -37,3 +37,4 @@
 - `.env` must never be committed.
 - `.env.example` should keep only non-secret sample values.
 - Branch protection and review rules are enforced on `main`.
+\n- protection check PR created on 2026-03-24
