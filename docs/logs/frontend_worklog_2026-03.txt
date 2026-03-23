@@ -1,0 +1,25 @@
+# frontend_worklog_2026-03
+Channel: #04-frontend
+Purpose: 時系列の作業ログ（詳細）。確定事項は docs/decision_logs.txt に転記。
+
+## 2026-03-20
+
+[2026-03-20][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - Frontend初期実装（React + Vite + TS）
+  - 受注一覧 / 詳細 / 作成編集の3画面をモックAPIで接続
+  - loading / empty / error / success 状態UIを実装
+  - UI案（Invoice / OrderInput）を参考に情報設計を再構成
+  - `/invoices/:id` を追加（Invoice Lines / 合計 / ステータス遷移）
+  - 明細データ構造を拡張（qty / uom / unitPrice / discount / tax / unitCost）
+  - 伝票レベル税計算（floor）を実装
+  - Profit margin（内部閲覧用）表示を追加（粗利額・粗利率）
+- 明日やること:
+  - API実接続への切り替え準備
+  - E2E観点で画面遷移とバリデーション再確認
+- ブロッカー:
+  - `npm run dev` の表示URLが環境によって到達不可になるケースあり（`--host 0.0.0.0 --port 4173`で回避）
+
+参照:
+- #04-frontend

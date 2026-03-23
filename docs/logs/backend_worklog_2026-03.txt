@@ -1,0 +1,121 @@
+# backend_worklog_2026-03
+Channel: #03-backend-api
+Purpose: 時系列の作業ログ（詳細）。確定事項は docs/decision_logs.txt に転記。
+
+## 2026-03-18
+
+### 00:49 JST+8 ログ開始（OpenClawBot）
+- `docs/logs/backend_worklog_2026-03.txt` を新規作成。
+- #03-backend-api の作業履歴をこのファイルで継続記録する。
+
+---
+記法メモ:
+[YYYY-MM-DD HH:MM] actor: summary
+- detail
+- detail
+
+[2026-03-18][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - APIプレフィックスを /api/v1 に統一
+  - MVP v2準拠でEnum/モデル/ルートを整合（order/invoice/allocation）
+  - order bulk-transition、invoice finalize/reset-to-draft/unlock 実装
+  - エラーレスポンスを {code,message} 形式に統一
+  - OpenAPI関連ドキュメント（skeleton/error-codes）を実装に同期
+  - P0対応: JWT認証（login/refresh/logout/me）実装
+  - P0対応: version列追加＋楽観ロック（409 VERSION_CONFLICT）実装
+  - P0対応: purchase-results API（create/update/bulk-upsert）実装
+  - P0対応: 最小OpenAPI契約テスト追加、READMEにmigration順/検証手順を追記
+- 明日やること:
+  - P1着手（DB制約/インデックス見直し、監査ログ参照API、Master API拡張）
+  - 契約テストを増強（主要エンドポイントのrequest/response/error網羅）
+  - ローカルでpytest実行環境を整備してテスト実行結果を固定化
+- ブロッカー:
+  - 現環境で pytest 未導入（`python3 -m pytest` が No module named pytest）
+
+BUG候補:
+- なし / あり（概要）:
+  - あり（軽微）: 一部ドキュメント/実装でHTTPエラーコード命名の粒度差が残る可能性
+- 再現手順（簡易）:
+  - OpenAPI draft と runtime のエラーcode一覧を突合すると差分が出るケースあり
+- 影響範囲（簡易）:
+  - 仕様レビュー/QA観点（実行時APIは動作、主にドキュメント整合）
+
+参照:
+- スレッド/メッセージURL
+  - #03-backend（本スレッド）
+  - 主要コミット: 54567d6, 3c348ab, 10b2e8b, 52cc271, e1d2fa1
+
+### 01:08 JST+8 ログ更新（OpenClawBot）
+- #08-progress-daily 共有内容を backend worklog として反映済みであることを確認。
+- ブロッカー表記を整形:
+  - 現環境で pytest 未導入（`python3 -m pytest` が `No module named pytest`）
+
+## 2026-03-19
+
+### 09:52 JST+8 進捗記載依頼を反映（OpenClawBot）
+- Kojiからの依頼により、03-backendログへの進捗記載を開始。
+- 当日分テンプレートを先行で作成（詳細は随時追記）。
+
+[2026-03-19][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - Batch再試行の安全化を実装（failedのみ、retry上限、最新attemptのみ）
+  - retry運用導線を整備（`POST /api/v1/batch/jobs/{task_id}/retry` ガード強化、README更新）
+  - `/metrics` 追加（APIリクエスト総数、batch enqueue/retryカウンター）
+  - E2Eテスト追加（enqueue→worker→history更新→retry拒否、retry上限超過ケース）
+  - Prometheus/Alertmanagerテンプレ追加（rule/scrape/receiver例）
+- 明日やること:
+  - API latencyヒストグラム（P95/P99）を追加
+  - アラートにlatency閾値を追加
+  - 必要ならbatch失敗時の手動運用runbookを追記
+- ブロッカー:
+  - pytest実行環境の未整備（環境により `python3 -m pytest` が未導入のケースあり）
+
+BUG候補:
+- なし / あり（概要）:
+  - あり（軽微）: AlertmanagerのDiscord通知はbridge URL差し替え前提
+- 再現手順（簡易）:
+  - `alerts/alertmanager.example.yml` のURLを未設定のまま運用すると通知が届かない
+- 影響範囲（簡易）:
+  - 監視通知運用のみ（API本体には影響なし）
+
+参照:
+- スレッド/メッセージURL
+  - #03-backend
+  - 主要コミット: 39cd2b9, f5f763c, 3512d46, 2a565f6, 3439d4b
+
+## 2026-03-20
+
+### 00:13 JST+8 ログ更新依頼を反映（OpenClawBot）
+- Kojiからの「backend log text file update」依頼を受領。
+- 03-19分の進捗詳細をログへ確定反映。
+
+[2026-03-20][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - API latencyヒストグラムを実装（`order_system_api_request_duration_seconds`）
+  - p95/p99 latencyアラートを追加（`OrderSystemApiLatencyP95High` / `OrderSystemApiLatencyP99High`）
+  - CIをbranch protection向けに分割（`backend-lint` / `backend-schema` / `backend-test`）
+  - OpenAPI同期チェックを強化（paths + 主要schema + error code enum + 主要endpoint status code）
+  - Batch実行結果メトリクスを追加（`order_system_batch_task_executions_total`）
+  - Batch失敗/再試行スパイクアラートを追加（`OrderSystemBatchTaskFailureSpike` / `OrderSystemBatchTaskRetryingSpike`）
+- 明日やること:
+  - Grafanaダッシュボード雛形（JSON）追加
+  - 監視ルールのしきい値調整（実トラフィックに合わせる）
+  - CIのOpenAPI同期チェックを主要schemaの型差分まで拡張
+- ブロッカー:
+  - なし（軽微: AlertmanagerのDiscord通知はbridge URL設定が必要）
+
+BUG候補:
+- なし / あり（概要）:
+  - あり（軽微）: docsとruntimeの将来ドリフト余地（CIで検知は開始済み）
+- 再現手順（簡易）:
+  - docs更新漏れ状態でPRを作ると `backend-schema` ジョブで失敗
+- 影響範囲（簡易）:
+  - 開発フロー（CI）中心、ランタイムAPI影響はなし
+
+参照:
+- スレッド/メッセージURL
+  - #03-backend
+  - 主要コミット: `9179de2`, `faf8e95`, `f2ef347`, `8ca405d`, `102020e`, `98c26c8`

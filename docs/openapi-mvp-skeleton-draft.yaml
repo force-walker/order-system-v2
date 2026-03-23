@@ -1,0 +1,838 @@
+openapi: 3.0.3
+info:
+  title: Order System MVP API Skeleton
+  version: 0.2.0
+  description: |
+    Skeleton-level OpenAPI for current MVP runtime.
+    Error responses are standardized via shared ErrorResponse schema/codes.
+
+servers:
+  - url: https://api.example.com
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+      required: [status]
+
+    IdResponse:
+      type: object
+      properties:
+        id: { type: integer }
+      required: [id]
+
+    ProductCreateRequest:
+      type: object
+      required: [sku, name, order_uom, purchase_uom, invoice_uom]
+      properties:
+        sku: { type: string }
+        name: { type: string }
+        order_uom: { type: string }
+        purchase_uom: { type: string }
+        invoice_uom: { type: string }
+        is_catch_weight: { type: boolean, default: false }
+        weight_capture_required: { type: boolean, default: false }
+        pricing_basis_default: { type: string, enum: [uom_count, uom_kg], default: uom_count }
+
+    ProductUpdateRequest:
+      type: object
+      required: [version]
+      properties:
+        name: { type: string }
+        order_uom: { type: string }
+        purchase_uom: { type: string }
+        invoice_uom: { type: string }
+        is_catch_weight: { type: boolean }
+        weight_capture_required: { type: boolean }
+        active: { type: boolean }
+        version: { type: integer, minimum: 1 }
+
+    ProductResponse:
+      type: object
+      required: [id, sku, name, active, version]
+      properties:
+        id: { type: integer }
+        sku: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+        version: { type: integer }
+
+    CustomerCreateRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        active: { type: boolean, default: true }
+
+    CustomerUpdateRequest:
+      type: object
+      required: [version]
+      properties:
+        name: { type: string }
+        active: { type: boolean }
+        version: { type: integer, minimum: 1 }
+
+    CustomerResponse:
+      type: object
+      required: [id, code, name, active, version]
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+        version: { type: integer }
+
+    OrderBulkTransitionRequest:
+      type: object
+      required: [from_status, to_status, version]
+      properties:
+        from_status:
+          type: string
+          enum: [confirmed, allocated, purchased, shipped]
+        to_status:
+          type: string
+          enum: [allocated, purchased, shipped, invoiced]
+        version: { type: integer, minimum: 1 }
+
+    OrderBulkTransitionResponse:
+      type: object
+      required: [order_id, updated_lines, updated_order_status]
+      properties:
+        order_id: { type: integer }
+        updated_lines: { type: integer }
+        updated_order_status:
+          type: string
+          enum: [allocated, purchased, shipped, invoiced]
+
+    AllocationOverrideRequest:
+      type: object
+      required: [final_supplier_id, final_qty, final_uom, override_reason_code, overridden_by, version]
+      properties:
+        final_supplier_id: { type: integer }
+        final_qty: { type: number }
+        final_uom: { type: string }
+        override_reason_code: { type: string }
+        override_note: { type: string }
+        overridden_by: { type: string }
+        version: { type: integer, minimum: 1 }
+
+    AllocationSplitRequest:
+      type: object
+      required: [parts, override_reason_code, overridden_by, version]
+      properties:
+        parts:
+          type: array
+          minItems: 2
+          items:
+            type: object
+            required: [final_supplier_id, final_qty, final_uom]
+            properties:
+              final_supplier_id: { type: integer }
+              final_qty: { type: number }
+              final_uom: { type: string }
+        override_reason_code: { type: string }
+        override_note: { type: string }
+        overridden_by: { type: string }
+        version: { type: integer, minimum: 1 }
+
+    PurchaseResultRequest:
+      type: object
+      required: [allocation_id, purchased_qty, purchased_uom, result_status, version]
+      properties:
+        allocation_id: { type: integer }
+        supplier_id: { type: integer }
+        purchased_qty: { type: number }
+        purchased_uom: { type: string }
+        actual_weight_kg: { type: number }
+        unit_cost: { type: number }
+        final_unit_cost: { type: number }
+        result_status:
+          type: string
+          enum: [not_filled, filled, partially_filled, substituted]
+        shortage_qty: { type: number }
+        shortage_policy:
+          type: string
+          enum: [backorder, cancel, substitute, split]
+        invoiceable_flag: { type: boolean, default: true }
+        note: { type: string }
+        version: { type: integer, minimum: 1 }
+
+    PurchaseResultBulkUpsertRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PurchaseResultRequest'
+
+    PurchaseResultResponse:
+      type: object
+      required: [id, allocation_id, result_status, version]
+      properties:
+        id: { type: integer }
+        allocation_id: { type: integer }
+        result_status: { type: string }
+        version: { type: integer }
+
+    InvoiceResetRequest:
+      type: object
+      required: [version, reset_reason_code]
+      properties:
+        version: { type: integer, minimum: 1 }
+        reset_reason_code:
+          type: string
+          enum: [data_error, pricing_error, tax_error, customer_change, policy_exception]
+        reason_note: { type: string, maxLength: 500 }
+
+    InvoiceUnlockRequest:
+      type: object
+      required: [version, unlock_reason_code]
+      properties:
+        version: { type: integer, minimum: 1 }
+        unlock_reason_code:
+          type: string
+          enum: [pricing_correction, quantity_correction, tax_correction, customer_request, data_fix, other]
+        reason_note: { type: string, maxLength: 500 }
+
+    InvoiceFinalizeResponse:
+      type: object
+      required: [invoice_id, status, is_locked]
+      properties:
+        invoice_id: { type: integer }
+        status: { type: string, enum: [finalized] }
+        is_locked: { type: boolean }
+
+    InvoiceResetResponse:
+      type: object
+      required: [invoice_id, status]
+      properties:
+        invoice_id: { type: integer }
+        status: { type: string, enum: [draft] }
+
+    InvoiceUnlockResponse:
+      type: object
+      required: [invoice_id, status, is_locked]
+      properties:
+        invoice_id: { type: integer }
+        status: { type: string, enum: [finalized] }
+        is_locked: { type: boolean }
+
+    AuditLogItem:
+      type: object
+      required: [id, entity_type, entity_id, action, changed_by, changed_at]
+      properties:
+        id: { type: integer }
+        entity_type: { type: string }
+        entity_id: { type: integer }
+        action: { type: string }
+        reason_code: { type: string, nullable: true }
+        changed_by: { type: string }
+        changed_at: { type: string, format: date-time }
+        before_json: { type: object, nullable: true, additionalProperties: true }
+        after_json: { type: object, nullable: true, additionalProperties: true }
+
+    AuditLogListResponse:
+      type: object
+      required: [items, count]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogItem'
+        count: { type: integer }
+
+    LoginRequest:
+      type: object
+      required: [user_id, role]
+      properties:
+        user_id: { type: string }
+        role: { type: string, enum: [admin, order_entry, buyer, supplier, customer] }
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+
+    TokenResponse:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, example: bearer }
+        expires_in: { type: integer }
+
+    MeResponse:
+      type: object
+      required: [user_id, role]
+      properties:
+        user_id: { type: string }
+        role: { type: string }
+
+
+
+    ProcurementRegenerationRequest:
+      type: object
+      required: [order_id]
+      properties:
+        order_id: { type: integer, minimum: 1 }
+
+    JobEnqueueResponse:
+      type: object
+      required: [task_id, status, retry_count]
+      properties:
+        task_id: { type: string }
+        status: { type: string }
+        retry_count: { type: integer }
+
+    JobStatusResponse:
+      type: object
+      required: [task_id, status, retry_count, max_retries]
+      properties:
+        task_id: { type: string }
+        status: { type: string }
+        result: { type: object, nullable: true, additionalProperties: true }
+        error_message: { type: string, nullable: true }
+        retry_count: { type: integer }
+        max_retries: { type: integer }
+
+    JobHistoryItem:
+      type: object
+      required: [task_id, job_type, status, requested_by, requested_at, retry_count, max_retries]
+      properties:
+        task_id: { type: string }
+        parent_task_id: { type: string, nullable: true }
+        job_type: { type: string }
+        order_id: { type: integer, nullable: true }
+        status: { type: string }
+        requested_by: { type: string }
+        requested_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+        retry_count: { type: integer }
+        max_retries: { type: integer }
+
+    JobHistoryListResponse:
+      type: object
+      required: [items, count]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobHistoryItem'
+        count: { type: integer }
+
+    ErrorResponse:
+      $ref: ./openapi-error-components-draft.yaml#/components/schemas/ErrorResponse
+
+  responses:
+    BadRequest: { $ref: ./openapi-error-components-draft.yaml#/components/responses/BadRequest }
+    Unauthorized: { $ref: ./openapi-error-components-draft.yaml#/components/responses/Unauthorized }
+    Forbidden: { $ref: ./openapi-error-components-draft.yaml#/components/responses/Forbidden }
+    NotFound: { $ref: ./openapi-error-components-draft.yaml#/components/responses/NotFound }
+    Conflict: { $ref: ./openapi-error-components-draft.yaml#/components/responses/Conflict }
+    UnprocessableEntity: { $ref: ./openapi-error-components-draft.yaml#/components/responses/UnprocessableEntity }
+
+paths:
+  /api/v1/health:
+    get:
+      summary: Health check
+      tags: [ops]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200': { description: OK }
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/audit-logs:
+    get:
+      tags: [audit]
+      parameters:
+        - in: query
+          name: entity_type
+          schema: { type: string }
+        - in: query
+          name: entity_id
+          schema: { type: integer }
+        - in: query
+          name: changed_by
+          schema: { type: string }
+        - in: query
+          name: from_ts
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to_ts
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditLogListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/products:
+    get:
+      tags: [products]
+      parameters:
+        - in: query
+          name: active
+          schema: { type: boolean }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProductResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductCreateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/products/{product_id}:
+    get:
+      tags: [products]
+      parameters:
+        - in: path
+          name: product_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [products]
+      parameters:
+        - in: path
+          name: product_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductUpdateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/customers:
+    get:
+      tags: [customers]
+      parameters:
+        - in: query
+          name: active
+          schema: { type: boolean }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CustomerResponse' }
+    post:
+      tags: [customers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerCreateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerResponse' }
+
+  /api/v1/customers/{customer_id}:
+    get:
+      tags: [customers]
+      parameters:
+        - in: path
+          name: customer_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [customers]
+      parameters:
+        - in: path
+          name: customer_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerUpdateRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+
+  /api/v1/metrics:
+    get:
+      tags: [metrics]
+      responses:
+        '200':
+          description: Prometheus metrics
+
+  /api/v1/orders/{order_id}/bulk-transition:
+    post:
+      tags: [orders]
+      parameters:
+        - in: path
+          name: order_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderBulkTransitionRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderBulkTransitionResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/allocations/{allocation_id}/override:
+    patch:
+      tags: [allocations]
+      parameters:
+        - in: path
+          name: allocation_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AllocationOverrideRequest' }
+      responses:
+        '200': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/allocations/{allocation_id}/split-line:
+    post:
+      tags: [allocations]
+      parameters:
+        - in: path
+          name: allocation_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AllocationSplitRequest' }
+      responses:
+        '200': { description: OK }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/purchase-results:
+    post:
+      tags: [purchase-results]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PurchaseResultRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseResultResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/purchase-results/{result_id}:
+    patch:
+      tags: [purchase-results]
+      parameters:
+        - in: path
+          name: result_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PurchaseResultRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseResultResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/purchase-results/bulk-upsert:
+    post:
+      tags: [purchase-results]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PurchaseResultBulkUpsertRequest' }
+      responses:
+        '200': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/invoices/{invoice_id}/finalize:
+    post:
+      tags: [invoices]
+      parameters:
+        - in: path
+          name: invoice_id
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoiceFinalizeResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/invoices/{invoice_id}/reset-to-draft:
+    post:
+      tags: [invoices]
+      parameters:
+        - in: path
+          name: invoice_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoiceResetRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoiceResetResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /api/v1/invoices/{invoice_id}/unlock:
+    post:
+      tags: [invoices]
+      parameters:
+        - in: path
+          name: invoice_id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoiceUnlockRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoiceUnlockResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+
+  /api/v1/batch/procurement-regeneration:
+    post:
+      tags: [batch]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProcurementRegenerationRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobEnqueueResponse' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/batch/jobs:
+    get:
+      tags: [batch]
+      parameters:
+        - in: query
+          name: job_type
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: order_id
+          schema: { type: integer }
+        - in: query
+          name: from_ts
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to_ts
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobHistoryListResponse' }
+
+  /api/v1/batch/jobs/{task_id}:
+    get:
+      tags: [batch]
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobStatusResponse' }
+
+  /api/v1/batch/jobs/{task_id}/retry:
+    post:
+      tags: [batch]
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobEnqueueResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }

@@ -1,0 +1,20 @@
+Stage,Field,Type,Req,Direction,Inherited From,Used By,Example,Status,Notes,Allowed values,Validation rule,System of record
+Auto Allocation,input_run_id,string,required,input,client/system,allocation service,RUN-20260313-001,active,実行トレースID,free text,must be unique per run,allocation_runs.run_id
+Auto Allocation,order_item_id,int,required,input,order_items,allocation engine,9001,active,対象受注明細ID,positive int,must exist in order_items,supplier_allocations.order_item_id
+Auto Allocation,product_id,int,required,input,order_items.product_id,rule engine,501,active,商品ルール適用キー,positive int,must exist in products,supplier_allocations.product_id(ref)
+Auto Allocation,order_uom_type,enum,required,input,order_items.order_uom_type,rule engine,uom_count,active,UOM判定キー,uom_count|uom_kg,must be enum,supplier_allocations.order_uom_type(ref)
+Auto Allocation,ordered_qty,decimal(12,3),required,input,order_items.ordered_qty,allocation calc,1.000,active,割当数量の基準,>0,decimal scale=3,supplier_allocations.ordered_qty(ref)
+Auto Allocation,estimated_weight_kg,decimal(12,3),optional,input,order_items.estimated_weight_kg,allocation calc,2.430,active,catch-weight計算補助,>=0,required when pricing basis=uom_kg,supplier_allocations.estimated_weight_kg(ref)
+Auto Allocation,default_supplier_id,int,optional,input,product/customer defaults,rule engine,300,active,初期候補サプライヤ,positive int,must exist in suppliers,supplier_allocations.suggested_supplier_id
+Auto Allocation,target_price,decimal(12,2),optional,input,order_items/contract,rule engine,98.00,active,希望価格（評価条件）,>=0,decimal scale=2,supplier_allocations.target_price
+Auto Allocation,stockout_policy,enum,optional,input,order_items/customer,rule engine,substitute,active,欠品時ポリシー,backorder|substitute|cancel|partial_ok,must be enum,supplier_allocations.stockout_policy
+Auto Allocation,suggested_supplier_id,int,required,output,rule engine,override/purchase,300,active,自動提案サプライヤ,positive int,must exist in suppliers,supplier_allocations.suggested_supplier_id
+Auto Allocation,suggested_qty,decimal(12,3),required,output,rule engine,override/purchase,1.000,active,自動提案数量,>0,decimal scale=3,supplier_allocations.suggested_qty
+Auto Allocation,suggested_uom,string,required,output,rule engine,override/purchase,piece,active,自動提案UOM,valid uom,must align with order_uom_type,supplier_allocations.suggested_uom
+Auto Allocation,final_supplier_id,int,required,output,suggested_supplier_id,override/purchase,300,active,初期最終サプライヤ（提案値を初期採用）,positive int,must exist in suppliers,supplier_allocations.final_supplier_id
+Auto Allocation,final_qty,decimal(12,3),required,output,suggested_qty,override/purchase,1.000,active,初期最終数量（提案値を初期採用）,>0,decimal scale=3,supplier_allocations.final_qty
+Auto Allocation,final_uom,string,required,output,suggested_uom,override/purchase,piece,active,初期最終UOM（提案値を初期採用）,valid uom,must align with policy,supplier_allocations.final_uom
+Auto Allocation,line_status,enum,required,output,workflow transition,allocation/purchase,allocated,active,自動割当後の明細ステータス,open|allocated|purchased|invoiced|cancelled,must transition open->allocated on successful allocation,order_items.line_status
+Auto Allocation,allocation_confidence,decimal(5,2),optional,output,rule score,review,87.50,active,提案信頼度(%),0-100,decimal scale=2,supplier_allocations.allocation_confidence
+Auto Allocation,is_manual_override,boolean,required,output,system default,audit,false,active,自動割当直後はfalse,true|false,must be false on auto allocation,supplier_allocations.is_manual_override
+Auto Allocation,allocation_generated_at,datetime,required,output,system,audit,2026-03-13T10:30:00Z,active,自動割当生成時刻,ISO8601,required,supplier_allocations.created_at

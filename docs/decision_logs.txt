@@ -1,0 +1,367 @@
+# Order System 要件定義 決定ログ（Discord #proj-order-system-requirements）
+
+更新日: 2026-03-18
+
+## 決定日時（主要）
+- 2026-03-15 15:28〜16:00: Invoice方針（order単位＋split請求許可、invoice_line_status）
+- 2026-03-15 15:30〜15:35: Invoice Finalize hard-stop 最終化
+- 2026-03-15 23:11〜23:14: 税・丸め（invoice total課税、floor）確定
+- 2026-03-16 00:50〜02:12: shortage処理・result_status・再生成方針の確定
+- 2026-03-16 00:59〜01:07: Reset to Draft（Adminのみ、lineはuninvoicedへ戻す）
+- 2026-03-16 01:15〜01:33: Cancel権限マトリクス（group+user例外方針）
+- 2026-03-16 02:09〜02:18: regeneration二重実行防止（orderロック、409、全体ロールバック）
+- 2026-03-16 03:04〜03:16: Invoiceロック基準・採番・同時更新制御・画面再読込フロー・all-or-nothing境界を確定
+
+## 1. 全体方針
+- I/O定義の正（Source of Truth）は Excel: `docs/IO_from_order_to_invoice_revised_v_2.xlsx`。
+- 仕様書は上記Excelに追従する運用。
+- Excelはユーザー（Koji）が編集、Botは仕様書更新と整合チェック中心。
+
+## 2. ステータス/フロー
+- Order主フロー（確定）:
+  - `new -> confirmed -> allocated -> purchased -> shipped -> invoiced` (+ `cancelled`)
+- line_status（確定）:
+  - `open | allocated | purchased | shipped | invoiced | cancelled`
+- Auto Allocationバッチ対象:
+  - `line_status=open` のみ。
+- line単位でもAllocation対応可能。
+
+## 3. 課税・丸め（確定）
+- 税計算は line単位ではなく invoice total 単位。
+- 税額式:
+  - `tax_amount = floor(total_amount_pretax × tax_rate)`
+- 丸め方式:
+  - 切り捨て（floor）
+
+## 4. Invoice方針（確定）
+- 請求単位は orderベース。
+- ただし split請求は許可（同一orderに複数invoice可）。
+- 先行請求しないlineは未請求のまま保持。
+- line請求状態（確定）:
+  - `invoice_line_status = uninvoiced | partially_invoiced | invoiced | cancelled`
+- Invoice Create必須項目に `due_date` を含める。
+
+## 5. Invoice Finalize hard-stop（最終）
+- selected line 0件
+- `invoiceable_flag=false` 含む
+- `result_status=not_filled` 含む
+- catch-weightで `actual_weight_kg` 欠落
+- required unit price 欠落
+- billable qty不正（<=0 または未請求残超過）
+- 税式不一致
+- 合計不一致
+- 負値
+- version競合
+
+## 6. Reset to Draft（確定）
+- Endpoint運用あり（MVP）
+- 実行権限: Adminのみ
+- Reset時、対象lineの `invoice_line_status` は一律 `uninvoiced` に戻す
+- Hard-stop時は状態不変、レコードはロックしない（再編集・再実行可）
+
+## 7. Purchase Result / 不足処理（確定）
+- 結果ステータス:
+  - `not_filled | filled | partially_filled | substituted`
+- 必須入力:
+  - `supplier_id, purchased_qty, final_unit_cost, result_status`
+- `uom` はSKUで一意に決まるため入力不要方針
+- shortage policy:
+  - `backorder | cancel | substitute | split`
+- shortage reason:
+  - `stockout | quality_issue | delivery_delay | supplier_reject | manual_adjustment`
+- `manual_adjustment` はMVPで許可（`shortage_note` 必須）
+- `delivery_delay` は全選択肢許可（backorder限定なし）
+- `quality_issue` は優先ポリシーなし
+
+## 8. Cancelポリシー（確定）
+- Invoiced lineの直接cancelは不可。
+- ただし invoiceがreset-to-draft後（draft状態）なら、権限者がline cancel可能。
+- Hard-stop時:
+  - 操作のみ失敗（all-or-nothing rollback）
+  - Order/Invoice/lineの状態は不変
+  - 監査ログ記録、修正後リトライ可
+
+## 9. 権限モデル（確定）
+- MVPはグループ権限ベース + ユーザー個別例外（Allow/Deny）併用。
+- 優先順位:
+  1) user explicit deny
+  2) user explicit allow
+  3) group permission
+  4) default deny
+- Cancel権限マトリクスは
+  - `docs/permission_matrix_cancel.csv` で管理。
+
+## 10. 再生成（procurement_list_regeneration）
+- 重大変更判定はシステム自動ではなくユーザー判断。
+- `allocated -> open` に戻したlineは再生成対象。
+- 旧allocation入力値はできるだけ保持。
+- `regeneration_reason_code` は不要。
+- 同一orderへの再生成二重実行防止:
+  - order単位ロック
+  - 実行中の再要求は `409 Conflict`
+- 失敗時は全体ロールバック。
+
+## 11. 補足
+- `generated` と `derived` は別概念として運用:
+  - generated = 新規発行値
+  - derived = 既存情報/ルールから導出値
+- Lookup-selectはID行、name/address行はderivedで扱う方針。
+
+---
+
+## 追記ログ（Discord #proj-order-system）
+
+### 決定日時（主要）
+- 2026-03-10 18:31〜22:40: ステータス遷移・例外・非機能・RBAC・業務ルール・API認可の要件確定
+- 2026-03-11 00:00〜00:40: 要件定義クローズ方針（未確定項目FIX）
+- 2026-03-12 14:00〜16:40: I/Oマトリクス整備、UOM命名、粗利項目追加、ODS/XLSX整備
+- 2026-03-13 15:50〜16:05: split構造（同一テーブル自己参照）と検証項目方針
+
+### A. ステータス遷移（確定）
+- 主フロー:
+  - `new -> confirmed -> purchasing -> shipped -> delivered -> invoiced`
+- 例外終了:
+  - `cancelled`
+- `completed` は廃止。
+- `paid` は将来版で追加（会計スコープ導入時）。
+
+### B. 権限モデル（確定）
+- 役割:
+  - Admin（全権限）
+  - 受注入力者（受注入力・請求）
+  - 発注者（配分・発注業務）
+  - 仕入先（結果登録）
+  - 販売先（荷受確認）
+- 現行方針:
+  - supplierは入力補助。
+  - 最終validationはbuyer（発注者）。
+  - 将来は設定変更で役割変更可能（権限変更ポリシーで管理）。
+
+### C. UOM/価格基準（確定）
+- 命名:
+  - `per_kg` -> `uom_kg`
+  - `per_order_uom` -> `uom_count`
+- `product_id` から `is_catch_weight` / `order_uom_type` / `pricing_basis` を自動決定。
+- 同一 `product_id` で catch-weight混在は禁止。
+
+### D. Create Order項目方針（確定）
+- `actual_weight_kg` は受注時不要（仕入結果登録時に確定）。
+- tax関連入力は受注時不要（請求計算時に適用）。
+- `delivery_date` は必須（default翌日）。
+- `target_price`, `price_ceiling`, `stockout_policy`, `comment` を運用項目として保持。
+
+### E. Invoice・粗利（確定）
+- Invoice内部項目として:
+  - `sales_unit_price`（販売単価）
+  - `unit_cost_basis`（粗利計算原価）
+  - `gross_margin_rate`（粗利率）
+- 粗利式:
+  - `(sales_unit_price - unit_cost_basis) / unit_cost_basis`
+- split仕入れ時の原価:
+  - `unit_cost_basis = Σ(purchased_qty_i × final_unit_cost_i) / Σ(purchased_qty_i)`（加重平均）
+- `gross_margin_rate` は内部項目で、請求書PDFには表示しない。
+
+### F. Split設計（確定）
+- splitは `supplier_allocations` 同一テーブルで自己参照管理。
+- 親子識別:
+  - `split_group_id`（親子共通）
+  - `parent_allocation_id`（子のみ親を参照）
+  - `is_split_child`
+- `child_final_qty_sum` はDB保存せず、検証時の計算値として扱う。
+
+### G. 帳票/API I/Oマトリクス（確定）
+- `docs/IO_from_order_to_invoice.ods` / `.xlsx` を整備。
+- 含める列:
+  - 入力/出力/継承元
+  - Allowed values
+  - Validation rule
+  - System of record
+- Auto Allocationの入力/出力項目（suggested/final初期値、line_status更新）を明示追加。
+
+### H. 決定ログ運用（Discord #main, 2026-03-16 02:34〜02:35）
+- `./order_system/docs/decision_logs.txt` を #main チャンネルの決定事項記録先として継続利用する。
+- 既存の他チャンネル決定事項は削除せず保持する。
+- 追記時は可能な限り日時を明記する（トレーサビリティ担保）。
+
+### I. Invoiceロック/採番/同時更新制御（Discord #proj-order-system-requirements-3, 2026-03-16 03:04〜03:16）
+- Invoice変更ロック基準:
+  - `invoice_date` の翌月末をロック日とする。
+- Payment Term:
+  - 取引先ごとに異なる運用（ロック基準とは別管理）。
+- Invoice番号フォーマット:
+  - `INV/YYYY/00000`
+- 再採番:
+  - なし（採番後は固定）。
+- 欠番/重複:
+  - 欠番は許容。
+  - 重複は禁止（防止最優先）。
+- 丸め:
+  - 全項目 floor。
+- 画面再読込フロー:
+  - `409 VERSION_CONFLICT` 時に再読込して再編集・再保存する方式を採用。
+- all-or-nothing境界:
+  - 基本は invoice/order 単位で適用。
+
+### J. Open items確定（Discord #proj-order-system-requirements-3, 2026-03-16 03:20〜03:23）
+- Admin Unlock TTL:
+  - 無期限（auto-expiryなし）。
+- Unlock理由入力:
+  - 理由コード必須、備考任意。
+  - コード採用: `pricing_correction | quantity_correction | tax_correction | customer_request | data_fix | other`
+- 監査ログUIエクスポート（MVP）:
+  - CSVエクスポートのみ採用。
+  - 必須列: `event_time, event_type, resource_type, resource_id, actor, reason_code, reason_note, before_json, after_json`
+
+### K. API Error Code定義着手（Discord #proj-order-system-requirements-3, 2026-03-16 03:24〜）
+- APIエラーコード定義をMVP仕様として整理開始。
+- 主要対象HTTP: `400/401/403/404/409/422`
+- `409` は version conflict / lock conflict / duplicate number / regeneration running を明示分離する方針。
+
+### L. OpenAPIエラーcomponents化（Discord #proj-order-system-requirements-3, 2026-03-16 03:27〜）
+- APIエラーコード仕様をOpenAPI再利用componentsとしてYAML化。
+- `ErrorResponse` schemaと共通response（400/401/403/404/409/422）を定義。
+- `POST /api/invoices/{id}/finalize` で参照例を定義。
+
+### M. OpenAPI MVP骨子拡張（Discord #proj-order-system-requirements-3, 2026-03-16 03:29〜）
+- `orders / allocations / purchase-results / invoices` の主要endpointをOpenAPI skeleton化。
+- 各endpointに標準エラーレスポンス（400/401/403/404/409/422）を適用。
+- `openapi-error-components-draft.yaml` を外部参照する構成で整備。
+
+### N. 表記統一フェーズ着手（Discord #proj-order-system-requirements-3, 2026-03-16 03:33〜03:35）
+- API詳細化より先に、docs横断の表記ゆれ統一を優先する方針を確認。
+- 「表記統一チェックリスト（docs横断）」を作成・共有。
+- 次回セッションでチェックリストに沿って統一作業を実施予定。
+
+### O. ステータス語彙の統一方針確定（Discord #proj-order-system-requirements-3, 2026-03-16 17:44〜）
+- 候補Aを採用。
+- `order_status`:
+  - `new -> confirmed -> allocated -> purchased -> shipped -> invoiced` (+ `cancelled`)
+- `line_status`:
+  - `open -> allocated -> purchased -> shipped -> invoiced` (+ `cancelled`)
+- `invoice_line_status` は現行維持:
+  - `uninvoiced | partially_invoiced | invoiced | cancelled`
+- 次アクション:
+  - 上記語彙へ docs横断で置換・整合化を実施。
+
+### P. 仕様書の表記統一（第1弾）反映（Discord #proj-order-system-requirements-3, 2026-03-16 17:47〜）
+- 以下ドキュメントでステータス語彙を候補Aへ整合化:
+  - `requirements-definition-closure-v1.md`
+  - `api-authorization-spec-draft.md`
+  - `business-rules-decision-table-draft.md`
+  - `uat-acceptance-checklist-draft.md`
+- 置換内容（代表）:
+  - `purchasing, delivered` をステータス列挙から除外
+  - `allocated, purchased, shipped` 系へ統一
+  - UAT遷移確認を `shipped -> invoiced` へ更新
+
+### Q. 表記統一対象ドキュメント固定（Discord #proj-order-system-requirements-3, 2026-03-16 17:49〜）
+- 先に対象ドキュメントを固定してから更新する運用へ変更。
+- `docs/terminology-unification-targets.md` を新規作成し、Must/Should対象を明文化。
+- status語彙のcanonical定義と、更新済み/整合済みファイルを記録。
+
+### R. Enum方針調整（Discord #proj-order-system-requirements-3, 2026-03-16 21:43〜）
+- `override_reason_code` は必須要件から外す（理由コード入力を不要化）。
+- 背景: override操作は高頻度のため、運用負荷軽減を優先。
+- `reset_reason_code` / `unlock_reason_code` は現行方針を維持（理由コード必須）。
+
+### S. enum/用語統一 仕様書反映（Discord #proj-order-system-requirements-3, 2026-03-16 21:44〜）
+- `stockout_policy` を `backorder | substitute | cancel | split` に統一（`partial_ok` 廃止）。
+- `override_reason_code` を Allocation Override / Split-Line で optional に統一。
+- OpenAPI skeleton の required から `override_reason_code` を除外。
+- UAT文言も override reason optional 前提に更新。
+
+### T. 最終統一チェック（cancel/reset/unlock reason codes）（Discord #proj-order-system-requirements-3, 2026-03-16 21:50〜）
+- reason code 定義の横断確認を実施。
+- `cancel_reason_code` / `reset_reason_code` / `unlock_reason_code` のセット差分なしを確認。
+- `report-and-api-io-definition-draft.md` に最終統一セットを明文化。
+
+### U. 用語・項目名統一（Phase 3）反映（Discord #proj-order-system-requirements-3, 2026-03-17 11:08〜）
+- `uom_count / uom_kg` 表記へ統一（`per_kg`, `per_order_uom` を置換）。
+- 単価項目名を `unit_price_uom_count / unit_price_uom_kg` に統一。
+- `unit_cost`（暫定）と `final_unit_cost`（確定）の責務を明文化。
+- `input / derived / generated` の定義をI/O仕様へ追記。
+
+### V. OpenAPI/MD差分の最終補正（Discord #proj-order-system-requirements-3, 2026-03-17 11:17〜）
+- Business rules文言の `partial` 表現を `split` に統一。
+- 作業ログ内の旧単価項目名を `unit_price_uom_count / unit_price_uom_kg` へ更新。
+- `openapi-mvp-skeleton-draft.yaml` の `OrderCreateRequest.items` に
+  - `unit_price_uom_count`
+  - `unit_price_uom_kg`
+  を追加し、MD仕様との項目名整合を補完。
+
+### W. 状態遷移条件の厳密化（Discord #proj-order-system-requirements-3, 2026-03-17 11:45〜12:01）
+- line先行方針を採用。
+- `confirmed -> allocated`, `allocated -> purchased`, `shipped -> invoiced` はline単位判定。
+- `purchased -> shipped` はorder一括判定。
+- 未完lineの一括キャンセルは自動実行しない。
+- 一括キャンセルは明示的なユーザー入力時のみ実行する。
+
+### X. Orderステータス遷移トリガー方針（Discord #proj-order-system-requirements-3, 2026-03-17 12:39〜）
+- Order単位のステータス遷移は、ユーザー入力による一括処理で実行する。
+- line更新結果からの自動的なorderステータス昇格はMVPでは行わない。
+
+### Y. 同日複数回遷移・Line所属方針（Discord #proj-order-system-requirements-3, 2026-03-17 12:41〜）
+- ステータス遷移のユーザー一括入力は、同一営業日に複数回実行されることを許容する。
+- 各lineは、明示的にcancelされるまでは元のorderに所属し続ける。
+
+### Z. 遷移要件クローズ前の最終同期（Discord #proj-order-system-requirements-3, 2026-03-17 12:44〜）
+- `status-transition-draft.md` の内容を I/O仕様・UATへ同期。
+- エラーコードに `STATUS_NO_TARGET_LINES` を追加。
+- OpenAPI skeletonへ user-triggered order bulk transition API注記を追加（同日複数回可）。
+
+### AA. Cancel/Reset境界の追加確定（Discord #proj-order-system-requirements-3, 2026-03-17 16:42〜）
+- Cancel時は `line_status` と `invoice_line_status` を同時更新する。
+- Reset対象は `invoice.status=finalized` のみ。
+
+### AB. Unlock境界仕様の確定（Discord #proj-order-system-requirements-3, 2026-03-17 20:25〜20:35）
+- Unlock対象は `invoice.status=finalized` かつ lock済みinvoiceのみ。
+- 実行権限は Adminのみ。
+- `unlock_reason_code` は必須、`reason_note` は任意（500文字以内）。
+- Unlock後の編集範囲はMVPでAdmin全項目可。
+- TTLは無期限（auto-expiryなし）。
+- 自動再lockは行わず、re-finalizeで再確定する。
+- エラーコード: `PERMISSION_DENIED / INVOICE_NOT_FOUND / VERSION_CONFLICT / STATUS_TRANSITION_CONFLICT / UNLOCK_REASON_REQUIRED / INVALID_REASON_CODE`。
+
+### AC. UAT実行テンプレ/実装雛形の整備（Discord #proj-order-system-requirements-3, 2026-03-17 20:48〜）
+- `uat-acceptance-checklist-draft.md` を数値入り実行テンプレへ更新。
+  - 同時ユーザー10、orders 10,000、order_lines 100,000、invoices 30,000
+  - API P95 1.5s、グリッドP95 2.0s、allocation 5,000 lines/5分
+- `implementation-bootstrap-plan.md` を新規作成。
+  - 推奨スタック前提のフォルダ構成、初期タスク、Done条件を定義。
+
+### AD. 要件定義クローズ宣言 v2（Discord #proj-order-system-requirements-3, 2026-03-17 〜）
+- `requirements-definition-closure-v2.md` を作成し、MVP要件定義のクローズを宣言。
+- v1以降の確定差分（status/enum/境界仕様/UAT基準）を集約。
+- 実装引き渡し基準とMVP外項目を明文化。
+
+### AE. 当日作業ログ追記（Discord #proj-order-system-requirements-3, 2026-03-17 20:59〜）
+- `requirements-worklog-2026-03-17.md` を新規作成。
+- 本日の要件定義工程（統一作業、境界仕様、UATテンプレ、クローズ宣言）を記録。
+
+### AF. Architecture/DB v2整合 決定反映（Discord #02-architecture, 2026-03-17）
+- システム構成を4層で確定:
+  - Frontend SPA / Backend API(`/api/v1`) / Worker(Batch) / PostgreSQL
+- 監視方式（MVP）を確定:
+  - 構造化ログ + メトリクス + アラート
+- 注文遷移はユーザー明示バルク実行（自動昇格なし）
+- ステータス定義を固定:
+  - Order: `new -> confirmed -> allocated -> purchased -> shipped -> invoiced` + `cancelled`
+  - Line: `open -> allocated -> purchased -> shipped -> invoiced` + `cancelled`
+  - `paid` はMVPスコープ外
+- Dual-UOM方針を採用:
+  - `uom_count / uom_kg`
+  - `unit_price_uom_count / unit_price_uom_kg`
+- 分割請求方針を固定:
+  - `order_items 1-N invoice_items`
+- 主要技術選定（MVP）:
+  - Backend: FastAPI + SQLAlchemy + Alembic
+  - DB: PostgreSQL
+  - Batch: 初期はアプリ内ジョブ（将来 Redis/Celery 拡張）
+  - Auth: JWT + RBAC
+  - API契約: OpenAPI 3.0
+- 非機能目標（MVP）:
+  - API P95 <= 1.5s
+  - Grid初期表示 P95 <= 2.0s
+  - Allocation 5,000行 <= 5分
+  - 可用性 99.5%（月次）
+  - RPO <= 1h / RTO <= 4h

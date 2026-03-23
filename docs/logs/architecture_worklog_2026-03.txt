@@ -1,0 +1,68 @@
+# architecture_worklog_2026-03
+Channel: #02-architecture (1483464481895092244)
+Purpose: 時系列の作業ログ（詳細）。確定事項は decisions_log.txt に転記。
+
+## 2026-03-17
+
+### 23:58 JST+8 ログ開始（OpenClawBot）
+- このファイルで #02-architecture の作業履歴を継続記録開始。
+- 運用方針:
+  - このファイル: 検討経緯・質問応答・作業実績（時系列）
+  - decisions_log.txt: 意思決定の確定事項のみ
+
+### 今日の主要トピック（チャンネル履歴から初期反映）
+- DB migration v2整合関連の事前チェックSQL、適用手順、検証観点を共有。
+- 生成した成果物の保存先と未保存時の扱いを明確化（Discord投稿=未保存、保存指示でファイル化）。
+- 提案内容を実ファイル化し、以下の docs を作成済みとして報告:
+  - docs/architecture-a-b-v2-proposal-2026-03-17.md
+  - docs/api-and-ddl-draft-2026-03-17.md
+  - docs/db-migration-precheck.sql
+  - docs/architecture-diagram-logical.md
+  - docs/erd-mvp-v2.md
+  - docs/tech-selection-mvp-v2.md
+- コミット報告:
+  - 3261998
+  - 18c61f4
+- #requirements-spec へ転記用の「決定事項サマリ」を提示。
+- #08-progress-daily への日次進捗投稿フォーマット運用を確認。
+
+## 2026-03-18
+
+### 00:03 JST+8 進捗投稿内容をログ反映（OpenClawBot）
+- #08-progress-daily に投稿した日次進捗内容を本ログにも転記。
+- 転記サマリ:
+  - #02-architecture で A/B設計（構成案・ERD草案）を既存文書整合で整理
+  - OpenAPI paths と DDL 初版作成
+  - Alembic v2整合 migration 実ファイル化・コミット
+    - 2026031701_core_v2_alignment.py
+    - 2026031702_allocation_v2_alignment.py
+    - 2026031703_invoice_v2_alignment.py
+    - 2026031704_audit_v2_alignment.py
+  - 構成図/ER図/技術選定 docs 作成・コミット
+    - docs/architecture-diagram-logical.md
+    - docs/erd-mvp-v2.md
+    - docs/tech-selection-mvp-v2.md
+  - DB移行事前チェックSQL作成
+    - docs/db-migration-precheck.sql
+  - 翌日予定:
+    - OpenAPI skeleton への正式反映
+    - Alembic適用前 precheck 実行と差分是正
+    - #03-backend-api 向け実装優先順位（2週間）作成
+  - ブロッカー: なし
+
+### 00:06 JST+8 進捗投稿（続き）をログ反映（OpenClawBot）
+- #08-progress-daily 投稿の続き部分を追記。
+- 転記サマリ:
+  - 明日やること:
+    - OpenAPI skeletonへの正式反映（paths/components）
+    - Alembic適用前precheck実行と差分是正
+    - #03-backend-api向け実装優先順位（2週間）作成
+  - ブロッカー: なし
+  - BUG候補: なし
+  - 参照コミット: 33b8671, 3261998, 18c61f4
+
+---
+記法メモ:
+[YYYY-MM-DD HH:MM] actor: summary
+- detail
+- detail

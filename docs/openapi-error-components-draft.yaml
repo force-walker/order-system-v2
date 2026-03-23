@@ -1,0 +1,206 @@
+openapi: 3.0.3
+info:
+  title: Order System Error Components Draft
+  version: 0.2.0
+  description: Reusable OpenAPI components for MVP error responses (aligned to architecture/06-error-model.md).
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - traceId
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: Human-readable error summary.
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Structured context for debugging/UI handling.
+        traceId:
+          type: string
+          description: Correlation id for support/troubleshooting.
+
+    ErrorCode:
+      type: string
+      enum:
+        - INVALID_REQUEST_FORMAT
+        - MISSING_REQUIRED_FIELD
+        - INVALID_REASON_CODE
+        - INVALID_DATE_FORMAT
+        - AUTH_REQUIRED
+        - AUTH_TOKEN_INVALID
+        - AUTH_TOKEN_EXPIRED
+        - AUTH_FORBIDDEN
+        - RESOURCE_NOT_FOUND
+        - RESOURCE_ALREADY_EXISTS
+        - STATUS_TRANSITION_CONFLICT
+        - STATUS_NO_TARGET_LINES
+        - STATUS_STALE_VERSION
+        - VALIDATION_FAILED
+        - CATCH_WEIGHT_MISSING_ACTUAL_WEIGHT
+        - PRICE_BASIS_FIELD_MISSING
+        - INVOICE_LOCKED
+        - UNLOCK_REASON_REQUIRED
+        - TAX_MISMATCH
+        - TOTAL_MISMATCH
+        - NEGATIVE_AMOUNT_NOT_ALLOWED
+        - INTERNAL_ERROR
+
+  responses:
+    BadRequest:
+      description: Bad request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missingField:
+              value:
+                code: MISSING_REQUIRED_FIELD
+                message: required field is missing
+                details:
+                  field: invoiceDate
+                traceId: trc_01HXYZBADREQ
+
+    Unauthorized:
+      description: Unauthorized.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            authRequired:
+              value:
+                code: AUTH_REQUIRED
+                message: authentication is required
+                traceId: trc_01HXYZ401
+
+    Forbidden:
+      description: Forbidden.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            denied:
+              value:
+                code: AUTH_FORBIDDEN
+                message: role is not allowed for this operation
+                traceId: trc_01HXYZ403
+
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invoiceNotFound:
+              value:
+                code: RESOURCE_NOT_FOUND
+                message: resource not found
+                details:
+                  resource: invoice
+                  resourceId: 123
+                traceId: trc_01HXYZ404
+
+    Conflict:
+      description: State/version conflict.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            staleVersion:
+              value:
+                code: STATUS_STALE_VERSION
+                message: record has been updated by another user. reload and retry.
+                details:
+                  resource: invoice
+                  resourceId: 123
+                  currentVersion: 18
+                traceId: trc_01HXYZ409A
+            duplicateResource:
+              value:
+                code: RESOURCE_ALREADY_EXISTS
+                message: duplicate resource detected
+                details:
+                  resource: invoice
+                  key: invoice_no
+                  value: INV/2026/00042
+                traceId: trc_01HXYZ409B
+            noTargetLines:
+              value:
+                code: STATUS_NO_TARGET_LINES
+                message: no eligible lines found for this transition
+                details:
+                  orderIds: [1001, 1002]
+                traceId: trc_01HXYZ409C
+
+    UnprocessableEntity:
+      description: Business validation error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validationFailed:
+              value:
+                code: VALIDATION_FAILED
+                message: validation failed
+                details:
+                  fields:
+                    - name: unit_price_uom_kg
+                      reason: required_when_pricing_basis_is_uom_kg
+                traceId: trc_01HXYZ422A
+            missingActualWeight:
+              value:
+                code: CATCH_WEIGHT_MISSING_ACTUAL_WEIGHT
+                message: catch-weight line requires actual_weight_kg
+                details:
+                  field: actual_weight_kg
+                traceId: trc_01HXYZ422B
+
+paths:
+  /api/v1/invoices/{invoiceId}/finalize:
+    post:
+      summary: Finalize invoice (response mapping sample)
+      parameters:
+        - in: path
+          name: invoiceId
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                internal:
+                  value:
+                    code: INTERNAL_ERROR
+                    message: unexpected internal error
+                    traceId: trc_01HXYZ500

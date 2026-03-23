@@ -1,0 +1,6 @@
+role,scope_type,can_view_order,can_view_invoice,can_cancel_order_new,can_cancel_order_confirmed,can_cancel_order_allocated,can_cancel_order_purchased,can_cancel_order_shipped,can_cancel_order_invoiced,can_cancel_line_uninvoiced,can_cancel_line_partially_invoiced,can_cancel_line_invoiced,can_cancel_line_when_invoice_draft,can_reset_invoice_to_draft,require_reason_code,require_note_on_policy_exception,notes
+Admin,global,true,true,true,true,true,true,true,false,true,true,false,true,true,true,true,Full authority; invoiced order direct cancel is blocked (use reset/credit flow)
+OrderEntry,own,true,true,true,false,false,false,false,false,false,false,false,false,false,true,true,Can cancel own orders only in new status
+Buyer,assigned,true,true,true,true,true,false,false,false,true,true,false,true,false,true,true,Can cancel assigned orders/lines; purchased+ and shipped order cancel not allowed
+Supplier,assigned,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,No cancel permission
+Customer,own,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,No direct cancel permission (request via operator)

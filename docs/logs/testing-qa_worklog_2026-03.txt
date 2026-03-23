@@ -1,0 +1,21 @@
+# testing-qa_worklog_2026-03
+Channel: #06-testing-qa
+Purpose: 時系列の作業ログ（詳細）。確定事項は docs/decision_logs.txt に転記。
+
+## 2026-03-20
+
+[2026-03-20][Testing-QA]
+PROGRESS:
+- 今日やったこと:
+  - MVP受け入れテストの実行準備（正常/異常/境界値の観点整理）
+  - 重要フロー観点の固定
+  - 実施テンプレ整備
+- 明日やること:
+  - テストケース実行
+  - 結果記録
+  - Fail/Blockedの切り分け
+- ブロッカー:
+  - なし
+
+参照:
+- #06-testing-qa

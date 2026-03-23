@@ -1,0 +1,19 @@
+# infra-devops_worklog_2026-03
+Channel: #05-infra-devops
+Purpose: 時系列の作業ログ（詳細）。確定事項は docs/decision_logs.txt に転記。
+
+## 2026-03-20
+
+[2026-03-20][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - 日次レポート転記のリマインドを実施（#08-progress-daily 向け）
+  - backend監視系タスク（Prometheus/Alertmanager, メトリクス/アラート追加）との連携状況を確認
+- 明日やること:
+  - 監視設定（URL/通知先）の環境差分確認
+  - 運用手順のrunbook整備
+- ブロッカー:
+  - 通知先bridge URLの本番設定待ち
+
+参照:
+- #05-infra-devops
