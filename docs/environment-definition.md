@@ -27,7 +27,7 @@
 
 ## Promotion flow
 
-1. Develop on `rebuild/order-system`
+1. Develop on `rebuild/order-system-v2`
 2. Open PR to `main`
 3. CI required checks pass (lint/test)
 4. Merge after review
