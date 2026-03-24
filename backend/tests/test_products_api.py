@@ -29,8 +29,9 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
-client = TestClient(app)
+def _client() -> TestClient:
+    app.dependency_overrides[get_db] = override_get_db
+    return TestClient(app)
 
 
 def _seed_product(sku: str = "SKU-001") -> int:
@@ -58,6 +59,7 @@ def _seed_product(sku: str = "SKU-001") -> int:
 
 def test_list_products():
     _seed_product()
+    client = _client()
     res = client.get("/api/v1/products")
     assert res.status_code == 200
     body = res.json()
@@ -67,6 +69,7 @@ def test_list_products():
 
 
 def test_get_product_not_found():
+    client = _client()
     res = client.get("/api/v1/products/999999")
     assert res.status_code == 404
     assert res.json()["detail"]["code"] == "PRODUCT_NOT_FOUND"
@@ -74,6 +77,7 @@ def test_get_product_not_found():
 
 def test_get_product_by_id():
     pid = _seed_product("SKU-002")
+    client = _client()
     res = client.get(f"/api/v1/products/{pid}")
     assert res.status_code == 200
     assert res.json()["id"] == pid
