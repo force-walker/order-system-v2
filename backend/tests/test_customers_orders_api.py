@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -40,8 +40,8 @@ def _seed_customer(code: str = "CUST-001") -> int:
         code=code,
         name="Test Customer",
         active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(c)
     db.commit()
@@ -58,6 +58,18 @@ def test_list_customers():
     assert res.status_code == 200
     assert isinstance(res.json(), list)
     assert any(x["code"] == "CUST-LIST" for x in res.json())
+
+
+def test_create_customer_success_and_duplicate_conflict():
+    client = _client()
+    payload = {"code": "CUST-NEW", "name": "New Customer", "active": True}
+    created = client.post("/api/v1/customers", json=payload)
+    assert created.status_code == 201
+    assert created.json()["code"] == "CUST-NEW"
+
+    dup = client.post("/api/v1/customers", json=payload)
+    assert dup.status_code == 409
+    assert dup.json()["detail"]["code"] == "CUSTOMER_CODE_ALREADY_EXISTS"
 
 
 def test_get_customer_not_found():
@@ -83,6 +95,11 @@ def test_create_order_success_and_list():
     list_res = client.get("/api/v1/orders")
     assert list_res.status_code == 200
     assert any(x["order_no"] == "ORD-001" for x in list_res.json())
+
+    order_id = create_res.json()["id"]
+    detail_res = client.get(f"/api/v1/orders/{order_id}")
+    assert detail_res.status_code == 200
+    assert detail_res.json()["id"] == order_id
 
 
 def test_create_order_customer_not_found():
@@ -111,3 +128,10 @@ def test_create_order_duplicate_order_no():
     second = client.post("/api/v1/orders", json=payload)
     assert second.status_code == 409
     assert second.json()["detail"]["code"] == "ORDER_NO_ALREADY_EXISTS"
+
+
+def test_get_order_not_found():
+    client = _client()
+    res = client.get("/api/v1/orders/999999")
+    assert res.status_code == 404
+    assert res.json()["detail"]["code"] == "ORDER_NOT_FOUND"

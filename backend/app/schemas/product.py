@@ -1,8 +1,19 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.entities import PricingBasis
+
+
+class ProductCreateRequest(BaseModel):
+    sku: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    order_uom: str = Field(min_length=1, max_length=32)
+    purchase_uom: str = Field(min_length=1, max_length=32)
+    invoice_uom: str = Field(min_length=1, max_length=32)
+    is_catch_weight: bool = False
+    weight_capture_required: bool = False
+    pricing_basis_default: PricingBasis = PricingBasis.uom_count
 
 
 class ProductResponse(BaseModel):

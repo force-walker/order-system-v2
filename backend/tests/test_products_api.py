@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -46,8 +46,8 @@ def _seed_product(sku: str = "SKU-001") -> int:
         weight_capture_required=False,
         pricing_basis_default=PricingBasis.uom_count,
         active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(p)
     db.commit()
@@ -81,3 +81,24 @@ def test_get_product_by_id():
     res = client.get(f"/api/v1/products/{pid}")
     assert res.status_code == 200
     assert res.json()["id"] == pid
+
+
+def test_create_product_success_and_duplicate_conflict():
+    client = _client()
+    payload = {
+        "sku": "SKU-NEW-1",
+        "name": "Created Product",
+        "order_uom": "count",
+        "purchase_uom": "count",
+        "invoice_uom": "count",
+        "is_catch_weight": False,
+        "weight_capture_required": False,
+        "pricing_basis_default": "uom_count",
+    }
+    created = client.post("/api/v1/products", json=payload)
+    assert created.status_code == 201
+    assert created.json()["sku"] == "SKU-NEW-1"
+
+    dup = client.post("/api/v1/products", json=payload)
+    assert dup.status_code == 409
+    assert dup.json()["detail"]["code"] == "SKU_ALREADY_EXISTS"
