@@ -119,3 +119,29 @@ BUG候補:
 - スレッド/メッセージURL
   - #03-backend
   - 主要コミット: `9179de2`, `faf8e95`, `f2ef347`, `8ca405d`, `102020e`, `98c26c8`
+
+## 2026-03-25
+
+### 01:44 JST+8 チャンネル報告を反映（OpenClawBot）
+- #03-backend から受領した日次報告をログへ反映。
+
+[2026-03-25][Backend]
+PROGRESS:
+- 昨日やったこと:
+  - order_system_v2 で backend API拡張を実施
+  - products/customers の create API、orders の detail APIを追加
+  - auth API（`/api/v1/auth/login|refresh|logout|me`）を追加
+  - 関連テスト（auth / products / customers / orders）を追加・更新
+  - PR作成〜Merge完了（PR #4）
+- 今日やったこと:
+  - main を最新に同期
+  - 作業ブランチ整理（merge済みブランチを削除）
+  - 次作業に向けて待機状態へ移行
+- ブロッカー:
+  - なし（実装面）
+  - 補足: 一部環境では pytest 未導入のため、ローカル実行前に dev 依存の導入が必要
+
+参照:
+- PR: <https://github.com/force-walker/order-system-v2/pull/4>
+- Merge commit: `9c24709`
+- 主なコミット: `22ea272`, `44e6d20`, `0c2fce8`
