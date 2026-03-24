@@ -16,6 +16,14 @@ def list_orders(db: Session = Depends(get_db)) -> list[OrderResponse]:
     return [OrderResponse.model_validate(r) for r in rows]
 
 
+@router.get("/{order_id}", response_model=OrderResponse)
+def get_order(order_id: int, db: Session = Depends(get_db)) -> OrderResponse:
+    row = db.query(Order).filter(Order.id == order_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    return OrderResponse.model_validate(row)
+
+
 @router.post("", response_model=OrderResponse, status_code=201)
 def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> OrderResponse:
     customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
