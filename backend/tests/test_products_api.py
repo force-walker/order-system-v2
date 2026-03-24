@@ -1,0 +1,79 @@
+from datetime import datetime
+
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app
+from app.models.entities import PricingBasis, Product
+
+
+engine = create_engine(
+    "sqlite+pysqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+    future=True,
+)
+TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+Base.metadata.create_all(bind=engine)
+
+
+def override_get_db():
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+app.dependency_overrides[get_db] = override_get_db
+client = TestClient(app)
+
+
+def _seed_product(sku: str = "SKU-001") -> int:
+    db = TestingSessionLocal()
+    p = Product(
+        sku=sku,
+        name="Test Product",
+        order_uom="count",
+        purchase_uom="count",
+        invoice_uom="count",
+        is_catch_weight=False,
+        weight_capture_required=False,
+        pricing_basis_default=PricingBasis.uom_count,
+        active=True,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    pid = p.id
+    db.close()
+    return pid
+
+
+def test_list_products():
+    _seed_product()
+    res = client.get("/api/v1/products")
+    assert res.status_code == 200
+    body = res.json()
+    assert isinstance(body, list)
+    assert len(body) >= 1
+    assert body[0]["sku"] == "SKU-001"
+
+
+def test_get_product_not_found():
+    res = client.get("/api/v1/products/999999")
+    assert res.status_code == 404
+    assert res.json()["detail"]["code"] == "PRODUCT_NOT_FOUND"
+
+
+def test_get_product_by_id():
+    pid = _seed_product("SKU-002")
+    res = client.get(f"/api/v1/products/{pid}")
+    assert res.status_code == 200
+    assert res.json()["id"] == pid
