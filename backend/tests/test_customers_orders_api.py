@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -40,8 +40,8 @@ def _seed_customer(code: str = "CUST-001") -> int:
         code=code,
         name="Test Customer",
         active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(c)
     db.commit()

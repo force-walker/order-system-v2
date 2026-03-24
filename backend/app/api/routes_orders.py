@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -37,7 +37,7 @@ def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> 
     row = Order(
         order_no=payload.order_no,
         customer_id=payload.customer_id,
-        order_datetime=datetime.utcnow(),
+        order_datetime=datetime.now(UTC),
         delivery_date=payload.delivery_date,
         status=OrderStatus.new,
         note=payload.note,

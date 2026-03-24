@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -46,8 +46,8 @@ def _seed_product(sku: str = "SKU-001") -> int:
         weight_capture_required=False,
         pricing_basis_default=PricingBasis.uom_count,
         active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(p)
     db.commit()
