@@ -17,3 +17,24 @@ PROGRESS:
 
 参照:
 - #05-infra-devops
+
+## 2026-03-25
+
+[2026-03-25][OpenClaw]
+PROGRESS:
+- 今日やったこと:
+  - `order-system-v2` のローカル最終疎通を確定（`docker-compose up --build` 後、`GET /health` = 200）
+  - infra運用固定化を実施（`docs/infra-runbook.md` 追加、`backend/.env.example` 最小必須キー整理）
+  - 時刻警告対応を反映（`datetime.utcnow()` -> `datetime.now(UTC)`）
+  - 警告対応PR #5 を作成・マージ完了
+- 明日やること:
+  - Secrets運用雛形（キー名一覧）のdocs化
+  - main保護設定の最終点検（required checks / approval）
+  - 次APIスコープ優先順位の確定
+- ブロッカー:
+  - なし
+
+参照:
+- #05-infra-devops
+- repo: <https://github.com/force-walker/order-system-v2>
+- merged PR: <https://github.com/force-walker/order-system-v2/pull/5>
