@@ -19,3 +19,24 @@ PROGRESS:
 
 参照:
 - #06-testing-qa
+
+## 2026-03-25
+
+[2026-03-25][Testing-QA 追加進捗]
+PROGRESS:
+- 今日やったこと:
+  - PR前テスト手順を実行（compile/pytest/authスモーク/既存API回帰の確認フロー整理）
+  - APIエンドポイントの実検証を継続し、Pass/Fail判定を実施
+  - テスト実行時の import 問題（`ModuleNotFoundError: app`）を切り分け、実行手順を提示
+  - テスト結果は合格（日時処理の警告あり）
+  - `datetime.utcnow()` -> `datetime.now(UTC)` への統一方針を backend / frontend へ共有
+- 明日やること:
+  - POST系（正常/異常）の追加検証
+  - 警告解消後の再テスト確認
+- ブロッカー:
+  - なし（警告対応待ち）
+
+参照:
+- #06-testing-qa
+- #03-backend
+- #04-frontend

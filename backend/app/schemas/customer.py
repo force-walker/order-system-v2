@@ -9,6 +9,11 @@ class CustomerCreateRequest(BaseModel):
     active: bool = True
 
 
+class CustomerUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    active: bool | None = None
+
+
 class CustomerResponse(BaseModel):
     id: int
     code: str

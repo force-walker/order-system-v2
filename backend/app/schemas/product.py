@@ -16,6 +16,16 @@ class ProductCreateRequest(BaseModel):
     pricing_basis_default: PricingBasis = PricingBasis.uom_count
 
 
+class ProductUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    order_uom: str | None = Field(default=None, min_length=1, max_length=32)
+    purchase_uom: str | None = Field(default=None, min_length=1, max_length=32)
+    invoice_uom: str | None = Field(default=None, min_length=1, max_length=32)
+    is_catch_weight: bool | None = None
+    weight_capture_required: bool | None = None
+    active: bool | None = None
+
+
 class ProductResponse(BaseModel):
     id: int
     sku: str
