@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 
+from app.api.routes_allocations import router as allocations_router
 from app.api.routes_auth import router as auth_router
 from app.api.routes_customers import router as customers_router
 from app.api.routes_orders import router as orders_router
 from app.api.routes_products import router as products_router
+from app.api.routes_purchase_results import router as purchase_results_router
 
 app = FastAPI(title="Order System v2 API")
 
@@ -22,3 +24,5 @@ app.include_router(auth_router)
 app.include_router(products_router)
 app.include_router(customers_router)
 app.include_router(orders_router)
+app.include_router(allocations_router)
+app.include_router(purchase_results_router)

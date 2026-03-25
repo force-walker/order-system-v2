@@ -1,0 +1,65 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.db.session import get_db
+from app.models.entities import PurchaseResult, SupplierAllocation
+from app.schemas.purchase_result import (
+    PurchaseResultBulkUpsertRequest,
+    PurchaseResultCreateRequest,
+    PurchaseResultResponse,
+    PurchaseResultUpdateRequest,
+)
+
+router = APIRouter(prefix="/api/v1/purchase-results", tags=["purchase-results"])
+
+
+@router.post("", response_model=PurchaseResultResponse, status_code=201)
+def create_purchase_result(payload: PurchaseResultCreateRequest, db: Session = Depends(get_db)) -> PurchaseResultResponse:
+    alloc = db.query(SupplierAllocation).filter(SupplierAllocation.id == payload.allocation_id).first()
+    if alloc is None:
+        raise HTTPException(status_code=404, detail={"code": "ALLOCATION_NOT_FOUND", "message": "allocation not found"})
+
+    row = PurchaseResult(**payload.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return PurchaseResultResponse.model_validate(row)
+
+
+@router.patch("/{result_id}", response_model=PurchaseResultResponse)
+def update_purchase_result(result_id: int, payload: PurchaseResultUpdateRequest, db: Session = Depends(get_db)) -> PurchaseResultResponse:
+    row = db.query(PurchaseResult).filter(PurchaseResult.id == result_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "purchase result not found"})
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(row, k, v)
+
+    db.commit()
+    db.refresh(row)
+    return PurchaseResultResponse.model_validate(row)
+
+
+@router.post("/bulk-upsert")
+def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: Session = Depends(get_db)) -> dict[str, int]:
+    count = 0
+    for item in payload.items:
+        alloc = db.query(SupplierAllocation).filter(SupplierAllocation.id == item.allocation_id).first()
+        if alloc is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "ALLOCATION_NOT_FOUND", "message": f"allocation not found: {item.allocation_id}"},
+            )
+
+        row = db.query(PurchaseResult).filter(PurchaseResult.allocation_id == item.allocation_id).first()
+        if row is None:
+            row = PurchaseResult(**item.model_dump())
+            db.add(row)
+        else:
+            for k, v in item.model_dump().items():
+                setattr(row, k, v)
+        count += 1
+
+    db.commit()
+    return {"upserted_count": count}
