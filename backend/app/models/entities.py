@@ -122,3 +122,28 @@ class PurchaseResult(Base):
     invoiceable_flag: Mapped[bool] = mapped_column(Boolean, default=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class InvoiceStatus(str, enum.Enum):
+    draft = "draft"
+    finalized = "finalized"
+    sent = "sent"
+    cancelled = "cancelled"
+
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    invoice_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    invoice_date: Mapped[date] = mapped_column(Date)
+    delivery_date: Mapped[date] = mapped_column(Date)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    subtotal: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    tax_total: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    grand_total: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    status: Mapped[InvoiceStatus] = mapped_column(Enum(InvoiceStatus, name="invoicestatus"), default=InvoiceStatus.draft, index=True)
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
