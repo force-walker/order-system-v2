@@ -177,8 +177,60 @@ Validation note:
 
 ---
 
-## 10) References
+## 10) Batch API Finalization (Agreed)
+
+### A. Execution mode
+- `POST /api/v1/allocations/runs` is **asynchronous** (`202 Accepted` + `jobId`).
+- Worker processes allocation jobs out-of-band.
+
+### B. Job APIs
+- `POST /api/v1/allocations/runs` (enqueue)
+- `GET /api/v1/batch/jobs/{jobId}` (status/progress/result)
+- `GET /api/v1/batch/jobs` (list/filter for operations)
+- `POST /api/v1/batch/jobs/{jobId}/cancel` (optional but adopted)
+
+### C. Job states
+- `queued -> running -> succeeded | failed | cancelled`
+
+### D. Retry policy (MVP)
+- Auto retry: **1 time only**
+- Retry targets: transient failures only (timeout/temporary connectivity)
+- No auto retry for business validation failures
+- Retry interval: 30-60 seconds
+
+### E. Concurrency control
+- If same `jobType + businessDate` already has `queued` or `running`, reject new start:
+  - `409 JOB_ALREADY_RUNNING`
+
+### F. Result payload (summary)
+```json
+{
+  "jobId": "job_01H...",
+  "status": "succeeded",
+  "traceId": "trc_01H...",
+  "summary": {
+    "requestedCount": 1200,
+    "processedCount": 1180,
+    "succeededCount": 1100,
+    "failedCount": 50,
+    "skippedCount": 30,
+    "retryCount": 1,
+    "durationMs": 84231,
+    "startedAt": "2026-03-25T12:00:00Z",
+    "finishedAt": "2026-03-25T12:01:24Z"
+  },
+  "errors": []
+}
+```
+
+### G. Audit/Observability required fields
+- Required in job logs/events:
+  - `jobId`, `traceId`, `requestId`, `actor`, `status`, `startedAt`, `finishedAt`, `durationMs`
+- `cancel` and `retry` operations must be audit-logged.
+
+## 11) References
 - `docs/architecture/02-status-model.md`
 - `docs/openapi-mvp-skeleton-draft.yaml`
 - `docs/api-authorization-spec-draft.md`
 - `docs/api-error-codes-draft.md`
+- `docs/architecture/07-observability.md`
