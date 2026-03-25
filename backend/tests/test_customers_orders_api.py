@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -153,19 +154,20 @@ def test_get_order_not_found():
 
 def _seed_order_with_open_line() -> int:
     db = TestingSessionLocal()
+    suffix = uuid4().hex[:8]
 
     customer = Customer(
-        code="CUST-TRANS",
+        code=f"CUST-TRANS-{suffix}",
         name="Transition Customer",
         active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(customer)
     db.flush()
 
     product = Product(
-        sku="SKU-TRANS",
+        sku=f"SKU-TRANS-{suffix}",
         name="Transition Product",
         order_uom="count",
         purchase_uom="count",
@@ -174,21 +176,21 @@ def _seed_order_with_open_line() -> int:
         weight_capture_required=False,
         pricing_basis_default=PricingBasis.uom_count,
         active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(product)
     db.flush()
 
     order = Order(
-        order_no="ORD-TRANS-1",
+        order_no=f"ORD-TRANS-{suffix}",
         customer_id=customer.id,
-        order_datetime=datetime.utcnow(),
+        order_datetime=datetime.now(UTC),
         delivery_date=date.today(),
         status=OrderStatus.confirmed,
         note=None,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(order)
     db.flush()
@@ -201,8 +203,8 @@ def _seed_order_with_open_line() -> int:
         unit_price_uom_count=10,
         unit_price_uom_kg=None,
         line_status=LineStatus.open,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
     db.add(line)
     db.commit()
