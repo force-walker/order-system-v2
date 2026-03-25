@@ -31,6 +31,13 @@ class LineStatus(str, enum.Enum):
     cancelled = "cancelled"
 
 
+class StockoutPolicy(str, enum.Enum):
+    backorder = "backorder"
+    substitute = "substitute"
+    cancel = "cancel"
+    split = "split"
+
+
 class Customer(Base):
     __tablename__ = "customers"
 
@@ -86,3 +93,32 @@ class OrderItem(Base):
     line_status: Mapped[LineStatus] = mapped_column(Enum(LineStatus, name="linestatus"), default=LineStatus.open, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SupplierAllocation(Base):
+    __tablename__ = "supplier_allocations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"), index=True)
+    final_supplier_id: Mapped[int | None] = mapped_column(index=True)
+    final_qty: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
+    final_uom: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_manual_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    override_reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    stockout_policy: Mapped[StockoutPolicy | None] = mapped_column(Enum(StockoutPolicy, name="stockoutpolicy"), nullable=True)
+    split_group_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PurchaseResult(Base):
+    __tablename__ = "purchase_results"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    allocation_id: Mapped[int] = mapped_column(ForeignKey("supplier_allocations.id"), index=True)
+    purchased_qty: Mapped[float] = mapped_column(Numeric(12, 3))
+    purchased_uom: Mapped[str] = mapped_column(String(32))
+    result_status: Mapped[str] = mapped_column(String(32), index=True)
+    invoiceable_flag: Mapped[bool] = mapped_column(Boolean, default=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
