@@ -12,6 +12,17 @@ class OrderCreateRequest(BaseModel):
     note: str | None = None
 
 
+class OrderBulkTransitionRequest(BaseModel):
+    from_status: OrderStatus
+    to_status: OrderStatus
+
+
+class OrderBulkTransitionResponse(BaseModel):
+    order_id: int
+    updated_lines: int
+    updated_order_status: OrderStatus
+
+
 class OrderResponse(BaseModel):
     id: int
     order_no: str

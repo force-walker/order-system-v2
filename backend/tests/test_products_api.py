@@ -102,3 +102,17 @@ def test_create_product_success_and_duplicate_conflict():
     dup = client.post("/api/v1/products", json=payload)
     assert dup.status_code == 409
     assert dup.json()["detail"]["code"] == "SKU_ALREADY_EXISTS"
+
+
+def test_update_product_success_and_not_found():
+    pid = _seed_product("SKU-UPD")
+    client = _client()
+
+    ok = client.patch(f"/api/v1/products/{pid}", json={"name": "Updated Name", "active": False})
+    assert ok.status_code == 200
+    assert ok.json()["name"] == "Updated Name"
+    assert ok.json()["active"] is False
+
+    nf = client.patch("/api/v1/products/999999", json={"name": "x"})
+    assert nf.status_code == 404
+    assert nf.json()["detail"]["code"] == "PRODUCT_NOT_FOUND"

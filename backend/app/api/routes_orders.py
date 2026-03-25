@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.entities import Customer, Order, OrderStatus
-from app.schemas.order import OrderCreateRequest, OrderResponse
+from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus
+from app.schemas.order import OrderBulkTransitionRequest, OrderBulkTransitionResponse, OrderCreateRequest, OrderResponse
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
@@ -22,6 +22,41 @@ def get_order(order_id: int, db: Session = Depends(get_db)) -> OrderResponse:
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
     return OrderResponse.model_validate(row)
+
+
+_TRANSITION_RULES: dict[tuple[OrderStatus, OrderStatus], tuple[LineStatus, LineStatus]] = {
+    (OrderStatus.confirmed, OrderStatus.allocated): (LineStatus.open, LineStatus.allocated),
+    (OrderStatus.allocated, OrderStatus.purchased): (LineStatus.allocated, LineStatus.purchased),
+    (OrderStatus.purchased, OrderStatus.shipped): (LineStatus.purchased, LineStatus.shipped),
+    (OrderStatus.shipped, OrderStatus.invoiced): (LineStatus.shipped, LineStatus.invoiced),
+}
+
+
+@router.post("/{order_id}/bulk-transition", response_model=OrderBulkTransitionResponse)
+def bulk_transition_order(order_id: int, payload: OrderBulkTransitionRequest, db: Session = Depends(get_db)) -> OrderBulkTransitionResponse:
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+
+    key = (payload.from_status, payload.to_status)
+    if key not in _TRANSITION_RULES:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_TRANSITION_PAIR", "message": "invalid transition pair"})
+
+    if order.status != payload.from_status:
+        raise HTTPException(status_code=409, detail={"code": "ORDER_STATUS_MISMATCH", "message": "order status mismatch"})
+
+    from_line, to_line = _TRANSITION_RULES[key]
+    lines = db.query(OrderItem).filter(OrderItem.order_id == order_id, OrderItem.line_status == from_line).all()
+    if not lines:
+        raise HTTPException(status_code=409, detail={"code": "STATUS_NO_TARGET_LINES", "message": "no eligible lines"})
+
+    for line in lines:
+        line.line_status = to_line
+
+    order.status = payload.to_status
+    db.commit()
+
+    return OrderBulkTransitionResponse(order_id=order.id, updated_lines=len(lines), updated_order_status=order.status)
 
 
 @router.post("", response_model=OrderResponse, status_code=201)

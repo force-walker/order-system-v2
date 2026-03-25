@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Customer
+from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product
 
 
 engine = create_engine(
@@ -70,6 +70,20 @@ def test_create_customer_success_and_duplicate_conflict():
     dup = client.post("/api/v1/customers", json=payload)
     assert dup.status_code == 409
     assert dup.json()["detail"]["code"] == "CUSTOMER_CODE_ALREADY_EXISTS"
+
+
+def test_update_customer_success_and_not_found():
+    cid = _seed_customer("CUST-UPD")
+    client = _client()
+
+    ok = client.patch(f"/api/v1/customers/{cid}", json={"name": "Updated Customer", "active": False})
+    assert ok.status_code == 200
+    assert ok.json()["name"] == "Updated Customer"
+    assert ok.json()["active"] is False
+
+    nf = client.patch("/api/v1/customers/999999", json={"name": "x"})
+    assert nf.status_code == 404
+    assert nf.json()["detail"]["code"] == "CUSTOMER_NOT_FOUND"
 
 
 def test_get_customer_not_found():
@@ -135,3 +149,95 @@ def test_get_order_not_found():
     res = client.get("/api/v1/orders/999999")
     assert res.status_code == 404
     assert res.json()["detail"]["code"] == "ORDER_NOT_FOUND"
+
+
+def _seed_order_with_open_line() -> int:
+    db = TestingSessionLocal()
+
+    customer = Customer(
+        code="CUST-TRANS",
+        name="Transition Customer",
+        active=True,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(customer)
+    db.flush()
+
+    product = Product(
+        sku="SKU-TRANS",
+        name="Transition Product",
+        order_uom="count",
+        purchase_uom="count",
+        invoice_uom="count",
+        is_catch_weight=False,
+        weight_capture_required=False,
+        pricing_basis_default=PricingBasis.uom_count,
+        active=True,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(product)
+    db.flush()
+
+    order = Order(
+        order_no="ORD-TRANS-1",
+        customer_id=customer.id,
+        order_datetime=datetime.utcnow(),
+        delivery_date=date.today(),
+        status=OrderStatus.confirmed,
+        note=None,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(order)
+    db.flush()
+
+    line = OrderItem(
+        order_id=order.id,
+        product_id=product.id,
+        ordered_qty=2,
+        pricing_basis=PricingBasis.uom_count,
+        unit_price_uom_count=10,
+        unit_price_uom_kg=None,
+        line_status=LineStatus.open,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(line)
+    db.commit()
+    oid = order.id
+    db.close()
+    return oid
+
+
+def test_order_bulk_transition_success_and_no_target_lines():
+    order_id = _seed_order_with_open_line()
+    client = _client()
+
+    ok = client.post(
+        f"/api/v1/orders/{order_id}/bulk-transition",
+        json={"from_status": "confirmed", "to_status": "allocated"},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["order_id"] == order_id
+    assert ok.json()["updated_lines"] == 1
+    assert ok.json()["updated_order_status"] == "allocated"
+
+    no_target = client.post(
+        f"/api/v1/orders/{order_id}/bulk-transition",
+        json={"from_status": "confirmed", "to_status": "allocated"},
+    )
+    assert no_target.status_code == 409
+    assert no_target.json()["detail"]["code"] == "ORDER_STATUS_MISMATCH"
+
+
+def test_order_bulk_transition_invalid_pair():
+    order_id = _seed_order_with_open_line()
+    client = _client()
+    bad = client.post(
+        f"/api/v1/orders/{order_id}/bulk-transition",
+        json={"from_status": "confirmed", "to_status": "invoiced"},
+    )
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["code"] == "INVALID_TRANSITION_PAIR"

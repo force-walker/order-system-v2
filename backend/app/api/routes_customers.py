@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.entities import Customer
-from app.schemas.customer import CustomerCreateRequest, CustomerResponse
+from app.schemas.customer import CustomerCreateRequest, CustomerResponse, CustomerUpdateRequest
 
 router = APIRouter(prefix="/api/v1/customers", tags=["customers"])
 
@@ -19,6 +19,21 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)) -> CustomerRes
     row = db.query(Customer).filter(Customer.id == customer_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+    return CustomerResponse.model_validate(row)
+
+
+@router.patch("/{customer_id}", response_model=CustomerResponse)
+def update_customer(customer_id: int, payload: CustomerUpdateRequest, db: Session = Depends(get_db)) -> CustomerResponse:
+    row = db.query(Customer).filter(Customer.id == customer_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(row, k, v)
+
+    db.commit()
+    db.refresh(row)
     return CustomerResponse.model_validate(row)
 
 

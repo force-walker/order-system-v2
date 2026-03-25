@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.entities import Product
-from app.schemas.product import ProductCreateRequest, ProductResponse
+from app.schemas.product import ProductCreateRequest, ProductResponse, ProductUpdateRequest
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
 
@@ -19,6 +19,21 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductRespon
     row = db.query(Product).filter(Product.id == product_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+    return ProductResponse.model_validate(row)
+
+
+@router.patch("/{product_id}", response_model=ProductResponse)
+def update_product(product_id: int, payload: ProductUpdateRequest, db: Session = Depends(get_db)) -> ProductResponse:
+    row = db.query(Product).filter(Product.id == product_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(row, k, v)
+
+    db.commit()
+    db.refresh(row)
     return ProductResponse.model_validate(row)
 
 
