@@ -40,3 +40,26 @@ PROGRESS:
 - #06-testing-qa
 - #03-backend
 - #04-frontend
+
+## 2026-03-26
+
+[2026-03-26][Testing-QA]
+PROGRESS:
+- 今日やったこと:
+  - API拡張後の回帰テストを2回実施
+  - 1回目: 20 passed / 0 failed
+  - 2回目: 21 passed / 0 failed（invoices系追加確認）
+  - compileall通過を確認
+  - テスト方針を「差分限定でなく全体回帰」に整理
+- 明日やること:
+  - POST/異常系観点の追加確認
+  - `datetime.utcnow()` 警告の解消状況追跡
+- ブロッカー:
+  - なし（機能テストは合格）
+
+注意事項:
+- DeprecationWarning（`datetime.utcnow()`）が継続発生（最新実行時31件）
+
+参照:
+- #06-testing-qa
+- #03-backend

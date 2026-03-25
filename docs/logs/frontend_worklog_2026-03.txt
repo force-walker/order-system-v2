@@ -23,3 +23,19 @@ PROGRESS:
 
 参照:
 - #04-frontend
+
+## 2026-03-26
+
+[2026-03-26][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - backend API拡張（PR #6/#7/#8）を踏まえた連携前提を確認
+- 明日やること:
+  - 新規/更新APIへの接続差分確認（PATCH/Invoice系）
+  - 必要に応じて画面側のエラーハンドリング調整
+- ブロッカー:
+  - なし
+
+参照:
+- #04-frontend
+- #03-backend

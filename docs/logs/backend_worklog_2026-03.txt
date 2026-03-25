@@ -145,3 +145,23 @@ PROGRESS:
 - PR: <https://github.com/force-walker/order-system-v2/pull/4>
 - Merge commit: `9c24709`
 - 主なコミット: `22ea272`, `44e6d20`, `0c2fce8`
+
+## 2026-03-26
+
+[2026-03-26][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - products/customers PATCH と orders bulk-transition を実装・マージ（PR #6）
+  - allocations / purchase-results API を実装・マージ（PR #7）
+  - invoices API（create/finalize/reset-to-draft/unlock）を実装・マージ（PR #8）
+  - テスト失敗対応（UNIQUE制約違反のseed重複を解消）
+  - 一部テストで `datetime.utcnow()` を `datetime.now(UTC)` に置換
+- 明日やること:
+  - 残API（batch / audit-logs / metrics）実装
+  - OpenAPI整合とテスト補完
+- ブロッカー:
+  - なし
+
+参照:
+- #03-backend
+- PR: #6, #7, #8

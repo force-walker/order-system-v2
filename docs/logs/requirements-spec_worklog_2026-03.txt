@@ -18,3 +18,20 @@ PROGRESS:
 
 参照:
 - #01-requirements
+
+## 2026-03-26
+
+[2026-03-26][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - architectureで確定したBatch API方針（非同期ジョブ化）を要件観点で確認
+  - 実装進捗（PR #6/#7/#8）との整合観点を確認
+- 明日やること:
+  - 仕様と実装の差分有無を点検（batch/audit/metricsの残項目中心）
+- ブロッカー:
+  - なし
+
+参照:
+- #01-requirements
+- #02-architecture
+- #03-backend
