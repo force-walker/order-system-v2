@@ -16,8 +16,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    stockout_policy = sa.Enum("backorder", "substitute", "cancel", "split", name="stockoutpolicy")
-    invoice_status = sa.Enum("draft", "finalized", "sent", "cancelled", name="invoicestatus")
+    stockout_policy = sa.Enum(
+        "backorder", "substitute", "cancel", "split", name="stockoutpolicy", create_type=False
+    )
+    invoice_status = sa.Enum("draft", "finalized", "sent", "cancelled", name="invoicestatus", create_type=False)
     stockout_policy.create(op.get_bind(), checkfirst=True)
     invoice_status.create(op.get_bind(), checkfirst=True)
 
