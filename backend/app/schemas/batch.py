@@ -23,6 +23,12 @@ class BatchJobSummary(BaseModel):
     finishedAt: datetime | None
 
 
+class BatchJobError(BaseModel):
+    code: str | None = None
+    message: str
+    itemRef: str | None = None
+
+
 class BatchJobResponse(BaseModel):
     jobId: int
     jobType: str
@@ -32,9 +38,18 @@ class BatchJobResponse(BaseModel):
     requestId: str
     actor: str
     summary: BatchJobSummary
-    errors: list[dict] = []
+    errors: list[BatchJobError] = Field(default_factory=list)
 
 
 class BatchJobListResponse(BaseModel):
     items: list[BatchJobResponse]
     count: int
+
+
+class ApiErrorDetail(BaseModel):
+    code: str
+    message: str
+
+
+class ApiErrorResponse(BaseModel):
+    detail: ApiErrorDetail

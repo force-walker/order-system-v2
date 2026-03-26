@@ -8,9 +8,21 @@ from sqlalchemy.orm import Session
 from app.core.auth import AuthContext, require_roles
 from app.db.session import get_db
 from app.models.entities import AuditLog, BatchJob, BatchJobStatus
-from app.schemas.batch import AllocationRunRequest, BatchJobListResponse, BatchJobResponse, BatchJobSummary
+from app.schemas.batch import (
+    AllocationRunRequest,
+    ApiErrorResponse,
+    BatchJobError,
+    BatchJobListResponse,
+    BatchJobResponse,
+    BatchJobSummary,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["batch"])
+
+BATCH_COMMON_ERROR_RESPONSES = {
+    401: {"model": ApiErrorResponse, "description": "Unauthorized"},
+    403: {"model": ApiErrorResponse, "description": "Forbidden"},
+}
 
 
 def _audit(db: Session, *, entity_id: int, action: str, actor: str, reason_code: str | None = None) -> None:
@@ -31,12 +43,23 @@ def _to_response(job: BatchJob) -> BatchJobResponse:
     if job.started_at and job.finished_at:
         duration_ms = int((job.finished_at - job.started_at).total_seconds() * 1000)
 
-    errors = []
+    errors: list[BatchJobError] = []
     if job.errors_json:
         try:
-            errors = json.loads(job.errors_json)
+            raw_errors = json.loads(job.errors_json)
+            if isinstance(raw_errors, list):
+                errors = [
+                    BatchJobError(
+                        code=(e.get("code") if isinstance(e, dict) else None),
+                        message=(e.get("message") if isinstance(e, dict) else str(e)),
+                        itemRef=(e.get("itemRef") if isinstance(e, dict) else None),
+                    )
+                    for e in raw_errors
+                ]
+            else:
+                errors = [BatchJobError(message=str(raw_errors))]
         except Exception:
-            errors = [{"message": job.errors_json}]
+            errors = [BatchJobError(message=job.errors_json)]
 
     return BatchJobResponse(
         jobId=job.id,
@@ -61,7 +84,15 @@ def _to_response(job: BatchJob) -> BatchJobResponse:
     )
 
 
-@router.post("/allocations/runs", response_model=BatchJobResponse, status_code=202)
+@router.post(
+    "/allocations/runs",
+    response_model=BatchJobResponse,
+    status_code=202,
+    responses={
+        **BATCH_COMMON_ERROR_RESPONSES,
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def enqueue_allocation_run(
     payload: AllocationRunRequest,
     db: Session = Depends(get_db),
@@ -112,7 +143,14 @@ def enqueue_allocation_run(
     return _to_response(job)
 
 
-@router.get("/batch/jobs/{job_id}", response_model=BatchJobResponse)
+@router.get(
+    "/batch/jobs/{job_id}",
+    response_model=BatchJobResponse,
+    responses={
+        **BATCH_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+    },
+)
 def get_batch_job(job_id: int, db: Session = Depends(get_db), auth: AuthContext = Depends(require_roles("admin", "buyer", "order_entry"))) -> BatchJobResponse:
     job = db.query(BatchJob).filter(BatchJob.id == job_id).first()
     if job is None:
@@ -140,7 +178,7 @@ def get_batch_job(job_id: int, db: Session = Depends(get_db), auth: AuthContext 
     return _to_response(job)
 
 
-@router.get("/batch/jobs", response_model=BatchJobListResponse)
+@router.get("/batch/jobs", response_model=BatchJobListResponse, responses=BATCH_COMMON_ERROR_RESPONSES)
 def list_batch_jobs(
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(require_roles("admin", "buyer", "order_entry")),
@@ -158,7 +196,15 @@ def list_batch_jobs(
     return BatchJobListResponse(items=items, count=len(items))
 
 
-@router.post("/batch/jobs/{job_id}/cancel", response_model=BatchJobResponse)
+@router.post(
+    "/batch/jobs/{job_id}/cancel",
+    response_model=BatchJobResponse,
+    responses={
+        **BATCH_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def cancel_batch_job(job_id: int, db: Session = Depends(get_db), auth: AuthContext = Depends(require_roles("admin", "buyer"))) -> BatchJobResponse:
     job = db.query(BatchJob).filter(BatchJob.id == job_id).first()
     if job is None:
@@ -175,7 +221,15 @@ def cancel_batch_job(job_id: int, db: Session = Depends(get_db), auth: AuthConte
     return _to_response(job)
 
 
-@router.post("/batch/jobs/{job_id}/retry", response_model=BatchJobResponse)
+@router.post(
+    "/batch/jobs/{job_id}/retry",
+    response_model=BatchJobResponse,
+    responses={
+        **BATCH_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def retry_batch_job(
     job_id: int,
     db: Session = Depends(get_db),
