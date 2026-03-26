@@ -38,6 +38,9 @@ def bulk_transition_order(order_id: int, payload: OrderBulkTransitionRequest, db
     if order is None:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
 
+    if payload.from_status == payload.to_status:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_TRANSITION_PAIR", "message": "from_status and to_status must differ"})
+
     key = (payload.from_status, payload.to_status)
     if key not in _TRANSITION_RULES:
         raise HTTPException(status_code=422, detail={"code": "INVALID_TRANSITION_PAIR", "message": "invalid transition pair"})

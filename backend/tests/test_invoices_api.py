@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -53,6 +53,24 @@ def _seed_order() -> int:
     oid = o.id
     db.close()
     return oid
+
+
+def test_create_invoice_invalid_date_range_is_422():
+    order_id = _seed_order()
+    client = _client()
+
+    today = date.today()
+    bad = client.post(
+        "/api/v1/invoices",
+        json={
+            "invoice_no": "INV-BAD-DATE",
+            "order_id": order_id,
+            "invoice_date": str(today),
+            "due_date": str(today - timedelta(days=1)),
+        },
+    )
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["code"] == "INVALID_DATE_RANGE"
 
 
 def test_create_finalize_unlock_reset_invoice_flow():
