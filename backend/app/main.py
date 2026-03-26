@@ -1,3 +1,5 @@
+from time import perf_counter
+
 from fastapi import FastAPI, Request
 
 from app.api.routes_allocations import router as allocations_router
@@ -10,17 +12,30 @@ from app.api.routes_metrics import router as metrics_router
 from app.api.routes_orders import router as orders_router
 from app.api.routes_products import router as products_router
 from app.api.routes_purchase_results import router as purchase_results_router
-from app.core.metrics import api_requests_total
+from app.core.metrics import api_request_duration_ms, api_request_errors_total, api_requests_total, inflight_requests
 
 app = FastAPI(title="Order System v2 API")
 
 
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
-    response = await call_next(request)
+    started = perf_counter()
+    inflight_requests.inc()
+    try:
+        response = await call_next(request)
+    finally:
+        inflight_requests.dec()
+
+    elapsed_ms = (perf_counter() - started) * 1000
     route = request.scope.get("route")
     path_label = getattr(route, "path", request.url.path)
-    api_requests_total.labels(method=request.method, path=path_label, status=str(response.status_code)).inc()
+    status = str(response.status_code)
+
+    api_requests_total.labels(method=request.method, path=path_label, status=status).inc()
+    api_request_duration_ms.labels(method=request.method, path=path_label).observe(elapsed_ms)
+    if status.startswith("4") or status.startswith("5"):
+        api_request_errors_total.labels(status_family=f"{status[0]}xx").inc()
+
     return response
 
 
