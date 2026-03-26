@@ -6,3 +6,4 @@ psycopg[binary]==3.2.1
 pydantic==2.9.2
 python-dotenv==1.0.1
 PyJWT==2.9.0
+prometheus-client==0.21.0

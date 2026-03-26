@@ -66,3 +66,23 @@ Purpose: 時系列の作業ログ（詳細）。確定事項は decisions_log.tx
 [YYYY-MM-DD HH:MM] actor: summary
 - detail
 - detail
+
+## 2026-03-26
+
+[2026-03-26][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - Batch系API仕様をArchitectureで確定
+  - `allocations/runs` を同期ではなく非同期ジョブ化で合意
+  - 同時実行制御、再実行方針、監査/可観測性、結果返却`summary`を確定
+  - `docs/architecture/03-api-catalog.md` へ反映
+  - コミット: `5f2e4aa`
+- 明日やること:
+  - API実装チャンネルとの仕様同期
+  - OpenAPI skeleton側の反映差分チェック
+- ブロッカー:
+  - なし
+
+参照:
+- #02-architecture
+- Commit: 5f2e4aa
