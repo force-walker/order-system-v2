@@ -87,6 +87,12 @@ def test_update_customer_success_and_not_found():
     assert nf.json()["detail"]["code"] == "CUSTOMER_NOT_FOUND"
 
 
+def test_create_customer_validation_error_is_422():
+    client = _client()
+    res = client.post("/api/v1/customers", json={"code": "CUST-ONLY"})
+    assert res.status_code == 422
+
+
 def test_get_customer_not_found():
     client = _client()
     res = client.get("/api/v1/customers/999999")

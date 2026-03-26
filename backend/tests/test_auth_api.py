@@ -23,7 +23,12 @@ def test_login_refresh_me_flow():
     assert "access_token" in refreshed.json()
 
 
-def test_login_forbidden_role():
+def test_login_invalid_role_is_422():
     res = client.post("/api/v1/auth/login", json={"user_id": "u1", "role": "invalid_role"})
-    assert res.status_code == 403
-    assert res.json()["detail"]["code"] == "FORBIDDEN"
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "INVALID_ROLE"
+
+
+def test_auth_required_field_validation_is_422():
+    res = client.post("/api/v1/auth/login", json={"role": "admin"})
+    assert res.status_code == 422

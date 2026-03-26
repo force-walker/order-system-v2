@@ -3,9 +3,14 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.entities import Customer
+from app.schemas.common import ApiErrorResponse
 from app.schemas.customer import CustomerCreateRequest, CustomerResponse, CustomerUpdateRequest
 
 router = APIRouter(prefix="/api/v1/customers", tags=["customers"])
+
+CUSTOMER_COMMON_ERROR_RESPONSES = {
+    422: {"model": ApiErrorResponse, "description": "Validation Error"},
+}
 
 
 @router.get("", response_model=list[CustomerResponse])
@@ -14,7 +19,11 @@ def list_customers(db: Session = Depends(get_db)) -> list[CustomerResponse]:
     return [CustomerResponse.model_validate(r) for r in rows]
 
 
-@router.get("/{customer_id}", response_model=CustomerResponse)
+@router.get(
+    "/{customer_id}",
+    response_model=CustomerResponse,
+    responses={**CUSTOMER_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
 def get_customer(customer_id: int, db: Session = Depends(get_db)) -> CustomerResponse:
     row = db.query(Customer).filter(Customer.id == customer_id).first()
     if row is None:
@@ -22,7 +31,11 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)) -> CustomerRes
     return CustomerResponse.model_validate(row)
 
 
-@router.patch("/{customer_id}", response_model=CustomerResponse)
+@router.patch(
+    "/{customer_id}",
+    response_model=CustomerResponse,
+    responses={**CUSTOMER_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
 def update_customer(customer_id: int, payload: CustomerUpdateRequest, db: Session = Depends(get_db)) -> CustomerResponse:
     row = db.query(Customer).filter(Customer.id == customer_id).first()
     if row is None:
@@ -37,7 +50,15 @@ def update_customer(customer_id: int, payload: CustomerUpdateRequest, db: Sessio
     return CustomerResponse.model_validate(row)
 
 
-@router.post("", response_model=CustomerResponse, status_code=201)
+@router.post(
+    "",
+    response_model=CustomerResponse,
+    status_code=201,
+    responses={
+        **CUSTOMER_COMMON_ERROR_RESPONSES,
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def create_customer(payload: CustomerCreateRequest, db: Session = Depends(get_db)) -> CustomerResponse:
     exists = db.query(Customer).filter(Customer.code == payload.code).first()
     if exists is not None:

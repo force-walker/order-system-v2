@@ -6,11 +6,20 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.entities import SupplierAllocation
 from app.schemas.allocation import AllocationOverrideRequest, AllocationResponse, AllocationSplitRequest
+from app.schemas.common import ApiErrorResponse
 
 router = APIRouter(prefix="/api/v1/allocations", tags=["allocations"])
 
+ALLOCATION_COMMON_ERROR_RESPONSES = {
+    422: {"model": ApiErrorResponse, "description": "Validation Error"},
+}
 
-@router.patch("/{allocation_id}/override", response_model=AllocationResponse)
+
+@router.patch(
+    "/{allocation_id}/override",
+    response_model=AllocationResponse,
+    responses={**ALLOCATION_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
 def override_allocation(allocation_id: int, payload: AllocationOverrideRequest, db: Session = Depends(get_db)) -> AllocationResponse:
     row = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).first()
     if row is None:
@@ -27,7 +36,11 @@ def override_allocation(allocation_id: int, payload: AllocationOverrideRequest, 
     return AllocationResponse.model_validate(row)
 
 
-@router.post("/{allocation_id}/split-line", response_model=list[AllocationResponse])
+@router.post(
+    "/{allocation_id}/split-line",
+    response_model=list[AllocationResponse],
+    responses={**ALLOCATION_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
 def split_allocation(allocation_id: int, payload: AllocationSplitRequest, db: Session = Depends(get_db)) -> list[AllocationResponse]:
     row = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).first()
     if row is None:

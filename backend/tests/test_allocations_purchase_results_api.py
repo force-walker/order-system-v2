@@ -116,6 +116,16 @@ def test_allocation_override_and_split():
     assert len(sp.json()) == 2
 
 
+def test_allocation_validation_error_is_422():
+    aid = _seed_allocation()
+    client = _client()
+    bad = client.patch(
+        f"/api/v1/allocations/{aid}/override",
+        json={"final_supplier_id": 101, "final_qty": 0, "final_uom": "count", "override_reason_code": "manual"},
+    )
+    assert bad.status_code == 422
+
+
 def test_purchase_result_create_update_bulk_upsert():
     aid = _seed_allocation()
     client = _client()

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.entities import PurchaseResult, SupplierAllocation
+from app.schemas.common import ApiErrorResponse
 from app.schemas.purchase_result import (
     PurchaseResultBulkUpsertRequest,
     PurchaseResultCreateRequest,
@@ -12,8 +13,17 @@ from app.schemas.purchase_result import (
 
 router = APIRouter(prefix="/api/v1/purchase-results", tags=["purchase-results"])
 
+PURCHASE_RESULT_COMMON_ERROR_RESPONSES = {
+    422: {"model": ApiErrorResponse, "description": "Validation Error"},
+}
 
-@router.post("", response_model=PurchaseResultResponse, status_code=201)
+
+@router.post(
+    "",
+    response_model=PurchaseResultResponse,
+    status_code=201,
+    responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
 def create_purchase_result(payload: PurchaseResultCreateRequest, db: Session = Depends(get_db)) -> PurchaseResultResponse:
     alloc = db.query(SupplierAllocation).filter(SupplierAllocation.id == payload.allocation_id).first()
     if alloc is None:
@@ -26,7 +36,11 @@ def create_purchase_result(payload: PurchaseResultCreateRequest, db: Session = D
     return PurchaseResultResponse.model_validate(row)
 
 
-@router.patch("/{result_id}", response_model=PurchaseResultResponse)
+@router.patch(
+    "/{result_id}",
+    response_model=PurchaseResultResponse,
+    responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
 def update_purchase_result(result_id: int, payload: PurchaseResultUpdateRequest, db: Session = Depends(get_db)) -> PurchaseResultResponse:
     row = db.query(PurchaseResult).filter(PurchaseResult.id == result_id).first()
     if row is None:
@@ -41,7 +55,10 @@ def update_purchase_result(result_id: int, payload: PurchaseResultUpdateRequest,
     return PurchaseResultResponse.model_validate(row)
 
 
-@router.post("/bulk-upsert")
+@router.post(
+    "/bulk-upsert",
+    responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
 def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: Session = Depends(get_db)) -> dict[str, int]:
     count = 0
     for item in payload.items:

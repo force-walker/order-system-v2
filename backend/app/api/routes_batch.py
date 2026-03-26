@@ -8,14 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import AuthContext, require_roles
 from app.db.session import get_db
 from app.models.entities import AuditLog, BatchJob, BatchJobStatus
-from app.schemas.batch import (
-    AllocationRunRequest,
-    ApiErrorResponse,
-    BatchJobError,
-    BatchJobListResponse,
-    BatchJobResponse,
-    BatchJobSummary,
-)
+from app.schemas.batch import AllocationRunRequest, BatchJobError, BatchJobListResponse, BatchJobResponse, BatchJobSummary
+from app.schemas.common import ApiErrorResponse
 
 router = APIRouter(prefix="/api/v1", tags=["batch"])
 

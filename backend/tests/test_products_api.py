@@ -104,6 +104,25 @@ def test_create_product_success_and_duplicate_conflict():
     assert dup.json()["detail"]["code"] == "SKU_ALREADY_EXISTS"
 
 
+def test_create_product_validation_errors_are_422():
+    client = _client()
+    missing_required = client.post("/api/v1/products", json={"sku": "SKU-X"})
+    assert missing_required.status_code == 422
+
+    invalid_enum = client.post(
+        "/api/v1/products",
+        json={
+            "sku": "SKU-X2",
+            "name": "X",
+            "order_uom": "count",
+            "purchase_uom": "count",
+            "invoice_uom": "count",
+            "pricing_basis_default": "unknown_basis",
+        },
+    )
+    assert invalid_enum.status_code == 422
+
+
 def test_update_product_success_and_not_found():
     pid = _seed_product("SKU-UPD")
     client = _client()

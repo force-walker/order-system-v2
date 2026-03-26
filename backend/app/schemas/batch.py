@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 from app.models.entities import BatchJobStatus
+from app.schemas.common import ApiErrorResponse
 
 
 class AllocationRunRequest(BaseModel):
@@ -45,11 +46,3 @@ class BatchJobListResponse(BaseModel):
     items: list[BatchJobResponse]
     count: int
 
-
-class ApiErrorDetail(BaseModel):
-    code: str
-    message: str
-
-
-class ApiErrorResponse(BaseModel):
-    detail: ApiErrorDetail
