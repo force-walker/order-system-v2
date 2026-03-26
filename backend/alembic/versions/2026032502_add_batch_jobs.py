@@ -16,9 +16,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    status_enum = sa.Enum("queued", "running", "succeeded", "failed", "cancelled", name="batchjobstatus")
-    status_enum.create(op.get_bind(), checkfirst=True)
-
     op.create_table(
         "audit_logs",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -43,7 +40,7 @@ def upgrade() -> None:
         sa.Column("trace_id", sa.String(length=64), nullable=False),
         sa.Column("request_id", sa.String(length=64), nullable=False),
         sa.Column("actor", sa.String(length=64), nullable=False),
-        sa.Column("status", status_enum, nullable=False, server_default="queued"),
+        sa.Column("status", sa.String(length=32), nullable=False, server_default="queued"),
         sa.Column("retry_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("max_retries", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("requested_count", sa.Integer(), nullable=False, server_default="0"),
@@ -76,4 +73,3 @@ def downgrade() -> None:
     op.drop_index("ix_audit_logs_entity_type", table_name="audit_logs")
     op.drop_table("audit_logs")
 
-    sa.Enum(name="batchjobstatus").drop(op.get_bind(), checkfirst=True)

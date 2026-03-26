@@ -16,13 +16,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    stockout_policy = sa.Enum(
-        "backorder", "substitute", "cancel", "split", name="stockoutpolicy", create_type=False
-    )
-    invoice_status = sa.Enum("draft", "finalized", "sent", "cancelled", name="invoicestatus", create_type=False)
-    stockout_policy.create(op.get_bind(), checkfirst=True)
-    invoice_status.create(op.get_bind(), checkfirst=True)
-
     op.create_table(
         "supplier_allocations",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -32,7 +25,7 @@ def upgrade() -> None:
         sa.Column("final_uom", sa.String(length=32), nullable=True),
         sa.Column("is_manual_override", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("override_reason_code", sa.String(length=64), nullable=True),
-        sa.Column("stockout_policy", stockout_policy, nullable=True),
+        sa.Column("stockout_policy", sa.String(length=32), nullable=True),
         sa.Column("split_group_id", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")),
@@ -67,7 +60,7 @@ def upgrade() -> None:
         sa.Column("subtotal", sa.Numeric(12, 2), nullable=False, server_default="0"),
         sa.Column("tax_total", sa.Numeric(12, 2), nullable=False, server_default="0"),
         sa.Column("grand_total", sa.Numeric(12, 2), nullable=False, server_default="0"),
-        sa.Column("status", invoice_status, nullable=False, server_default="draft"),
+        sa.Column("status", sa.String(length=32), nullable=False, server_default="draft"),
         sa.Column("is_locked", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("now()")),
@@ -93,5 +86,3 @@ def downgrade() -> None:
     op.drop_index("ix_supplier_allocations_order_item_id", table_name="supplier_allocations")
     op.drop_table("supplier_allocations")
 
-    sa.Enum(name="invoicestatus").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="stockoutpolicy").drop(op.get_bind(), checkfirst=True)
