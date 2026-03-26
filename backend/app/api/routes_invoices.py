@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.entities import Invoice, InvoiceStatus, Order
+from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
     InvoiceCreateRequest,
     InvoiceFinalizeResponse,
@@ -15,8 +16,21 @@ from app.schemas.invoice import (
 
 router = APIRouter(prefix="/api/v1/invoices", tags=["invoices"])
 
+INVOICE_COMMON_ERROR_RESPONSES = {
+    422: {"model": ApiErrorResponse, "description": "Validation Error"},
+}
 
-@router.post("", response_model=InvoiceResponse, status_code=201)
+
+@router.post(
+    "",
+    response_model=InvoiceResponse,
+    status_code=201,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
     if payload.due_date is not None and payload.due_date < payload.invoice_date:
         raise HTTPException(status_code=422, detail={"code": "INVALID_DATE_RANGE", "message": "due_date must be on or after invoice_date"})
@@ -47,7 +61,15 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
     return InvoiceResponse.model_validate(row)
 
 
-@router.post("/{invoice_id}/finalize", response_model=InvoiceFinalizeResponse)
+@router.post(
+    "/{invoice_id}/finalize",
+    response_model=InvoiceFinalizeResponse,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def finalize_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceFinalizeResponse:
     row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if row is None:
@@ -61,7 +83,15 @@ def finalize_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceF
     return InvoiceFinalizeResponse(invoice_id=row.id, status=row.status, is_locked=row.is_locked)
 
 
-@router.post("/{invoice_id}/reset-to-draft", response_model=InvoiceResetResponse)
+@router.post(
+    "/{invoice_id}/reset-to-draft",
+    response_model=InvoiceResetResponse,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def reset_to_draft(invoice_id: int, payload: InvoiceResetRequest, db: Session = Depends(get_db)) -> InvoiceResetResponse:
     row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if row is None:
@@ -75,7 +105,15 @@ def reset_to_draft(invoice_id: int, payload: InvoiceResetRequest, db: Session = 
     return InvoiceResetResponse(invoice_id=row.id, status=row.status)
 
 
-@router.post("/{invoice_id}/unlock", response_model=InvoiceUnlockResponse)
+@router.post(
+    "/{invoice_id}/unlock",
+    response_model=InvoiceUnlockResponse,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def unlock_invoice(invoice_id: int, payload: InvoiceUnlockRequest, db: Session = Depends(get_db)) -> InvoiceUnlockResponse:
     row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if row is None:

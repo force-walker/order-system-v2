@@ -1,13 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
-    user_id: str
-    role: str
+    user_id: str = Field(min_length=1, max_length=128)
+    role: str = Field(min_length=1, max_length=32)
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str = Field(min_length=1)
 
 
 class TokenResponse(BaseModel):

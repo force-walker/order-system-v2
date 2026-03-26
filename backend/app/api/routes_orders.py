@@ -5,9 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus
+from app.schemas.common import ApiErrorResponse
 from app.schemas.order import OrderBulkTransitionRequest, OrderBulkTransitionResponse, OrderCreateRequest, OrderResponse
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
+
+ORDER_COMMON_ERROR_RESPONSES = {
+    422: {"model": ApiErrorResponse, "description": "Validation Error"},
+}
 
 
 @router.get("", response_model=list[OrderResponse])
@@ -16,7 +21,11 @@ def list_orders(db: Session = Depends(get_db)) -> list[OrderResponse]:
     return [OrderResponse.model_validate(r) for r in rows]
 
 
-@router.get("/{order_id}", response_model=OrderResponse)
+@router.get(
+    "/{order_id}",
+    response_model=OrderResponse,
+    responses={**ORDER_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
 def get_order(order_id: int, db: Session = Depends(get_db)) -> OrderResponse:
     row = db.query(Order).filter(Order.id == order_id).first()
     if row is None:
@@ -32,7 +41,15 @@ _TRANSITION_RULES: dict[tuple[OrderStatus, OrderStatus], tuple[LineStatus, LineS
 }
 
 
-@router.post("/{order_id}/bulk-transition", response_model=OrderBulkTransitionResponse)
+@router.post(
+    "/{order_id}/bulk-transition",
+    response_model=OrderBulkTransitionResponse,
+    responses={
+        **ORDER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def bulk_transition_order(order_id: int, payload: OrderBulkTransitionRequest, db: Session = Depends(get_db)) -> OrderBulkTransitionResponse:
     order = db.query(Order).filter(Order.id == order_id).first()
     if order is None:
@@ -62,7 +79,16 @@ def bulk_transition_order(order_id: int, payload: OrderBulkTransitionRequest, db
     return OrderBulkTransitionResponse(order_id=order.id, updated_lines=len(lines), updated_order_status=order.status)
 
 
-@router.post("", response_model=OrderResponse, status_code=201)
+@router.post(
+    "",
+    response_model=OrderResponse,
+    status_code=201,
+    responses={
+        **ORDER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
 def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> OrderResponse:
     customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
     if customer is None:

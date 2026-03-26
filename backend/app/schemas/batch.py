@@ -45,11 +45,3 @@ class BatchJobListResponse(BaseModel):
     items: list[BatchJobResponse]
     count: int
 
-
-class ApiErrorDetail(BaseModel):
-    code: str
-    message: str
-
-
-class ApiErrorResponse(BaseModel):
-    detail: ApiErrorDetail
