@@ -88,6 +88,34 @@ def test_batch_cancel_queued_success_then_conflict():
     assert cancel_ng.json()["detail"]["code"] == "RETRY_NOT_ALLOWED"
 
 
+def test_batch_openapi_status_codes_and_error_schema():
+    client = _client()
+    spec = client.get("/openapi.json").json()
+
+    enqueue = spec["paths"]["/api/v1/allocations/runs"]["post"]["responses"]
+    assert "202" in enqueue
+    assert "401" in enqueue
+    assert "403" in enqueue
+    assert "409" in enqueue
+
+    get_job = spec["paths"]["/api/v1/batch/jobs/{job_id}"]["get"]["responses"]
+    assert "200" in get_job
+    assert "401" in get_job
+    assert "403" in get_job
+    assert "404" in get_job
+
+    cancel = spec["paths"]["/api/v1/batch/jobs/{job_id}/cancel"]["post"]["responses"]
+    assert "200" in cancel
+    assert "401" in cancel
+    assert "403" in cancel
+    assert "404" in cancel
+    assert "409" in cancel
+
+    components = spec["components"]["schemas"]
+    assert "BatchJobSummary" in components
+    assert "BatchJobError" in components
+
+
 def test_batch_retry_failed_job():
     client = _client()
     payload = {
