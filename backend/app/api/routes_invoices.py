@@ -18,6 +18,9 @@ router = APIRouter(prefix="/api/v1/invoices", tags=["invoices"])
 
 @router.post("", response_model=InvoiceResponse, status_code=201)
 def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
+    if payload.due_date is not None and payload.due_date < payload.invoice_date:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_DATE_RANGE", "message": "due_date must be on or after invoice_date"})
+
     order = db.query(Order).filter(Order.id == payload.order_id).first()
     if order is None:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})

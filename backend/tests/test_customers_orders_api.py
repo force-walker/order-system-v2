@@ -243,3 +243,30 @@ def test_order_bulk_transition_invalid_pair():
     )
     assert bad.status_code == 422
     assert bad.json()["detail"]["code"] == "INVALID_TRANSITION_PAIR"
+
+
+def test_order_bulk_transition_same_status_is_422():
+    order_id = _seed_order_with_open_line()
+    client = _client()
+    bad = client.post(
+        f"/api/v1/orders/{order_id}/bulk-transition",
+        json={"from_status": "confirmed", "to_status": "confirmed"},
+    )
+    assert bad.status_code == 422
+    assert bad.json()["detail"]["code"] == "INVALID_TRANSITION_PAIR"
+
+
+def test_order_validation_required_and_enum_are_422():
+    client = _client()
+
+    missing_required = client.post(
+        "/api/v1/orders",
+        json={"order_no": "ORD-MISS", "delivery_date": str(date.today())},
+    )
+    assert missing_required.status_code == 422
+
+    invalid_enum = client.post(
+        "/api/v1/orders/1/bulk-transition",
+        json={"from_status": "invalid_status", "to_status": "allocated"},
+    )
+    assert invalid_enum.status_code == 422
