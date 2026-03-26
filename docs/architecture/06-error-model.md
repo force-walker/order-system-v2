@@ -31,8 +31,6 @@ Fields:
 
 ## 2) HTTP Status Families (MVP)
 
-- `400 Bad Request`
-  - malformed request, invalid JSON, missing required fields
 - `401 Unauthorized`
   - missing/invalid/expired access token
 - `403 Forbidden`
@@ -40,9 +38,14 @@ Fields:
 - `404 Not Found`
   - target resource not found
 - `409 Conflict`
-  - state conflict / transition conflict / concurrency conflict
+  - **business state conflict** (duplicate, status mismatch, lock mismatch, concurrency conflict)
 - `422 Unprocessable Entity`
-  - business validation failed
+  - **input/validation failure** (required/enum/type/range/invalid transition pair)
+
+### 2.1 409 / 422 判定ルール（運用固定）
+
+- 422: 入力不正（必須不足、enum不正、日付範囲不正、不正な遷移ペア）
+- 409: 業務状態競合（重複、状態不一致、ロック不一致、同時実行衝突）
 
 ---
 

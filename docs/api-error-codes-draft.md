@@ -1,158 +1,125 @@
-# API Error Codes Draft (MVP)
+# API Error Codes & 409/422 Policy (MVP)
 
-Updated: 2026-03-18
-Status: Draft (endpoint-specific; aligned with current runtime)
+Updated: 2026-03-27
+Status: Draft (current runtime aligned)
 
-## 1. Standard Error Response
+## 1. Standard Error Response (current runtime)
 
 ```json
 {
-  "code": "STATUS_NO_TARGET_LINES",
-  "message": "no eligible lines"
+  "detail": {
+    "code": "ORDER_STATUS_MISMATCH",
+    "message": "order status mismatch"
+  }
 }
 ```
 
 Required fields:
-- `code` (string, stable)
-- `message` (string)
+- `detail.code` (string, stable)
+- `detail.message` (string)
 
 ---
 
-## 2. HTTP Status Usage Policy
+## 2. HTTP Status Usage Policy (finalized for MVP)
 
-- `400 Bad Request`: invalid input / missing runtime-required data
-- `401 Unauthorized`: missing/invalid bearer token
-- `403 Forbidden`: role/scope not allowed
-- `404 Not Found`: target resource not found
-- `409 Conflict`: state/version/lock conflict
-- `422 Unprocessable Entity`: invalid enum/pair/value set
+- `401 Unauthorized`: missing/invalid/expired bearer token
+- `403 Forbidden`: authenticated but permission denied
+- `404 Not Found`: target resource does not exist
+- `409 Conflict`: **business state conflict**
+- `422 Unprocessable Entity`: **input / validation error**
+
+### 2.1 409 vs 422 Decision Rule
+
+Use **422** when request payload itself is invalid:
+- required field missing
+- enum value invalid
+- invalid field range / relation (e.g., `due_date < invoice_date`)
+- invalid transition pair (e.g., unsupported `from_status -> to_status`)
+
+Use **409** when payload is valid but server-side state conflicts:
+- duplicate key/resource already exists
+- status mismatch with current resource state
+- lock-state mismatch
+- concurrent/running job conflict
 
 ---
 
-## 3. Error Code Catalog (Current Runtime)
+## 3. Error Code Catalog (current runtime)
 
-### 3.1 400 Bad Request
-- `ORDER_WEIGHT_REQUIRED`
-- `NO_INVOICEABLE_ITEMS`
-- `CATCH_WEIGHT_REQUIRED`
-- `UNIT_PRICE_UOM_COUNT_REQUIRED`
-- `UNIT_PRICE_UOM_KG_REQUIRED`
-- `NEGATIVE_INVOICE_TOTAL`
-- `ALLOCATION_INVALID`
-- `ALLOCATION_INVALID_TARGET_QTY`
-- `SPLIT_QTY_MISMATCH`
-- `SPLIT_GROUP_MISSING_PARENT`
-- `SPLIT_GROUP_MIN_CHILDREN`
-- `SPLIT_GROUP_QTY_MISMATCH`
-- `SPLIT_GROUP_UOM_MISMATCH`
-
-### 3.2 401 Unauthorized
+### 3.1 401
 - `AUTH_REQUIRED`
 
-### 3.3 403 Forbidden
+### 3.2 403
 - `FORBIDDEN`
 
-### 3.4 404 Not Found
+### 3.3 404
+- `PRODUCT_NOT_FOUND`
+- `CUSTOMER_NOT_FOUND`
 - `ORDER_NOT_FOUND`
 - `INVOICE_NOT_FOUND`
 - `ALLOCATION_NOT_FOUND`
 - `RESOURCE_NOT_FOUND`
 
-### 3.5 409 Conflict
-- `VERSION_CONFLICT`
+### 3.4 409 (state conflict)
+- `SKU_ALREADY_EXISTS`
+- `CUSTOMER_CODE_ALREADY_EXISTS`
+- `ORDER_NO_ALREADY_EXISTS`
+- `INVOICE_NO_ALREADY_EXISTS`
 - `ORDER_STATUS_MISMATCH`
 - `STATUS_NO_TARGET_LINES`
 - `INVOICE_NOT_DRAFT`
 - `INVOICE_NOT_FINALIZED`
 - `INVOICE_NOT_LOCKED_FINALIZED`
-- `REGENERATION_IN_PROGRESS`
+- `JOB_ALREADY_RUNNING`
 - `RETRY_NOT_ALLOWED`
 - `RETRY_LIMIT_EXCEEDED`
 
-### 3.6 422 Unprocessable Entity
+### 3.5 422 (input/validation)
 - `INVALID_TRANSITION_PAIR`
-- `INVALID_RESET_REASON_CODE`
-- `INVALID_UNLOCK_REASON_CODE`
+- `INVALID_DATE_RANGE`
+- `INVALID_ROLE`
+- FastAPI/Pydantic validation errors (missing required, enum/type mismatch, etc.)
 
 ---
 
-## 4. Endpoint-specific Mapping
+## 4. Endpoint Mapping (key examples)
 
 ### Auth
-- `POST /api/v1/auth/login`: `403 FORBIDDEN`
-- Bearer-required endpoints: `401 AUTH_REQUIRED`
+- `POST /api/v1/auth/login`
+  - `422 INVALID_ROLE` (invalid role input)
+- `GET /api/v1/auth/me`
+  - `401 AUTH_REQUIRED`
+
+### Products / Customers
+- create duplicate: `409`
+- required/enum/type invalid: `422`
 
 ### Orders
 - `POST /api/v1/orders/{order_id}/bulk-transition`
-  - `404 ORDER_NOT_FOUND`
-  - `409 VERSION_CONFLICT`
-  - `409 ORDER_STATUS_MISMATCH`
-  - `409 STATUS_NO_TARGET_LINES`
-  - `422 INVALID_TRANSITION_PAIR`
+  - unsupported pair / same status: `422 INVALID_TRANSITION_PAIR`
+  - order current status mismatch: `409 ORDER_STATUS_MISMATCH`
+  - no eligible lines: `409 STATUS_NO_TARGET_LINES`
 
 ### Invoices
-- `POST /api/v1/invoices`:
-  - `404 ORDER_NOT_FOUND`
-  - `400 NO_INVOICEABLE_ITEMS`
-  - `400 CATCH_WEIGHT_REQUIRED`
-  - `400 UNIT_PRICE_UOM_COUNT_REQUIRED`
-  - `400 UNIT_PRICE_UOM_KG_REQUIRED`
-- `POST /api/v1/invoices/{invoice_id}/finalize`:
-  - `404 INVOICE_NOT_FOUND`
-  - `400 NEGATIVE_INVOICE_TOTAL`
-  - `409 INVOICE_NOT_DRAFT`
-- `POST /api/v1/invoices/{invoice_id}/reset-to-draft`:
-  - `404 INVOICE_NOT_FOUND`
-  - `409 VERSION_CONFLICT`
-  - `409 INVOICE_NOT_FINALIZED`
-  - `422 INVALID_RESET_REASON_CODE`
-- `POST /api/v1/invoices/{invoice_id}/unlock`:
-  - `404 INVOICE_NOT_FOUND`
-  - `409 VERSION_CONFLICT`
-  - `409 INVOICE_NOT_LOCKED_FINALIZED`
-  - `422 INVALID_UNLOCK_REASON_CODE`
-
-### Allocations
-- `PATCH /api/v1/allocations/{allocation_id}/override`
-  - `404 ALLOCATION_NOT_FOUND`
-  - `409 VERSION_CONFLICT`
-- `POST /api/v1/allocations/{allocation_id}/split-line`
-  - `404 ALLOCATION_NOT_FOUND`
-  - `409 VERSION_CONFLICT`
-  - `400 ALLOCATION_INVALID_TARGET_QTY`
-  - `400 SPLIT_QTY_MISMATCH`
-
-### Purchase Results
-- `POST /api/v1/purchase-results`
-  - `404 ALLOCATION_NOT_FOUND`
-- `PATCH /api/v1/purchase-results/{result_id}`
-  - `404 RESOURCE_NOT_FOUND`
-  - `404 ALLOCATION_NOT_FOUND`
-  - `409 VERSION_CONFLICT`
-- `POST /api/v1/purchase-results/bulk-upsert`
-  - `404 ALLOCATION_NOT_FOUND`
-  - `409 VERSION_CONFLICT`
+- `POST /api/v1/invoices`
+  - `due_date < invoice_date`: `422 INVALID_DATE_RANGE`
+  - duplicate invoice no: `409 INVOICE_NO_ALREADY_EXISTS`
+- finalize/reset/unlock invalid current status: `409`
 
 ### Batch
-- `POST /api/v1/batch/procurement-regeneration`
-  - `409 REGENERATION_IN_PROGRESS`
-- `POST /api/v1/batch/jobs/{task_id}/retry`
-  - `404 RESOURCE_NOT_FOUND`
-  - `409 RETRY_NOT_ALLOWED` (failed以外/最新attempt以外)
-  - `409 RETRY_LIMIT_EXCEEDED`
-  - `409 REGENERATION_IN_PROGRESS`
-
-### Master APIs
-- `GET/PATCH /api/v1/products/{product_id}`
-  - `404 RESOURCE_NOT_FOUND`
-  - `409 VERSION_CONFLICT` (PATCH)
-- `GET/PATCH /api/v1/customers/{customer_id}`
-  - `404 RESOURCE_NOT_FOUND`
-  - `409 VERSION_CONFLICT` (PATCH)
+- `POST /api/v1/allocations/runs`
+  - same business date already queued/running: `409 JOB_ALREADY_RUNNING`
+- retry non-failed or over retry limit: `409`
 
 ---
 
-## 5. Notes
+## 5. Testing & Governance
 
-- This draft matches current runtime behavior (`detail: { code, message }`).
-- If response schema is expanded later (`field`, `resource`, `trace_id` etc.), update this file + OpenAPI components together.
+- Runtime behavior is enforced by:
+  - endpoint tests in `backend/tests/*`
+  - OpenAPI contract tests (`backend/tests/test_openapi_contract_api.py`)
+  - policy test (`backend/tests/test_error_policy_409_422_api.py`)
+- When adding new endpoints:
+  1. classify each failure path as 409 or 422 by this policy
+  2. expose status codes in OpenAPI `responses`
+  3. add/extend tests for both negative paths
