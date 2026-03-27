@@ -1,7 +1,7 @@
 import enum
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -184,6 +184,7 @@ class BatchJob(Base):
         CheckConstraint("succeeded_count >= 0", name="ck_batch_jobs_succeeded_count_non_negative"),
         CheckConstraint("failed_count >= 0", name="ck_batch_jobs_failed_count_non_negative"),
         CheckConstraint("skipped_count >= 0", name="ck_batch_jobs_skipped_count_non_negative"),
+        Index("ix_batch_jobs_type_business_date_status", "job_type", "business_date", "status"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -210,6 +211,10 @@ class BatchJob(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_entity_type_entity_id_changed_at", "entity_type", "entity_id", "changed_at"),
+        Index("ix_audit_logs_changed_by_changed_at", "changed_by", "changed_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(64), index=True)
