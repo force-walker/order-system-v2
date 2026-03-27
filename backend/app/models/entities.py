@@ -190,6 +190,39 @@ class Invoice(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
 
+class InvoiceLineStatus(str, enum.Enum):
+    uninvoiced = "uninvoiced"
+    partially_invoiced = "partially_invoiced"
+    invoiced = "invoiced"
+    cancelled = "cancelled"
+
+
+class InvoiceItem(Base):
+    __tablename__ = "invoice_items"
+    __table_args__ = (
+        CheckConstraint("sales_unit_price >= 0", name="ck_invoice_items_sales_unit_price_non_negative"),
+        Index("ix_invoice_items_invoice_id", "invoice_id"),
+        Index("ix_invoice_items_order_item_id", "order_item_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"))
+    order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"))
+    billable_qty: Mapped[float] = mapped_column(Numeric(12, 3))
+    billable_uom: Mapped[str] = mapped_column(String(32))
+    invoice_line_status: Mapped[InvoiceLineStatus] = mapped_column(
+        Enum(InvoiceLineStatus, name="invoicelinestatus"),
+        default=InvoiceLineStatus.uninvoiced,
+        index=True,
+    )
+    sales_unit_price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    unit_cost_basis: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    line_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
 class BatchJobStatus(str, enum.Enum):
     queued = "queued"
     running = "running"

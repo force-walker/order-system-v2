@@ -233,6 +233,8 @@ Indexes:
 - `purchase_results.actual_weight_kg > 0` when provided
 - `purchase_results.unit_cost/final_unit_cost/shortage_qty >= 0` when provided
 - `purchase_results.allocation_id` unique (one purchase result per allocation)
+- `invoice_items` table implemented (`invoice_id`, `order_item_id`, `billable_qty/uom`, status, pricing/tax fields)
+- `invoice_items.sales_unit_price >= 0`
 - `invoices.due_date IS NULL OR due_date >= invoice_date`
 - `invoices.subtotal/tax_total/grand_total >= 0`
 - `batch_jobs` counters non-negative, `max_retries >= 1`, `retry_count <= max_retries`
