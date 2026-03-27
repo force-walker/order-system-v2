@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.audit import write_audit_log
 from app.db.session import get_db
 from app.models.entities import Customer
 from app.schemas.common import ApiErrorResponse
@@ -45,6 +46,8 @@ def update_customer(customer_id: int, payload: CustomerUpdateRequest, db: Sessio
     for k, v in data.items():
         setattr(row, k, v)
 
+    db.flush()
+    write_audit_log(db, entity_type="customer", entity_id=row.id, action="update")
     db.commit()
     db.refresh(row)
     return CustomerResponse.model_validate(row)
@@ -66,6 +69,8 @@ def create_customer(payload: CustomerCreateRequest, db: Session = Depends(get_db
 
     row = Customer(code=payload.code, name=payload.name, active=payload.active)
     db.add(row)
+    db.flush()
+    write_audit_log(db, entity_type="customer", entity_id=row.id, action="create")
     db.commit()
     db.refresh(row)
     return CustomerResponse.model_validate(row)
