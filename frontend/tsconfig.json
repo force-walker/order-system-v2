@@ -15,7 +15,8 @@
     "baseUrl": "./src",
     "paths": {
       "components/*": ["components/*"],
-      "features/*": ["features/*"]
+      "features/*": ["features/*"],
+      "shared/*": ["shared/*"]
     }
   },
   "include": ["src"]

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { listOrders } from 'features/orders/services/ordersService';
 import type { OrderStatus, OrderSummary } from 'features/orders/types/order';
+import { toUserMessage } from 'shared/error';
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   new: '新規',
@@ -25,7 +26,7 @@ export const OrderListPage = () => {
         const sorted = [...data].sort((a, b) => b.id - a.id);
         setOrders(sorted);
       })
-      .catch(() => setError('一覧取得に失敗しました'));
+      .catch((e) => setError(toUserMessage(e, '一覧取得に失敗しました')));
   }, []);
 
   const filteredOrders = useMemo(() => {

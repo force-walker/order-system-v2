@@ -6,12 +6,15 @@
 cd frontend
 npm install
 npm run dev
+
+# test
+npm run test
 ```
 
 ## 開発環境変数（`.env.development`）
 
 ```bash
-VITE_APP_BRANCH=feat/frontend-pr4-api-minimal-integration
+VITE_APP_BRANCH=feat/frontend-pr5-polish-error-test
 VITE_USE_MOCK=false
 VITE_API_BASE_URL=http://127.0.0.1:8000
 VITE_DEV_LOGIN_USER=frontend-dev-admin

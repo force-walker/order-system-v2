@@ -5,6 +5,7 @@ export default defineConfig({
     alias: {
       components: '/src/components',
       features: '/src/features',
+      shared: '/src/shared',
     },
   },
   server: {
