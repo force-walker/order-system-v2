@@ -1,5 +1,6 @@
 import { mockOrders } from 'features/orders/mocks/orders';
 import type { CreateOrderRequest, OrderDetail, OrderSummary } from 'features/orders/types/order';
+import { parseApiErrorPayload, ServiceError } from 'shared/error';
 
 const STORAGE_KEY = 'osv2_mock_orders';
 const TOKEN_STORAGE_KEY = 'osv2_access_token';
@@ -61,7 +62,7 @@ const ensureDevToken = async (): Promise<string> => {
   });
 
   if (!res.ok) {
-    throw new Error('login_failed');
+    throw new ServiceError('ログインに失敗しました。設定を確認してください。', { code: 'login_failed', status: res.status });
   }
 
   const data = (await res.json()) as { access_token: string };
@@ -142,7 +143,7 @@ const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail
 const listOrdersApi = async (): Promise<OrderSummary[]> => {
   const res = await fetchWithAuth('/api/v1/orders', { method: 'GET' });
   if (!res.ok) {
-    throw new Error('list_orders_failed');
+    throw await parseApiErrorPayload(res);
   }
 
   const data = (await res.json()) as ApiOrderResponse[];
@@ -165,7 +166,7 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
   });
 
   if (!res.ok) {
-    throw new Error('create_order_failed');
+    throw await parseApiErrorPayload(res);
   }
 
   const data = (await res.json()) as ApiOrderResponse;

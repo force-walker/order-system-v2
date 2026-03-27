@@ -1,0 +1,45 @@
+export class ServiceError extends Error {
+  code?: string;
+  status?: number;
+
+  constructor(message: string, options?: { code?: string; status?: number }) {
+    super(message);
+    this.name = 'ServiceError';
+    this.code = options?.code;
+    this.status = options?.status;
+  }
+}
+
+type ApiErrorPayload = {
+  detail?: {
+    code?: string;
+    message?: string;
+  };
+};
+
+const DEFAULT_MESSAGES: Record<string, string> = {
+  login_failed: 'ログインに失敗しました。設定を確認してください。',
+  list_orders_failed: '注文一覧の取得に失敗しました。',
+  create_order_failed: '注文作成に失敗しました。',
+};
+
+export const parseApiErrorPayload = async (res: Response): Promise<ServiceError> => {
+  let payload: ApiErrorPayload | null = null;
+  try {
+    payload = (await res.json()) as ApiErrorPayload;
+  } catch {
+    payload = null;
+  }
+
+  const code = payload?.detail?.code;
+  const detailMessage = payload?.detail?.message;
+  const message = detailMessage || (code ? DEFAULT_MESSAGES[code] : undefined) || `APIエラーが発生しました (status: ${res.status})`;
+
+  return new ServiceError(message, { code, status: res.status });
+};
+
+export const toUserMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof ServiceError) return error.message;
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
