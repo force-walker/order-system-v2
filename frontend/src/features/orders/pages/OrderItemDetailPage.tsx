@@ -1,12 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { getOrderItem } from 'features/orders/services/ordersService';
-import type { OrderDetail, OrderItem } from 'features/orders/types/order';
+import type { OrderDetail, OrderItem, OrderStatus } from 'features/orders/types/order';
 
 type DetailState = {
   order: OrderDetail;
   item: OrderItem;
+};
+
+const STATUS_LABEL: Record<OrderStatus, string> = {
+  new: '新規',
+  confirmed: '確定',
+  allocated: '引当済',
+  purchased: '仕入済',
+  shipped: '出荷済',
+  invoiced: '請求済',
+  cancelled: '取消',
 };
 
 export const OrderItemDetailPage = () => {
@@ -37,6 +47,8 @@ export const OrderItemDetailPage = () => {
       .finally(() => setLoaded(true));
   }, [orderId, itemId]);
 
+  const itemCount = useMemo(() => detail?.order.items.length ?? 0, [detail]);
+
   if (error) {
     return <ErrorState title="アイテム詳細を表示できません" description={error} />;
   }
@@ -50,24 +62,70 @@ export const OrderItemDetailPage = () => {
   }
 
   return (
-    <section className="card">
-      <h2>注文アイテム詳細</h2>
-      <p>
-        <strong>注文番号:</strong> {detail.order.orderNo}
-      </p>
-      <p>
-        <strong>顧客名:</strong> {detail.order.customerName}
-      </p>
-      <p>
-        <strong>商品名:</strong> {detail.item.productName}
-      </p>
-      <p>
-        <strong>数量:</strong> {detail.item.quantity} {detail.item.unit}
-      </p>
-      <p>
-        <strong>備考:</strong> {detail.item.note ?? '-'}
-      </p>
-      <Link to="/orders">一覧へ戻る</Link>
+    <section className="detail-layout">
+      <div className="card">
+        <div className="detail-header">
+          <h2>注文アイテム詳細</h2>
+          <span className={`status-badge status-${detail.order.status}`}>{STATUS_LABEL[detail.order.status]}</span>
+        </div>
+
+        <div className="detail-grid two-col">
+          <div>
+            <h3>注文情報</h3>
+            <dl className="kv-list">
+              <div>
+                <dt>注文ID</dt>
+                <dd>{detail.order.id}</dd>
+              </div>
+              <div>
+                <dt>注文番号</dt>
+                <dd>{detail.order.orderNo}</dd>
+              </div>
+              <div>
+                <dt>顧客名</dt>
+                <dd>{detail.order.customerName}</dd>
+              </div>
+              <div>
+                <dt>納品日</dt>
+                <dd>{detail.order.deliveryDate}</dd>
+              </div>
+              <div>
+                <dt>アイテム数</dt>
+                <dd>{itemCount}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div>
+            <h3>選択アイテム情報</h3>
+            <dl className="kv-list">
+              <div>
+                <dt>アイテムID</dt>
+                <dd>{detail.item.id}</dd>
+              </div>
+              <div>
+                <dt>商品名</dt>
+                <dd>{detail.item.productName}</dd>
+              </div>
+              <div>
+                <dt>数量</dt>
+                <dd>
+                  {detail.item.quantity} {detail.item.unit}
+                </dd>
+              </div>
+              <div>
+                <dt>備考</dt>
+                <dd>{detail.item.note ?? '-'}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+
+        <div className="detail-actions">
+          <Link to="/orders">一覧へ戻る</Link>
+          <Link to="/orders/new">新規作成へ</Link>
+        </div>
+      </div>
     </section>
   );
 };
