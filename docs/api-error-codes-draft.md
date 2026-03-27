@@ -113,7 +113,19 @@ Use **409** when payload is valid but server-side state conflicts:
 
 ---
 
-## 5. Testing & Governance
+## 5. DB Constraint Exception Mapping (centralized)
+
+To reduce endpoint-by-endpoint variance, DB integrity exceptions are centrally mapped:
+
+- Unique violation (`23505`, UNIQUE failed) -> `409 RESOURCE_ALREADY_EXISTS`
+- FK violation (`23503`) -> `422 INVALID_REFERENCE`
+- Check violation (`23514`, CHECK failed) -> `422 VALIDATION_FAILED`
+- Not-null / length violations (`23502`, `22001`) -> `422 VALIDATION_FAILED`
+- Other integrity violations -> `409 CONSTRAINT_VIOLATION`
+
+This mapping is implemented in `backend/app/core/exception_mapping.py` and wired globally in `app/main.py`.
+
+## 6. Testing & Governance
 
 - Runtime behavior is enforced by:
   - endpoint tests in `backend/tests/*`
