@@ -31,6 +31,7 @@ def override_allocation(allocation_id: int, payload: AllocationOverrideRequest, 
     row.final_uom = payload.final_uom
     row.is_manual_override = True
     row.override_reason_code = payload.override_reason_code
+    row.is_split_child = False
 
     db.flush()
     write_audit_log(
@@ -56,16 +57,24 @@ def split_allocation(allocation_id: int, payload: AllocationSplitRequest, db: Se
         raise HTTPException(status_code=404, detail={"code": "ALLOCATION_NOT_FOUND", "message": "allocation not found"})
 
     group_id = f"split-{uuid4().hex[:12]}"
+    row.split_group_id = group_id
+    row.is_split_child = False
+
     created: list[SupplierAllocation] = []
     for p in payload.parts:
         child = SupplierAllocation(
             order_item_id=row.order_item_id,
+            suggested_supplier_id=row.suggested_supplier_id,
+            suggested_qty=row.suggested_qty,
             final_supplier_id=p.final_supplier_id,
             final_qty=p.final_qty,
             final_uom=p.final_uom,
             is_manual_override=True,
             override_reason_code=payload.override_reason_code,
+            target_price=row.target_price,
             split_group_id=group_id,
+            parent_allocation_id=row.id,
+            is_split_child=True,
         )
         db.add(child)
         created.append(child)

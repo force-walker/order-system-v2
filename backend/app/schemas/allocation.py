@@ -26,12 +26,17 @@ class AllocationSplitRequest(BaseModel):
 class AllocationResponse(BaseModel):
     id: int
     order_item_id: int
+    suggested_supplier_id: int | None
+    suggested_qty: float | None
     final_supplier_id: int | None
     final_qty: float | None
     final_uom: str | None
     is_manual_override: bool
     override_reason_code: str | None
+    target_price: float | None
     split_group_id: str | None
+    parent_allocation_id: int | None
+    is_split_child: bool
     created_at: datetime
     updated_at: datetime
 
