@@ -143,6 +143,19 @@ def test_purchase_result_create_update_bulk_upsert():
     assert created.status_code == 201
     rid = created.json()["id"]
 
+    dup = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "purchased_qty": 2,
+            "purchased_uom": "count",
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert dup.status_code == 409
+    assert dup.json()["detail"]["code"] == "PURCHASE_RESULT_ALREADY_EXISTS"
+
     upd = client.patch(f"/api/v1/purchase-results/{rid}", json={"result_status": "partially_filled"})
     assert upd.status_code == 200
     assert upd.json()["result_status"] == "partially_filled"

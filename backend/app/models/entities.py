@@ -1,7 +1,7 @@
 import enum
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -82,6 +82,9 @@ class Order(Base):
 
 class OrderItem(Base):
     __tablename__ = "order_items"
+    __table_args__ = (
+        CheckConstraint("ordered_qty > 0", name="ck_order_items_ordered_qty_positive"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
@@ -97,6 +100,9 @@ class OrderItem(Base):
 
 class SupplierAllocation(Base):
     __tablename__ = "supplier_allocations"
+    __table_args__ = (
+        CheckConstraint("final_qty IS NULL OR final_qty > 0", name="ck_supplier_allocations_final_qty_positive"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"), index=True)
@@ -113,6 +119,10 @@ class SupplierAllocation(Base):
 
 class PurchaseResult(Base):
     __tablename__ = "purchase_results"
+    __table_args__ = (
+        CheckConstraint("purchased_qty > 0", name="ck_purchase_results_purchased_qty_positive"),
+        UniqueConstraint("allocation_id", name="uq_purchase_results_allocation_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     allocation_id: Mapped[int] = mapped_column(ForeignKey("supplier_allocations.id"), index=True)
@@ -133,6 +143,12 @@ class InvoiceStatus(str, enum.Enum):
 
 class Invoice(Base):
     __tablename__ = "invoices"
+    __table_args__ = (
+        CheckConstraint("due_date IS NULL OR due_date >= invoice_date", name="ck_invoices_due_date_gte_invoice_date"),
+        CheckConstraint("subtotal >= 0", name="ck_invoices_subtotal_non_negative"),
+        CheckConstraint("tax_total >= 0", name="ck_invoices_tax_total_non_negative"),
+        CheckConstraint("grand_total >= 0", name="ck_invoices_grand_total_non_negative"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     invoice_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
@@ -159,6 +175,16 @@ class BatchJobStatus(str, enum.Enum):
 
 class BatchJob(Base):
     __tablename__ = "batch_jobs"
+    __table_args__ = (
+        CheckConstraint("retry_count >= 0", name="ck_batch_jobs_retry_count_non_negative"),
+        CheckConstraint("max_retries >= 1", name="ck_batch_jobs_max_retries_min_one"),
+        CheckConstraint("retry_count <= max_retries", name="ck_batch_jobs_retry_count_lte_max_retries"),
+        CheckConstraint("requested_count >= 0", name="ck_batch_jobs_requested_count_non_negative"),
+        CheckConstraint("processed_count >= 0", name="ck_batch_jobs_processed_count_non_negative"),
+        CheckConstraint("succeeded_count >= 0", name="ck_batch_jobs_succeeded_count_non_negative"),
+        CheckConstraint("failed_count >= 0", name="ck_batch_jobs_failed_count_non_negative"),
+        CheckConstraint("skipped_count >= 0", name="ck_batch_jobs_skipped_count_non_negative"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     job_type: Mapped[str] = mapped_column(String(64), index=True)

@@ -219,6 +219,21 @@ Indexes:
 - numeric/check constraints
 - enum domain safety
 
+### Implemented integrity constraints (runtime)
+- `order_items.ordered_qty > 0`
+- `supplier_allocations.final_qty IS NULL OR final_qty > 0`
+- `purchase_results.purchased_qty > 0`
+- `purchase_results.allocation_id` unique (one purchase result per allocation)
+- `invoices.due_date IS NULL OR due_date >= invoice_date`
+- `invoices.subtotal/tax_total/grand_total >= 0`
+- `batch_jobs` counters non-negative, `max_retries >= 1`, `retry_count <= max_retries`
+
+### 409/422 alignment guideline
+- DB uniqueness/FK/check violations should map to:
+  - `409 Conflict` for uniqueness/state-conflict semantics
+  - `422 Unprocessable Entity` for payload validation semantics
+- Prefer pre-check in API where feasible, with DB constraints as final guardrail.
+
 ## Application handles
 - status transition eligibility and role checks
 - catch-weight finalize-time validations
