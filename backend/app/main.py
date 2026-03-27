@@ -1,6 +1,8 @@
 from time import perf_counter
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.api.routes_allocations import router as allocations_router
 from app.api.routes_audit import router as audit_router
@@ -12,9 +14,24 @@ from app.api.routes_metrics import router as metrics_router
 from app.api.routes_orders import router as orders_router
 from app.api.routes_products import router as products_router
 from app.api.routes_purchase_results import router as purchase_results_router
+from app.core.exception_mapping import map_integrity_error
 from app.core.metrics import api_request_duration_ms, api_request_errors_total, api_requests_total, inflight_requests
 
 app = FastAPI(title="Order System v2 API")
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(_: Request, exc: IntegrityError):
+    status, code, message = map_integrity_error(exc)
+    return JSONResponse(status_code=status, content={"detail": {"code": code, "message": message}})
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_error_handler(_: Request, __: SQLAlchemyError):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": {"code": "DB_ERROR", "message": "database operation failed"}},
+    )
 
 
 @app.middleware("http")
