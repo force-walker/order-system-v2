@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.entities import SupplierAllocation
+from app.core.audit import write_audit_log
 from app.schemas.allocation import AllocationOverrideRequest, AllocationResponse, AllocationSplitRequest
 from app.schemas.common import ApiErrorResponse
 
@@ -31,6 +32,14 @@ def override_allocation(allocation_id: int, payload: AllocationOverrideRequest, 
     row.is_manual_override = True
     row.override_reason_code = payload.override_reason_code
 
+    db.flush()
+    write_audit_log(
+        db,
+        entity_type="supplier_allocation",
+        entity_id=row.id,
+        action="override",
+        reason_code=payload.override_reason_code,
+    )
     db.commit()
     db.refresh(row)
     return AllocationResponse.model_validate(row)
@@ -61,6 +70,15 @@ def split_allocation(allocation_id: int, payload: AllocationSplitRequest, db: Se
         db.add(child)
         created.append(child)
 
+    db.flush()
+    for c in created:
+        write_audit_log(
+            db,
+            entity_type="supplier_allocation",
+            entity_id=c.id,
+            action="split_line",
+            reason_code=payload.override_reason_code,
+        )
     db.commit()
     for c in created:
         db.refresh(c)

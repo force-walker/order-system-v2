@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.audit import write_audit_log
 from app.db.session import get_db
 from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus
 from app.schemas.common import ApiErrorResponse
@@ -74,6 +75,8 @@ def bulk_transition_order(order_id: int, payload: OrderBulkTransitionRequest, db
         line.line_status = to_line
 
     order.status = payload.to_status
+    db.flush()
+    write_audit_log(db, entity_type="order", entity_id=order.id, action="bulk_transition")
     db.commit()
 
     return OrderBulkTransitionResponse(order_id=order.id, updated_lines=len(lines), updated_order_status=order.status)
@@ -107,6 +110,8 @@ def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> 
         note=payload.note,
     )
     db.add(row)
+    db.flush()
+    write_audit_log(db, entity_type="order", entity_id=row.id, action="create")
     db.commit()
     db.refresh(row)
     return OrderResponse.model_validate(row)

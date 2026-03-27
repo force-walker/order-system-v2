@@ -90,3 +90,48 @@ Notification targets:
 - Keep cardinality low for labels/tags in early stage.
 - Alert thresholds can be tuned after first 1-2 weeks of production telemetry.
 - Store enough context to connect app logs, worker logs, and DB events by correlation ids.
+
+## H. Operations Checkpoints (Runbook)
+
+### H-1. Audit log coverage checklist (for each mutating endpoint)
+
+- [ ] create/update/transition/retry/cancel/unlock operations emit an `audit_logs` row
+- [ ] `entity_type`, `entity_id`, `action`, `changed_by`, `changed_at` are present
+- [ ] reason-driven operations set `reason_code` (e.g. reset/unlock/override)
+- [ ] failures return proper error code/status even when audit write path exists
+
+Recommended quick check:
+1. Call endpoint in test/staging.
+2. Query `GET /api/v1/audit-logs?entityType=<type>&entityId=<id>`.
+3. Confirm expected `action` exists.
+
+### H-2. Metrics checkpoints (daily)
+
+Endpoint-level health checks:
+- `order_system_v2_api_requests_total{method,path,status}`
+  - confirm top paths and status distribution
+- `order_system_v2_api_request_errors_total{status_family}`
+  - track 4xx/5xx trend deltas
+- `order_system_v2_api_request_duration_ms{method,path}`
+  - inspect high-latency paths (p95 target threshold)
+
+Summary endpoint checks:
+- `GET /api/v1/ops/metrics/summary`
+  - `api.requestsTotal`
+  - `api.errorRate5xx`
+  - `api.p95LatencyMs`
+  - `api.inflightRequests`
+
+### H-3. Alert triage notes
+
+If 4xx spikes:
+- inspect recent deploy/API contract changes
+- inspect validation/code changes by endpoint path label
+
+If 5xx spikes:
+- inspect failing endpoint path + server logs with correlation ids
+- verify DB connectivity and timeout/deadlock indicators
+
+If latency regresses:
+- identify endpoint path with high histogram buckets
+- check DB query performance and external dependency latency
