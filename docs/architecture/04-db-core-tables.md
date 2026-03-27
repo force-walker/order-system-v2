@@ -228,6 +228,11 @@ Indexes:
 - `invoices.subtotal/tax_total/grand_total >= 0`
 - `batch_jobs` counters non-negative, `max_retries >= 1`, `retry_count <= max_retries`
 
+### Implemented minimal performance indexes (runtime)
+- `ix_batch_jobs_type_business_date_status` on `(job_type, business_date, status)`
+- `ix_audit_logs_entity_type_entity_id_changed_at` on `(entity_type, entity_id, changed_at)`
+- `ix_audit_logs_changed_by_changed_at` on `(changed_by, changed_at)`
+
 ### 409/422 alignment guideline
 - DB uniqueness/FK/check violations should map to:
   - `409 Conflict` for uniqueness/state-conflict semantics
