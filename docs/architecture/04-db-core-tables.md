@@ -221,6 +221,9 @@ Indexes:
 
 ### Implemented integrity constraints (runtime)
 - `order_items.ordered_qty > 0`
+- `order_items.order_uom_type` added (`uom_count|uom_kg`)
+- `order_items.estimated_weight_kg`, `order_items.actual_weight_kg` added
+- `order_items` price required by pricing basis (`uom_count => unit_price_uom_count`, `uom_kg => unit_price_uom_kg`)
 - `supplier_allocations.final_qty IS NULL OR final_qty > 0`
 - `purchase_results.purchased_qty > 0`
 - `purchase_results.allocation_id` unique (one purchase result per allocation)
