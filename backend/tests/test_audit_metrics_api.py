@@ -50,12 +50,21 @@ def test_metrics_endpoint_and_summary():
     summary = client.get("/api/v1/ops/metrics/summary", headers=_auth("admin"))
     assert summary.status_code == 200
     body = summary.json()
-    assert "api" in body and "worker" in body and "db" in body
-    assert "errors4xxTotal" in body["api"]
-    assert "errors5xxTotal" in body["api"]
-    assert "statusFamilyCounts" in body["api"]
-    assert "endpointLatencyP95Ms" in body["api"]
-    assert "endpointStatusCounts" in body["api"]
+    assert set(body.keys()) == {"timestamp", "api", "worker", "db"}
+
+    assert set(body["api"].keys()) == {
+        "requestsTotal",
+        "errorRate5xx",
+        "errors4xxTotal",
+        "errors5xxTotal",
+        "statusFamilyCounts",
+        "p95LatencyMs",
+        "endpointLatencyP95Ms",
+        "endpointStatusCounts",
+        "inflightRequests",
+    }
+    assert set(body["worker"].keys()) == {"enqueuedTotal", "processedTotal", "failedTotal", "backlog", "oldestAgeSec"}
+    assert set(body["db"].keys()) == {"connectionsInUse", "queryP95Ms", "errorsTotal", "deadlocksTotal"}
 
 
 def test_audit_logs_list_detail_and_entity_timeline():
