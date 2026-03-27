@@ -76,6 +76,7 @@ def bulk_transition_order(order_id: int, payload: OrderBulkTransitionRequest, db
         line.line_status = to_line
 
     order.status = payload.to_status
+    order.updated_by = "system_api"
     db.flush()
     write_audit_log(db, entity_type="order", entity_id=order.id, action=AuditAction.BULK_TRANSITION)
     db.commit()
@@ -111,6 +112,8 @@ def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> 
             delivery_date=payload.delivery_date,
             status=OrderStatus.new,
             note=payload.note,
+            created_by="system_api",
+            updated_by="system_api",
         )
         db.add(row)
         db.flush()
