@@ -7,7 +7,7 @@ from app.models.entities import InvoiceStatus
 
 class InvoiceCreateRequest(BaseModel):
     invoice_no: str = Field(min_length=1, max_length=64)
-    order_id: int
+    order_id: int = Field(gt=0)
     invoice_date: date
     due_date: date | None = None
 

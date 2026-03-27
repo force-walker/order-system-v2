@@ -7,9 +7,9 @@ from app.models.entities import OrderStatus
 
 class OrderCreateRequest(BaseModel):
     order_no: str = Field(min_length=1, max_length=64)
-    customer_id: int
+    customer_id: int = Field(gt=0)
     delivery_date: date
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class OrderBulkTransitionRequest(BaseModel):
