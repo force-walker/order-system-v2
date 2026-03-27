@@ -1,10 +1,15 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
+const branchName = import.meta.env.VITE_APP_BRANCH ?? 'local';
+
 export const AppLayout = () => {
   return (
     <div className="page">
       <header className="header">
-        <h1>Order System v2 (Mockup)</h1>
+        <div>
+          <h1>Order System v2 (Mockup)</h1>
+          <p className="branch-badge">branch: {branchName}</p>
+        </div>
         <nav className="nav">
           <NavLink to="/orders/new">注文作成</NavLink>
           <NavLink to="/orders">注文一覧</NavLink>
