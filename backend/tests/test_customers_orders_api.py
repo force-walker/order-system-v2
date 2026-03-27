@@ -111,6 +111,8 @@ def test_create_order_success_and_list():
     create_res = client.post("/api/v1/orders", json=payload)
     assert create_res.status_code == 201
     assert create_res.json()["order_no"].startswith("ORD-")
+    assert create_res.json()["created_by"] == "system_api"
+    assert create_res.json()["updated_by"] == "system_api"
 
     list_res = client.get("/api/v1/orders")
     assert list_res.status_code == 200
@@ -228,6 +230,10 @@ def test_order_bulk_transition_success_and_no_target_lines():
     assert ok.json()["order_id"] == order_id
     assert ok.json()["updated_lines"] == 1
     assert ok.json()["updated_order_status"] == "allocated"
+
+    detail_after = client.get(f"/api/v1/orders/{order_id}")
+    assert detail_after.status_code == 200
+    assert detail_after.json()["updated_by"] == "system_api"
 
     no_target = client.post(
         f"/api/v1/orders/{order_id}/bulk-transition",

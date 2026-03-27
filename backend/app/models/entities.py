@@ -76,6 +76,8 @@ class Order(Base):
     delivery_date: Mapped[date] = mapped_column(Date, index=True)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus, name="orderstatus"), default=OrderStatus.new, index=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(String(64), default="system_api", index=True)
+    updated_by: Mapped[str] = mapped_column(String(64), default="system_api", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 

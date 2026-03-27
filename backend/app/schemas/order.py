@@ -30,6 +30,8 @@ class OrderResponse(BaseModel):
     delivery_date: date
     status: OrderStatus
     note: str | None
+    created_by: str
+    updated_by: str
     created_at: datetime
     updated_at: datetime
 
