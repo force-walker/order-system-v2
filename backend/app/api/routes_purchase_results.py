@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.audit import write_audit_log
+from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
 from app.models.entities import PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
@@ -44,7 +44,7 @@ def create_purchase_result(payload: PurchaseResultCreateRequest, db: Session = D
     row = PurchaseResult(**payload.model_dump())
     db.add(row)
     db.flush()
-    write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action="create")
+    write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.CREATE)
     db.commit()
     db.refresh(row)
     return PurchaseResultResponse.model_validate(row)
@@ -65,7 +65,7 @@ def update_purchase_result(result_id: int, payload: PurchaseResultUpdateRequest,
         setattr(row, k, v)
 
     db.flush()
-    write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action="update")
+    write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.UPDATE)
     db.commit()
     db.refresh(row)
     return PurchaseResultResponse.model_validate(row)
@@ -90,12 +90,12 @@ def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: S
             row = PurchaseResult(**item.model_dump())
             db.add(row)
             db.flush()
-            write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action="bulk_upsert_create")
+            write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.BULK_UPSERT_CREATE)
         else:
             for k, v in item.model_dump().items():
                 setattr(row, k, v)
             db.flush()
-            write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action="bulk_upsert_update")
+            write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.BULK_UPSERT_UPDATE)
         count += 1
 
     db.commit()

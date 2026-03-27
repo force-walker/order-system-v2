@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.audit import write_audit_log
+from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
 from app.models.entities import Product
 from app.schemas.common import ApiErrorResponse
@@ -47,7 +47,7 @@ def update_product(product_id: int, payload: ProductUpdateRequest, db: Session =
         setattr(row, k, v)
 
     db.flush()
-    write_audit_log(db, entity_type="product", entity_id=row.id, action="update")
+    write_audit_log(db, entity_type="product", entity_id=row.id, action=AuditAction.UPDATE)
     db.commit()
     db.refresh(row)
     return ProductResponse.model_validate(row)
@@ -80,7 +80,7 @@ def create_product(payload: ProductCreateRequest, db: Session = Depends(get_db))
     )
     db.add(row)
     db.flush()
-    write_audit_log(db, entity_type="product", entity_id=row.id, action="create")
+    write_audit_log(db, entity_type="product", entity_id=row.id, action=AuditAction.CREATE)
     db.commit()
     db.refresh(row)
     return ProductResponse.model_validate(row)

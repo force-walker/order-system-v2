@@ -5,9 +5,10 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.audit import AuditAction, write_audit_log
 from app.core.auth import AuthContext, require_roles
 from app.db.session import get_db
-from app.models.entities import AuditLog, BatchJob, BatchJobStatus
+from app.models.entities import BatchJob, BatchJobStatus
 from app.schemas.batch import AllocationRunRequest, BatchJobError, BatchJobListResponse, BatchJobResponse, BatchJobSummary
 from app.schemas.common import ApiErrorResponse
 
@@ -17,19 +18,6 @@ BATCH_COMMON_ERROR_RESPONSES = {
     401: {"model": ApiErrorResponse, "description": "Unauthorized"},
     403: {"model": ApiErrorResponse, "description": "Forbidden"},
 }
-
-
-def _audit(db: Session, *, entity_id: int, action: str, actor: str, reason_code: str | None = None) -> None:
-    db.add(
-        AuditLog(
-            entity_type="batch_job",
-            entity_id=entity_id,
-            action=action,
-            reason_code=reason_code,
-            changed_by=actor,
-            changed_at=datetime.now(UTC),
-        )
-    )
 
 
 def _to_response(job: BatchJob) -> BatchJobResponse:
@@ -131,7 +119,7 @@ def enqueue_allocation_run(
     )
     db.add(job)
     db.flush()
-    _audit(db, entity_id=job.id, action="enqueue", actor=auth.user_id)
+    write_audit_log(db, entity_type="batch_job", entity_id=job.id, action=AuditAction.ENQUEUE, actor=auth.user_id)
     db.commit()
     db.refresh(job)
     return _to_response(job)
@@ -155,7 +143,7 @@ def get_batch_job(job_id: int, db: Session = Depends(get_db), auth: AuthContext 
     if job.status == BatchJobStatus.queued:
         job.status = BatchJobStatus.running
         job.started_at = now
-        _audit(db, entity_id=job.id, action="start", actor=auth.user_id)
+        write_audit_log(db, entity_type="batch_job", entity_id=job.id, action=AuditAction.START, actor=auth.user_id)
         db.commit()
         db.refresh(job)
     elif job.status == BatchJobStatus.running:
@@ -165,7 +153,7 @@ def get_batch_job(job_id: int, db: Session = Depends(get_db), auth: AuthContext 
         job.failed_count = 0
         job.skipped_count = 0
         job.finished_at = now
-        _audit(db, entity_id=job.id, action="complete", actor=auth.user_id)
+        write_audit_log(db, entity_type="batch_job", entity_id=job.id, action=AuditAction.COMPLETE, actor=auth.user_id)
         db.commit()
         db.refresh(job)
 
@@ -209,7 +197,14 @@ def cancel_batch_job(job_id: int, db: Session = Depends(get_db), auth: AuthConte
     now = datetime.now(UTC)
     job.status = BatchJobStatus.cancelled
     job.finished_at = now
-    _audit(db, entity_id=job.id, action="cancel", actor=auth.user_id, reason_code="user_cancel")
+    write_audit_log(
+        db,
+        entity_type="batch_job",
+        entity_id=job.id,
+        action=AuditAction.CANCEL,
+        actor=auth.user_id,
+        reason_code="user_cancel",
+    )
     db.commit()
     db.refresh(job)
     return _to_response(job)
@@ -258,7 +253,14 @@ def retry_batch_job(
     job.failed_count = 0
     job.skipped_count = 0
     job.errors_json = "[]"
-    _audit(db, entity_id=job.id, action="retry", actor=auth.user_id, reason_code="manual_retry")
+    write_audit_log(
+        db,
+        entity_type="batch_job",
+        entity_id=job.id,
+        action=AuditAction.RETRY,
+        actor=auth.user_id,
+        reason_code="manual_retry",
+    )
     db.commit()
     db.refresh(job)
     return _to_response(job)

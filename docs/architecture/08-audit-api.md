@@ -121,12 +121,17 @@ Audit events must include:
 - `jobId` (if batch)
 - `source` (`api|worker|system`)
 
-Mandatory audited actions:
-- `cancel`
-- `override`
-- `reset_to_draft`
-- `unlock`
-- `status_change`
+Mandatory audited actions (standardized action vocabulary):
+- generic: `create`, `update`
+- order flow: `bulk_transition`
+- invoice flow: `finalize`, `reset_to_draft`, `unlock`
+- allocation flow: `override`, `split_line`
+- purchase-result flow: `bulk_upsert_create`, `bulk_upsert_update`
+- batch flow: `enqueue`, `start`, `complete`, `cancel`, `retry`
+
+Actor policy:
+- API endpoints without auth context use actor=`system_api`
+- Auth-required endpoints should write authenticated user id into actor
 
 ---
 
