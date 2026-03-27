@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.audit import AuditAction
 from app.core.auth import issue_tokens
 from app.db.base import Base
 from app.db.session import get_db
@@ -117,7 +118,14 @@ def test_audit_logs_are_written_for_mutating_operations():
         json={"invoice_no": "INV-AUD-1", "order_id": order["id"], "invoice_date": datetime.now(UTC).date().isoformat()},
     ).json()
 
-    # verify timeline exists for each entity type
+    expected_actions = {
+        "product": AuditAction.CREATE,
+        "customer": AuditAction.CREATE,
+        "order": AuditAction.CREATE,
+        "invoice": AuditAction.CREATE,
+    }
+
+    # verify timeline exists for each entity type and follows standardized action/actor
     for entity_type, entity_id in [
         ("product", product["id"]),
         ("customer", customer["id"]),
@@ -127,3 +135,6 @@ def test_audit_logs_are_written_for_mutating_operations():
         timeline = client.get(f"/api/v1/audit-logs/entities/{entity_type}/{entity_id}", headers=_auth())
         assert timeline.status_code == 200
         assert timeline.json()["total"] >= 1
+        item = timeline.json()["items"][0]
+        assert item["action"] == expected_actions[entity_type]
+        assert item["actor"]["id"] == "system_api"

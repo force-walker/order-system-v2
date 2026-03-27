@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.audit import write_audit_log
+from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
 from app.models.entities import Invoice, InvoiceStatus, Order
 from app.schemas.common import ApiErrorResponse
@@ -58,7 +58,7 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
     )
     db.add(row)
     db.flush()
-    write_audit_log(db, entity_type="invoice", entity_id=row.id, action="create")
+    write_audit_log(db, entity_type="invoice", entity_id=row.id, action=AuditAction.CREATE)
     db.commit()
     db.refresh(row)
     return InvoiceResponse.model_validate(row)
@@ -83,7 +83,7 @@ def finalize_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceF
     row.status = InvoiceStatus.finalized
     row.is_locked = True
     db.flush()
-    write_audit_log(db, entity_type="invoice", entity_id=row.id, action="finalize")
+    write_audit_log(db, entity_type="invoice", entity_id=row.id, action=AuditAction.FINALIZE)
     db.commit()
     return InvoiceFinalizeResponse(invoice_id=row.id, status=row.status, is_locked=row.is_locked)
 
@@ -107,7 +107,13 @@ def reset_to_draft(invoice_id: int, payload: InvoiceResetRequest, db: Session = 
     row.status = InvoiceStatus.draft
     row.is_locked = False
     db.flush()
-    write_audit_log(db, entity_type="invoice", entity_id=row.id, action="reset_to_draft", reason_code=payload.reset_reason_code)
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=row.id,
+        action=AuditAction.RESET_TO_DRAFT,
+        reason_code=payload.reset_reason_code,
+    )
     db.commit()
     return InvoiceResetResponse(invoice_id=row.id, status=row.status)
 
@@ -133,6 +139,12 @@ def unlock_invoice(invoice_id: int, payload: InvoiceUnlockRequest, db: Session =
 
     row.is_locked = False
     db.flush()
-    write_audit_log(db, entity_type="invoice", entity_id=row.id, action="unlock", reason_code=payload.unlock_reason_code)
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=row.id,
+        action=AuditAction.UNLOCK,
+        reason_code=payload.unlock_reason_code,
+    )
     db.commit()
     return InvoiceUnlockResponse(invoice_id=row.id, status=row.status, is_locked=row.is_locked)
