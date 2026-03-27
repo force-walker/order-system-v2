@@ -2,6 +2,24 @@ import { mockOrders } from 'features/orders/mocks/orders';
 import type { CreateOrderRequest, OrderDetail, OrderSummary } from 'features/orders/types/order';
 
 const STORAGE_KEY = 'osv2_mock_orders';
+const TOKEN_STORAGE_KEY = 'osv2_access_token';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
+const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true';
+const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
+const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
+const DEV_CUSTOMER_ID = Number(import.meta.env.VITE_DEV_CUSTOMER_ID ?? '1');
+
+type ApiOrderResponse = {
+  id: number;
+  order_no: string;
+  customer_id: number;
+  delivery_date: string;
+  status: OrderSummary['status'];
+  note: string | null;
+  created_at: string;
+};
+
+const apiOrderCache = new Map<number, OrderDetail>();
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -23,28 +41,80 @@ const writeOrders = (orders: OrderDetail[]) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
 };
 
-export const listOrders = async (): Promise<OrderSummary[]> => {
+const toMockListItem = (o: OrderDetail): OrderSummary => ({
+  id: o.id,
+  orderNo: o.orderNo,
+  customerName: o.customerName,
+  deliveryDate: o.deliveryDate,
+  status: o.status,
+  items: o.items,
+});
+
+const ensureDevToken = async (): Promise<string> => {
+  const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (cached) return cached;
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE }),
+  });
+
+  if (!res.ok) {
+    throw new Error('login_failed');
+  }
+
+  const data = (await res.json()) as { access_token: string };
+  localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
+  return data.access_token;
+};
+
+const fetchWithAuth = async (path: string, init?: RequestInit) => {
+  const token = await ensureDevToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  if (res.status === 401) {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+  }
+
+  return res;
+};
+
+const mapApiOrderToDetail = (order: ApiOrderResponse): OrderDetail => {
+  const cached = apiOrderCache.get(order.id);
+  return {
+    id: order.id,
+    orderNo: order.order_no,
+    customerName: cached?.customerName ?? `顧客#${order.customer_id}`,
+    deliveryDate: order.delivery_date,
+    status: order.status,
+    note: order.note ?? undefined,
+    createdAt: order.created_at,
+    items:
+      cached?.items ?? [
+        {
+          id: 1,
+          productName: '（詳細未取得）',
+          quantity: 0,
+          unit: '-',
+        },
+      ],
+  };
+};
+
+const listOrdersMock = async (): Promise<OrderSummary[]> => {
   await sleep(250);
-  return readOrders().map((o) => ({
-    id: o.id,
-    orderNo: o.orderNo,
-    customerName: o.customerName,
-    deliveryDate: o.deliveryDate,
-    status: o.status,
-    items: o.items,
-  }));
+  return readOrders().map(toMockListItem);
 };
 
-export const getOrderItem = async (orderId: number, itemId: number) => {
-  await sleep(200);
-  const order = readOrders().find((o) => o.id === orderId);
-  if (!order) return null;
-  const item = order.items.find((i) => i.id === itemId);
-  if (!item) return null;
-  return { order, item };
-};
-
-export const createOrder = async (payload: CreateOrderRequest): Promise<OrderDetail> => {
+const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail> => {
   await sleep(300);
   const current = readOrders();
   const nextId = current.length === 0 ? 1 : Math.max(...current.map((o) => o.id)) + 1;
@@ -67,4 +137,77 @@ export const createOrder = async (payload: CreateOrderRequest): Promise<OrderDet
 
   writeOrders([newOrder, ...current]);
   return newOrder;
+};
+
+const listOrdersApi = async (): Promise<OrderSummary[]> => {
+  const res = await fetchWithAuth('/api/v1/orders', { method: 'GET' });
+  if (!res.ok) {
+    throw new Error('list_orders_failed');
+  }
+
+  const data = (await res.json()) as ApiOrderResponse[];
+  return data.map((row) => {
+    const detail = mapApiOrderToDetail(row);
+    apiOrderCache.set(detail.id, detail);
+    return toMockListItem(detail);
+  });
+};
+
+const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail> => {
+  const res = await fetchWithAuth('/api/v1/orders', {
+    method: 'POST',
+    body: JSON.stringify({
+      order_no: payload.orderNo,
+      customer_id: DEV_CUSTOMER_ID,
+      delivery_date: payload.deliveryDate,
+      note: payload.note ?? null,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error('create_order_failed');
+  }
+
+  const data = (await res.json()) as ApiOrderResponse;
+  const detail: OrderDetail = {
+    ...mapApiOrderToDetail(data),
+    customerName: payload.customerName,
+    items: payload.items.map((item, index) => ({
+      id: index + 1,
+      productName: item.productName,
+      quantity: item.quantity,
+      unit: item.unit,
+    })),
+  };
+
+  apiOrderCache.set(detail.id, detail);
+  return detail;
+};
+
+export const listOrders = async (): Promise<OrderSummary[]> => {
+  if (USE_MOCK) return listOrdersMock();
+  return listOrdersApi();
+};
+
+export const getOrderItem = async (orderId: number, itemId: number) => {
+  await sleep(150);
+
+  if (USE_MOCK) {
+    const order = readOrders().find((o) => o.id === orderId);
+    if (!order) return null;
+    const item = order.items.find((i) => i.id === itemId);
+    if (!item) return null;
+    return { order, item };
+  }
+
+  const order = apiOrderCache.get(orderId);
+  if (!order) return null;
+  const item = order.items.find((i) => i.id === itemId);
+  if (!item) return null;
+  return { order, item };
+};
+
+export const createOrder = async (payload: CreateOrderRequest): Promise<OrderDetail> => {
+  if (USE_MOCK) return createOrderMock(payload);
+  return createOrderApi(payload);
 };
