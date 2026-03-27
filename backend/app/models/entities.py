@@ -110,17 +110,23 @@ class SupplierAllocation(Base):
     __tablename__ = "supplier_allocations"
     __table_args__ = (
         CheckConstraint("final_qty IS NULL OR final_qty > 0", name="ck_supplier_allocations_final_qty_positive"),
+        CheckConstraint("suggested_qty IS NULL OR suggested_qty > 0", name="ck_supplier_allocations_suggested_qty_positive"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"), index=True)
+    suggested_supplier_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
+    suggested_qty: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     final_supplier_id: Mapped[int | None] = mapped_column(index=True)
     final_qty: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     final_uom: Mapped[str | None] = mapped_column(String(32), nullable=True)
     is_manual_override: Mapped[bool] = mapped_column(Boolean, default=False)
     override_reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     stockout_policy: Mapped[StockoutPolicy | None] = mapped_column(Enum(StockoutPolicy, name="stockoutpolicy"), nullable=True)
     split_group_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    parent_allocation_id: Mapped[int | None] = mapped_column(ForeignKey("supplier_allocations.id"), nullable=True, index=True)
+    is_split_child: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 

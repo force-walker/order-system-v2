@@ -82,7 +82,14 @@ def _seed_allocation() -> int:
     db.add(item)
     db.flush()
 
-    alloc = SupplierAllocation(order_item_id=item.id, final_qty=3, final_uom="count")
+    alloc = SupplierAllocation(
+        order_item_id=item.id,
+        suggested_supplier_id=100,
+        suggested_qty=3,
+        target_price=10,
+        final_qty=3,
+        final_uom="count",
+    )
     db.add(alloc)
     db.commit()
     aid = alloc.id
@@ -114,6 +121,14 @@ def test_allocation_override_and_split():
     assert sp.status_code == 200
     assert isinstance(sp.json(), list)
     assert len(sp.json()) == 2
+
+    for child in sp.json():
+        assert child["is_split_child"] is True
+        assert child["parent_allocation_id"] == aid
+        assert child["split_group_id"] is not None
+        assert child["suggested_supplier_id"] == 100
+        assert float(child["suggested_qty"]) == 3.0
+        assert float(child["target_price"]) == 10.0
 
 
 def test_allocation_validation_error_is_422():
