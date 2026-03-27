@@ -135,15 +135,26 @@ class PurchaseResult(Base):
     __tablename__ = "purchase_results"
     __table_args__ = (
         CheckConstraint("purchased_qty > 0", name="ck_purchase_results_purchased_qty_positive"),
+        CheckConstraint("actual_weight_kg IS NULL OR actual_weight_kg > 0", name="ck_purchase_results_actual_weight_positive"),
+        CheckConstraint("unit_cost IS NULL OR unit_cost >= 0", name="ck_purchase_results_unit_cost_non_negative"),
+        CheckConstraint("final_unit_cost IS NULL OR final_unit_cost >= 0", name="ck_purchase_results_final_unit_cost_non_negative"),
+        CheckConstraint("shortage_qty IS NULL OR shortage_qty >= 0", name="ck_purchase_results_shortage_qty_non_negative"),
         UniqueConstraint("allocation_id", name="uq_purchase_results_allocation_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     allocation_id: Mapped[int] = mapped_column(ForeignKey("supplier_allocations.id"), index=True)
+    supplier_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
     purchased_qty: Mapped[float] = mapped_column(Numeric(12, 3))
     purchased_uom: Mapped[str] = mapped_column(String(32))
+    actual_weight_kg: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
+    unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    final_unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    shortage_qty: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
+    shortage_policy: Mapped[StockoutPolicy | None] = mapped_column(Enum(StockoutPolicy, name="stockoutpolicy"), nullable=True)
     result_status: Mapped[str] = mapped_column(String(32), index=True)
     invoiceable_flag: Mapped[bool] = mapped_column(Boolean, default=True)
+    recorded_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 

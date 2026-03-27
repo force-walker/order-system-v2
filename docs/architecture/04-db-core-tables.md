@@ -229,6 +229,9 @@ Indexes:
 - `supplier_allocations.parent_allocation_id` (self FK), `is_split_child` added
 - `supplier_allocations.suggested_qty IS NULL OR suggested_qty > 0`
 - `purchase_results.purchased_qty > 0`
+- `purchase_results.supplier_id`, `actual_weight_kg`, `unit_cost`, `final_unit_cost`, `shortage_qty`, `shortage_policy`, `recorded_by` added
+- `purchase_results.actual_weight_kg > 0` when provided
+- `purchase_results.unit_cost/final_unit_cost/shortage_qty >= 0` when provided
 - `purchase_results.allocation_id` unique (one purchase result per allocation)
 - `invoices.due_date IS NULL OR due_date >= invoice_date`
 - `invoices.subtotal/tax_total/grand_total >= 0`
