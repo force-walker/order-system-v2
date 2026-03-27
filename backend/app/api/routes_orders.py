@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -97,20 +98,27 @@ def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> 
     if customer is None:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
 
-    exists = db.query(Order).filter(Order.order_no == payload.order_no).first()
-    if exists is not None:
-        raise HTTPException(status_code=409, detail={"code": "ORDER_NO_ALREADY_EXISTS", "message": "order_no already exists"})
+    row = None
+    for _ in range(5):
+        generated_order_no = f"ORD-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:6].upper()}"
+        if db.query(Order).filter(Order.order_no == generated_order_no).first() is not None:
+            continue
 
-    row = Order(
-        order_no=payload.order_no,
-        customer_id=payload.customer_id,
-        order_datetime=datetime.now(UTC),
-        delivery_date=payload.delivery_date,
-        status=OrderStatus.new,
-        note=payload.note,
-    )
-    db.add(row)
-    db.flush()
+        row = Order(
+            order_no=generated_order_no,
+            customer_id=payload.customer_id,
+            order_datetime=datetime.now(UTC),
+            delivery_date=payload.delivery_date,
+            status=OrderStatus.new,
+            note=payload.note,
+        )
+        db.add(row)
+        db.flush()
+        break
+
+    if row is None:
+        raise HTTPException(status_code=409, detail={"code": "ORDER_NO_GENERATION_FAILED", "message": "failed to generate order_no"})
+
     write_audit_log(db, entity_type="order", entity_id=row.id, action=AuditAction.CREATE)
     db.commit()
     db.refresh(row)

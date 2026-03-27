@@ -124,19 +124,19 @@ def test_orders_invoices_and_purchase_results_regression_matrix():
     # orders create 201 / 409 / 422 / 404
     create_order = client.post(
         "/api/v1/orders",
-        json={"order_no": "ORD-M-1", "customer_id": customer_id, "delivery_date": str(date.today())},
+        json={"customer_id": customer_id, "delivery_date": str(date.today())},
     )
     assert create_order.status_code == 201
 
     dup_order = client.post(
         "/api/v1/orders",
-        json={"order_no": "ORD-M-1", "customer_id": customer_id, "delivery_date": str(date.today())},
+        json={"customer_id": customer_id, "delivery_date": str(date.today())},
     )
-    assert dup_order.status_code == 409
+    assert dup_order.status_code == 201
 
     bad_order = client.post(
         "/api/v1/orders",
-        json={"order_no": "ORD-M-2", "customer_id": 0, "delivery_date": str(date.today())},
+        json={"customer_id": 0, "delivery_date": str(date.today())},
     )
     assert bad_order.status_code == 422
 

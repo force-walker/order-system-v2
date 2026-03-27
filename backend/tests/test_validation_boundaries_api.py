@@ -150,7 +150,7 @@ def test_negative_zero_and_empty_string_boundaries():
 
     order_customer_zero = client.post(
         "/api/v1/orders",
-        json={"order_no": "ORD-0", "customer_id": 0, "delivery_date": str(date.today())},
+        json={"customer_id": 0, "delivery_date": str(date.today())},
     )
     assert order_customer_zero.status_code == 422
 
