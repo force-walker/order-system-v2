@@ -63,11 +63,11 @@ def update_customer(customer_id: int, payload: CustomerUpdateRequest, db: Sessio
     },
 )
 def create_customer(payload: CustomerCreateRequest, db: Session = Depends(get_db)) -> CustomerResponse:
-    exists = db.query(Customer).filter(Customer.code == payload.code).first()
+    exists = db.query(Customer).filter(Customer.customer_code == payload.customer_code).first()
     if exists is not None:
         raise HTTPException(status_code=409, detail={"code": "CUSTOMER_CODE_ALREADY_EXISTS", "message": "customer code already exists"})
 
-    row = Customer(code=payload.code, name=payload.name, active=payload.active)
+    row = Customer(customer_code=payload.customer_code, name=payload.name, active=payload.active)
     db.add(row)
     db.flush()
     write_audit_log(db, entity_type="customer", entity_id=row.id, action=AuditAction.CREATE)

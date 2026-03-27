@@ -52,7 +52,7 @@ def _auth() -> dict[str, str]:
 
 def _seed_product_customer_order() -> tuple[int, int]:
     db = TestingSessionLocal()
-    c = Customer(code=f"C-{datetime.now(UTC).timestamp()}", name="C", active=True)
+    c = Customer(customer_code=f"C-{datetime.now(UTC).timestamp()}", name="C", active=True)
     db.add(c)
     db.flush()
 

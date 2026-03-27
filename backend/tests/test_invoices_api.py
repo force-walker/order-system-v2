@@ -36,7 +36,7 @@ def _client() -> TestClient:
 
 def _seed_order() -> int:
     db = TestingSessionLocal()
-    c = Customer(code=f"C-I-{datetime.now(UTC).timestamp()}", name="Customer I", active=True)
+    c = Customer(customer_code=f"C-I-{datetime.now(UTC).timestamp()}", name="Customer I", active=True)
     db.add(c)
     db.flush()
 

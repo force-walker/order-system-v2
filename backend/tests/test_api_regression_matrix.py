@@ -42,7 +42,7 @@ def _auth(role: str = "admin") -> dict[str, str]:
 
 def _seed_order_with_allocation() -> tuple[int, int, int]:
     db = TestingSessionLocal()
-    customer = Customer(code=f"C-R-{datetime.now(UTC).timestamp()}", name="R-C", active=True)
+    customer = Customer(customer_code=f"C-R-{datetime.now(UTC).timestamp()}", name="R-C", active=True)
     db.add(customer)
     db.flush()
 

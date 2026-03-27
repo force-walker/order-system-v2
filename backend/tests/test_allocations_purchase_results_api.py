@@ -36,7 +36,7 @@ def _client() -> TestClient:
 
 def _seed_allocation() -> int:
     db = TestingSessionLocal()
-    c = Customer(code=f"C-{datetime.now(UTC).timestamp()}", name="C", active=True, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
+    c = Customer(customer_code=f"C-{datetime.now(UTC).timestamp()}", name="C", active=True, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
     db.add(c)
     db.flush()
 

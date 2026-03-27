@@ -41,10 +41,10 @@ def get_or_create_product(db: Session, sku: str, name: str) -> Product:
 
 
 def get_or_create_customer(db: Session, code: str, name: str) -> Customer:
-    row = db.query(Customer).filter(Customer.code == code).first()
+    row = db.query(Customer).filter(Customer.customer_code == code).first()
     if row:
         return row
-    row = Customer(code=code, name=name, active=True)
+    row = Customer(customer_code=code, name=name, active=True)
     db.add(row)
     db.flush()
     return row
