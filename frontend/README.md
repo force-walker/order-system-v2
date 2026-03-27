@@ -8,6 +8,14 @@ npm install
 npm run dev
 ```
 
+## ブランチ名表示（ヘッダー）
+
+`frontend/.env.development` に以下を設定するとヘッダーに表示されます。
+
+```bash
+VITE_APP_BRANCH=feat/frontend-pr2-order-form-ui-validation
+```
+
 ## モックアップ完了条件
 
 - 注文作成 → 注文一覧 → 注文アイテム詳細 の遷移
