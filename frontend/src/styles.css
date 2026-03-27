@@ -58,11 +58,50 @@ table {
   border-collapse: collapse;
 }
 
+.table-wrap {
+  overflow-x: auto;
+}
+
 th, td {
   text-align: left;
   border-bottom: 1px solid #e5e7eb;
   padding: 10px 8px;
+  white-space: nowrap;
 }
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.filter-label {
+  min-width: 180px;
+}
+
+.subtle {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.status-badge {
+  display: inline-block;
+  border-radius: 9999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-new { background: #dbeafe; color: #1e40af; }
+.status-confirmed { background: #dcfce7; color: #166534; }
+.status-allocated { background: #ede9fe; color: #5b21b6; }
+.status-purchased { background: #fef3c7; color: #92400e; }
+.status-shipped { background: #cffafe; color: #155e75; }
+.status-invoiced { background: #e5e7eb; color: #374151; }
+.status-cancelled { background: #fee2e2; color: #991b1b; }
 
 .form-grid {
   display: grid;
@@ -139,6 +178,11 @@ button:disabled { opacity: 0.6; }
   .three-col {
     grid-template-columns: 1fr;
   }
+
+  .list-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .form-error {
@@ -153,6 +197,52 @@ button:disabled { opacity: 0.6; }
 }
 
 .state-box h3 { margin: 0 0 8px; }
+
+.detail-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.kv-list {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.kv-list div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  border-bottom: 1px dashed #e5e7eb;
+  padding-bottom: 6px;
+}
+
+.kv-list dt {
+  color: #6b7280;
+}
+
+.kv-list dd {
+  margin: 0;
+  font-weight: 500;
+}
+
+.detail-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 12px;
+}
 
 .loading { border-left: 4px solid #2563eb; }
 .empty { border-left: 4px solid #6b7280; }

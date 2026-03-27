@@ -13,7 +13,7 @@ npm run dev
 `frontend/.env.development` に以下を設定するとヘッダーに表示されます。
 
 ```bash
-VITE_APP_BRANCH=feat/frontend-pr2-order-form-ui-validation
+VITE_APP_BRANCH=feat/frontend-pr3-list-detail-polish
 ```
 
 ## モックアップ完了条件
