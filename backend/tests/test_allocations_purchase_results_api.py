@@ -149,14 +149,24 @@ def test_purchase_result_create_update_bulk_upsert():
         "/api/v1/purchase-results",
         json={
             "allocation_id": aid,
+            "supplier_id": 555,
             "purchased_qty": 2,
             "purchased_uom": "count",
+            "actual_weight_kg": 2.5,
+            "unit_cost": 100,
+            "final_unit_cost": 120,
+            "shortage_qty": 0,
+            "shortage_policy": "backorder",
             "result_status": "filled",
             "invoiceable_flag": True,
+            "recorded_by": "tester",
         },
     )
     assert created.status_code == 201
     rid = created.json()["id"]
+    assert created.json()["supplier_id"] == 555
+    assert float(created.json()["actual_weight_kg"]) == 2.5
+    assert created.json()["recorded_by"] == "tester"
 
     dup = client.post(
         "/api/v1/purchase-results",
