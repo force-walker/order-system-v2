@@ -84,12 +84,20 @@ class OrderItem(Base):
     __tablename__ = "order_items"
     __table_args__ = (
         CheckConstraint("ordered_qty > 0", name="ck_order_items_ordered_qty_positive"),
+        CheckConstraint(
+            "(pricing_basis != 'uom_count' OR unit_price_uom_count IS NOT NULL)"
+            " AND (pricing_basis != 'uom_kg' OR unit_price_uom_kg IS NOT NULL)",
+            name="ck_order_items_price_required_by_pricing_basis",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     ordered_qty: Mapped[float] = mapped_column(Numeric(12, 3))
+    order_uom_type: Mapped[PricingBasis] = mapped_column(Enum(PricingBasis, name="pricingbasis"), default=PricingBasis.uom_count)
+    estimated_weight_kg: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
+    actual_weight_kg: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     pricing_basis: Mapped[PricingBasis] = mapped_column(Enum(PricingBasis, name="pricingbasis"), default=PricingBasis.uom_count)
     unit_price_uom_count: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     unit_price_uom_kg: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
