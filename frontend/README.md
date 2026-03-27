@@ -8,13 +8,19 @@ npm install
 npm run dev
 ```
 
-## ブランチ名表示（ヘッダー）
-
-`frontend/.env.development` に以下を設定するとヘッダーに表示されます。
+## 開発環境変数（`.env.development`）
 
 ```bash
-VITE_APP_BRANCH=feat/frontend-pr3-list-detail-polish
+VITE_APP_BRANCH=feat/frontend-pr4-api-minimal-integration
+VITE_USE_MOCK=false
+VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_DEV_LOGIN_USER=frontend-dev-admin
+VITE_DEV_LOGIN_ROLE=admin
+VITE_DEV_CUSTOMER_ID=1
 ```
+
+- `VITE_USE_MOCK=true` の場合はローカルモックで動作
+- `VITE_USE_MOCK=false` の場合は API 接続（login → token保持 → orders GET/POST）
 
 ## モックアップ完了条件
 
