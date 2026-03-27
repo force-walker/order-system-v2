@@ -117,10 +117,10 @@ Endpoint-level health checks:
 
 Summary endpoint checks:
 - `GET /api/v1/ops/metrics/summary`
-  - `api.requestsTotal`
-  - `api.errorRate5xx`
-  - `api.p95LatencyMs`
-  - `api.inflightRequests`
+  - fixed top-level keys: `timestamp`, `api`, `worker`, `db`
+  - `api`: `requestsTotal`, `errorRate5xx`, `errors4xxTotal`, `errors5xxTotal`, `statusFamilyCounts`, `p95LatencyMs`, `endpointLatencyP95Ms`, `endpointStatusCounts`, `inflightRequests`
+  - `worker`: `enqueuedTotal`, `processedTotal`, `failedTotal`, `backlog`, `oldestAgeSec`
+  - `db`: `connectionsInUse`, `queryP95Ms`, `errorsTotal`, `deadlocksTotal`
 
 ### H-3. Alert triage notes
 
