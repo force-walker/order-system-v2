@@ -114,7 +114,7 @@ def test_audit_logs_are_written_for_mutating_operations():
 
     customer = client.post(
         "/api/v1/customers",
-        json={"code": "C-AUD-1", "name": "Audit Customer", "active": True},
+        json={"customer_code": "C-AUD-1", "name": "Audit Customer", "active": True},
     ).json()
 
     order = client.post(

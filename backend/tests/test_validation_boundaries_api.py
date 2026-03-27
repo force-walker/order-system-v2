@@ -38,7 +38,7 @@ def _client() -> TestClient:
 def _seed_order_and_allocation() -> tuple[int, int]:
     db = TestingSessionLocal()
 
-    c = Customer(code=f"C-{datetime.now(UTC).timestamp()}", name="C", active=True)
+    c = Customer(customer_code=f"C-{datetime.now(UTC).timestamp()}", name="C", active=True)
     db.add(c)
     db.flush()
 

@@ -38,7 +38,7 @@ def _client() -> TestClient:
 def _seed_customer(code: str = "CUST-001") -> int:
     db = TestingSessionLocal()
     c = Customer(
-        code=code,
+        customer_code=code,
         name="Test Customer",
         active=True,
         created_at=datetime.now(UTC),
@@ -58,15 +58,15 @@ def test_list_customers():
     res = client.get("/api/v1/customers")
     assert res.status_code == 200
     assert isinstance(res.json(), list)
-    assert any(x["code"] == "CUST-LIST" for x in res.json())
+    assert any(x["customer_code"] == "CUST-LIST" for x in res.json())
 
 
 def test_create_customer_success_and_duplicate_conflict():
     client = _client()
-    payload = {"code": "CUST-NEW", "name": "New Customer", "active": True}
+    payload = {"customer_code": "CUST-NEW", "name": "New Customer", "active": True}
     created = client.post("/api/v1/customers", json=payload)
     assert created.status_code == 201
-    assert created.json()["code"] == "CUST-NEW"
+    assert created.json()["customer_code"] == "CUST-NEW"
 
     dup = client.post("/api/v1/customers", json=payload)
     assert dup.status_code == 409
@@ -89,7 +89,7 @@ def test_update_customer_success_and_not_found():
 
 def test_create_customer_validation_error_is_422():
     client = _client()
-    res = client.post("/api/v1/customers", json={"code": "CUST-ONLY"})
+    res = client.post("/api/v1/customers", json={"customer_code": "CUST-ONLY"})
     assert res.status_code == 422
 
 
@@ -160,7 +160,7 @@ def _seed_order_with_open_line() -> int:
     suffix = uuid4().hex[:8]
 
     customer = Customer(
-        code=f"CUST-TRANS-{suffix}",
+        customer_code=f"CUST-TRANS-{suffix}",
         name="Transition Customer",
         active=True,
         created_at=datetime.now(UTC),
