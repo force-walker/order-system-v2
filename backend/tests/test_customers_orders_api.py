@@ -103,7 +103,6 @@ def test_get_customer_not_found():
 def test_create_order_success_and_list():
     cid = _seed_customer("CUST-ORDER")
     payload = {
-        "order_no": "ORD-001",
         "customer_id": cid,
         "delivery_date": str(date.today()),
         "note": "first order",
@@ -111,11 +110,11 @@ def test_create_order_success_and_list():
     client = _client()
     create_res = client.post("/api/v1/orders", json=payload)
     assert create_res.status_code == 201
-    assert create_res.json()["order_no"] == "ORD-001"
+    assert create_res.json()["order_no"].startswith("ORD-")
 
     list_res = client.get("/api/v1/orders")
     assert list_res.status_code == 200
-    assert any(x["order_no"] == "ORD-001" for x in list_res.json())
+    assert any(x["id"] == create_res.json()["id"] for x in list_res.json())
 
     order_id = create_res.json()["id"]
     detail_res = client.get(f"/api/v1/orders/{order_id}")
@@ -125,7 +124,6 @@ def test_create_order_success_and_list():
 
 def test_create_order_customer_not_found():
     payload = {
-        "order_no": "ORD-404",
         "customer_id": 999999,
         "delivery_date": str(date.today()),
     }
@@ -135,10 +133,9 @@ def test_create_order_customer_not_found():
     assert res.json()["detail"]["code"] == "CUSTOMER_NOT_FOUND"
 
 
-def test_create_order_duplicate_order_no():
+def test_create_order_auto_numbering_generates_unique_order_no():
     cid = _seed_customer("CUST-DUP")
     payload = {
-        "order_no": "ORD-DUP",
         "customer_id": cid,
         "delivery_date": str(date.today()),
     }
@@ -147,8 +144,8 @@ def test_create_order_duplicate_order_no():
     assert first.status_code == 201
 
     second = client.post("/api/v1/orders", json=payload)
-    assert second.status_code == 409
-    assert second.json()["detail"]["code"] == "ORDER_NO_ALREADY_EXISTS"
+    assert second.status_code == 201
+    assert first.json()["order_no"] != second.json()["order_no"]
 
 
 def test_get_order_not_found():
@@ -267,7 +264,7 @@ def test_order_validation_required_and_enum_are_422():
 
     missing_required = client.post(
         "/api/v1/orders",
-        json={"order_no": "ORD-MISS", "delivery_date": str(date.today())},
+        json={"delivery_date": str(date.today())},
     )
     assert missing_required.status_code == 422
 
