@@ -9,9 +9,12 @@ export type OrderStatus =
 
 export type OrderItem = {
   id: number;
+  productId?: number;
   productName: string;
   quantity: number;
   unit: string;
+  unitPrice?: number;
+  pricingBasis?: 'uom_count' | 'uom_kg';
   note?: string;
 };
 
@@ -36,13 +39,24 @@ export type CreateOrderRequest = {
   deliveryDate: string;
   note?: string;
   items: Array<{
+    productId?: number;
     productName: string;
     quantity: number;
     unit: string;
+    unitPrice: number;
+    pricingBasis: 'uom_count' | 'uom_kg';
   }>;
 };
 
 export type CustomerOption = {
   id: number;
   label: string;
+};
+
+export type ProductOption = {
+  id: number;
+  label: string;
+  name: string;
+  orderUom: string;
+  pricingBasisDefault: 'uom_count' | 'uom_kg';
 };
