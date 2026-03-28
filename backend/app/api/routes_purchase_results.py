@@ -26,20 +26,12 @@ PURCHASE_RESULT_COMMON_ERROR_RESPONSES = {
     responses={
         **PURCHASE_RESULT_COMMON_ERROR_RESPONSES,
         404: {"model": ApiErrorResponse, "description": "Not Found"},
-        409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
 )
 def create_purchase_result(payload: PurchaseResultCreateRequest, db: Session = Depends(get_db)) -> PurchaseResultResponse:
     alloc = db.query(SupplierAllocation).filter(SupplierAllocation.id == payload.allocation_id).first()
     if alloc is None:
         raise HTTPException(status_code=404, detail={"code": "ALLOCATION_NOT_FOUND", "message": "allocation not found"})
-
-    exists = db.query(PurchaseResult).filter(PurchaseResult.allocation_id == payload.allocation_id).first()
-    if exists is not None:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "PURCHASE_RESULT_ALREADY_EXISTS", "message": "purchase result already exists for allocation"},
-        )
 
     row = PurchaseResult(**payload.model_dump())
     db.add(row)

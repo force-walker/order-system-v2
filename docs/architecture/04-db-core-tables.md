@@ -224,7 +224,7 @@ Indexes:
 - `order_items.order_uom_type` added (`uom_count|uom_kg`)
 - `order_items.estimated_weight_kg`, `order_items.actual_weight_kg` added
 - `order_items` price required by pricing basis (`uom_count => unit_price_uom_count`, `uom_kg => unit_price_uom_kg`)
-- `supplier_allocations.final_qty IS NULL OR final_qty > 0`
+- `supplier_allocations.final_qty IS NULL OR final_qty >= 0`
 - `supplier_allocations.suggested_supplier_id`, `suggested_qty`, `target_price` added
 - `supplier_allocations.parent_allocation_id` (self FK), `is_split_child` added
 - `supplier_allocations.suggested_qty IS NULL OR suggested_qty > 0`
@@ -232,7 +232,7 @@ Indexes:
 - `purchase_results.supplier_id`, `actual_weight_kg`, `unit_cost`, `final_unit_cost`, `shortage_qty`, `shortage_policy`, `recorded_by` added
 - `purchase_results.actual_weight_kg > 0` when provided
 - `purchase_results.unit_cost/final_unit_cost/shortage_qty >= 0` when provided
-- `purchase_results.allocation_id` unique (one purchase result per allocation)
+- `purchase_results.result_status` constrained by enum (`not_filled|filled|partially_filled|substituted`)
 - `invoice_items` table implemented (`invoice_id`, `order_item_id`, `billable_qty/uom`, status, pricing/tax fields)
 - `invoice_items.sales_unit_price >= 0`
 - `invoices.due_date IS NULL OR due_date >= invoice_date`

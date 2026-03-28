@@ -197,7 +197,7 @@ def test_orders_invoices_and_purchase_results_regression_matrix():
     fin_nf = client.post("/api/v1/invoices/999999/finalize")
     assert fin_nf.status_code == 404
 
-    # purchase-results 201 / 409 / 422 / 404
+    # purchase-results 201 / 201(allow multi per allocation) / 422 / 404
     pr_ok = client.post(
         "/api/v1/purchase-results",
         json={
@@ -216,11 +216,11 @@ def test_orders_invoices_and_purchase_results_regression_matrix():
             "allocation_id": allocation_id,
             "purchased_qty": 1,
             "purchased_uom": "count",
-            "result_status": "filled",
+            "result_status": "partially_filled",
             "invoiceable_flag": True,
         },
     )
-    assert pr_conflict.status_code == 409
+    assert pr_conflict.status_code == 201
 
     pr_bad = client.post(
         "/api/v1/purchase-results",

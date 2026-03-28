@@ -164,7 +164,7 @@ def test_negative_zero_and_empty_string_boundaries():
         f"/api/v1/allocations/{allocation_id}/override",
         json={"final_supplier_id": 1, "final_qty": 0, "final_uom": "count", "override_reason_code": "manual"},
     )
-    assert alloc_qty_zero.status_code == 422
+    assert alloc_qty_zero.status_code == 200
 
     alloc_uom_empty = client.patch(
         f"/api/v1/allocations/{allocation_id}/override",

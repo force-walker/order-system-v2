@@ -136,7 +136,7 @@ def test_allocation_validation_error_is_422():
     client = _client()
     bad = client.patch(
         f"/api/v1/allocations/{aid}/override",
-        json={"final_supplier_id": 101, "final_qty": 0, "final_uom": "count", "override_reason_code": "manual"},
+        json={"final_supplier_id": 101, "final_qty": -1, "final_uom": "count", "override_reason_code": "manual"},
     )
     assert bad.status_code == 422
 
@@ -174,12 +174,11 @@ def test_purchase_result_create_update_bulk_upsert():
             "allocation_id": aid,
             "purchased_qty": 2,
             "purchased_uom": "count",
-            "result_status": "filled",
+            "result_status": "partially_filled",
             "invoiceable_flag": True,
         },
     )
-    assert dup.status_code == 409
-    assert dup.json()["detail"]["code"] == "PURCHASE_RESULT_ALREADY_EXISTS"
+    assert dup.status_code == 201
 
     upd = client.patch(f"/api/v1/purchase-results/{rid}", json={"result_status": "partially_filled"})
     assert upd.status_code == 200

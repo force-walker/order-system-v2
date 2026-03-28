@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class AllocationOverrideRequest(BaseModel):
     final_supplier_id: int = Field(gt=0)
-    final_qty: float = Field(gt=0)
+    final_qty: float = Field(ge=0)
     final_uom: str = Field(min_length=1, max_length=32)
     override_reason_code: str = Field(min_length=1, max_length=64)
     override_note: str | None = Field(default=None, max_length=1000)
@@ -13,7 +13,7 @@ class AllocationOverrideRequest(BaseModel):
 
 class SplitPart(BaseModel):
     final_supplier_id: int = Field(gt=0)
-    final_qty: float = Field(gt=0)
+    final_qty: float = Field(ge=0)
     final_uom: str = Field(min_length=1, max_length=32)
 
 
