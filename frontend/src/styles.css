@@ -38,13 +38,29 @@ body { margin: 0; }
 
 .nav { display: flex; gap: 12px; }
 
-.nav a {
+.nav-link,
+.nav-link:visited {
   text-decoration: none;
   color: #374151;
   font-weight: 600;
 }
 
-.nav a.active { color: #2563eb; }
+.nav-link.active,
+.nav-link.active:visited {
+  color: #2563eb;
+}
+
+.nav-link:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.order-link,
+.order-link:visited {
+  color: #1d4ed8;
+  font-weight: 600;
+}
 
 .card {
   background: white;
