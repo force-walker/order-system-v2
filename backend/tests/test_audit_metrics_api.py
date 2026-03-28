@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
@@ -73,8 +74,13 @@ def test_audit_logs_list_detail_and_entity_timeline():
         entity_type="invoice",
         entity_id=1,
         action="status_change",
+        before_json=json.dumps({"status": "draft"}),
+        after_json=json.dumps({"status": "finalized"}),
         reason_code="data_fix",
         changed_by="auditor",
+        trace_id="trace-a1",
+        request_id="req-a1",
+        job_id="job-a1",
         changed_at=datetime.now(UTC),
     )
     db.add(row)
@@ -91,6 +97,11 @@ def test_audit_logs_list_detail_and_entity_timeline():
     detail = client.get(f"/api/v1/audit-logs/{audit_id}", headers=_auth())
     assert detail.status_code == 200
     assert detail.json()["id"] == audit_id
+    assert detail.json()["before"]["status"] == "draft"
+    assert detail.json()["after"]["status"] == "finalized"
+    assert detail.json()["traceId"] == "trace-a1"
+    assert detail.json()["requestId"] == "req-a1"
+    assert detail.json()["jobId"] == "job-a1"
 
     timeline = client.get("/api/v1/audit-logs/entities/invoice/1", headers=_auth())
     assert timeline.status_code == 200

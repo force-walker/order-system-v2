@@ -191,7 +191,7 @@ Key columns:
 - `before_json`, `after_json`
 - `reason_code`
 - `changed_by`, `changed_at`
-- correlation: `trace_id`, `request_id`, `job_id` (implementation-level extension)
+- correlation: `trace_id`, `request_id`, `job_id` (implemented)
 
 Indexes:
 - `idx_audit_entity`

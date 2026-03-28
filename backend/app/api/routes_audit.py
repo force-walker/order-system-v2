@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +13,19 @@ router = APIRouter(prefix="/api/v1/audit-logs", tags=["audit"])
 
 
 def _to_item(r: AuditLog) -> AuditLogItem:
+    before = None
+    after = None
+    if r.before_json:
+        try:
+            before = json.loads(r.before_json)
+        except Exception:
+            before = None
+    if r.after_json:
+        try:
+            after = json.loads(r.after_json)
+        except Exception:
+            after = None
+
     return AuditLogItem(
         id=r.id,
         occurredAt=r.changed_at,
@@ -20,11 +34,11 @@ def _to_item(r: AuditLog) -> AuditLogItem:
         entityType=r.entity_type,
         entityId=r.entity_id,
         reasonCode=r.reason_code,
-        before=None,
-        after=None,
-        traceId=None,
-        requestId=None,
-        jobId=None,
+        before=before,
+        after=after,
+        traceId=r.trace_id,
+        requestId=r.request_id,
+        jobId=r.job_id,
         source="api",
     )
 
