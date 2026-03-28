@@ -141,6 +141,14 @@ th, td {
   font-size: 16px;
 }
 
+.section-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
 label {
   display: grid;
   gap: 4px;
@@ -171,6 +179,16 @@ button {
   padding: 10px 16px;
 }
 
+button.secondary {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+button.danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 button:disabled { opacity: 0.6; }
 
 @media (max-width: 900px) {
@@ -180,6 +198,11 @@ button:disabled { opacity: 0.6; }
   }
 
   .list-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .section-row {
     align-items: stretch;
     flex-direction: column;
   }

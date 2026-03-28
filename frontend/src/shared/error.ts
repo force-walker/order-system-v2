@@ -21,6 +21,9 @@ const DEFAULT_MESSAGES: Record<string, string> = {
   login_failed: 'ログインに失敗しました。設定を確認してください。',
   list_orders_failed: '注文一覧の取得に失敗しました。',
   create_order_failed: '注文作成に失敗しました。',
+  STATUS_NO_TARGET_LINES: '対象データが見つかりませんでした。条件を見直してください。',
+  VALIDATION_ERROR: '入力内容に不備があります。必須項目や形式を確認してください。',
+  ORDER_CONFLICT: '注文状態の競合が発生しました。最新状態で再度お試しください。',
 };
 
 export const parseApiErrorPayload = async (res: Response): Promise<ServiceError> => {

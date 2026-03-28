@@ -147,7 +147,20 @@ const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail
   return newOrder;
 };
 
+const loadCustomersApi = async (): Promise<CustomerOption[]> => {
+  const res = await fetchWithAuth('/api/v1/customers', { method: 'GET' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as ApiCustomerResponse[];
+  return data.map((c) => {
+    customerNameCache.set(c.id, c.name);
+    return { id: c.id, label: `${c.id}: ${c.name} (${c.customer_code})` };
+  });
+};
+
 const listOrdersApi = async (): Promise<OrderSummary[]> => {
+  await loadCustomersApi();
+
   const res = await fetchWithAuth('/api/v1/orders', { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
 
@@ -199,14 +212,7 @@ export const listCustomers = async (): Promise<CustomerOption[]> => {
     ];
   }
 
-  const res = await fetchWithAuth('/api/v1/customers', { method: 'GET' });
-  if (!res.ok) throw await parseApiErrorPayload(res);
-
-  const data = (await res.json()) as ApiCustomerResponse[];
-  return data.map((c) => {
-    customerNameCache.set(c.id, c.name);
-    return { id: c.id, label: `${c.id}: ${c.name} (${c.customer_code})` };
-  });
+  return loadCustomersApi();
 };
 
 export const listOrders = async (): Promise<OrderSummary[]> => {
