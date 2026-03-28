@@ -1,5 +1,5 @@
 import { mockOrders } from 'features/orders/mocks/orders';
-import type { CreateOrderRequest, OrderDetail, OrderSummary } from 'features/orders/types/order';
+import type { CreateOrderRequest, CustomerOption, OrderDetail, OrderSummary } from 'features/orders/types/order';
 import { parseApiErrorPayload, ServiceError } from 'shared/error';
 
 const STORAGE_KEY = 'osv2_mock_orders';
@@ -20,7 +20,14 @@ type ApiOrderResponse = {
   created_at: string;
 };
 
+type ApiCustomerResponse = {
+  id: number;
+  customer_code: string;
+  name: string;
+};
+
 const apiOrderCache = new Map<number, OrderDetail>();
+const customerNameCache = new Map<number, string>();
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -93,7 +100,7 @@ const mapApiOrderToDetail = (order: ApiOrderResponse): OrderDetail => {
   return {
     id: order.id,
     orderNo: order.order_no,
-    customerName: cached?.customerName ?? `顧客#${order.customer_id}`,
+    customerName: cached?.customerName ?? customerNameCache.get(order.customer_id) ?? `顧客#${order.customer_id}`,
     deliveryDate: order.delivery_date,
     status: order.status,
     note: order.note ?? undefined,
@@ -122,7 +129,7 @@ const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail
 
   const newOrder: OrderDetail = {
     id: nextId,
-    orderNo: payload.orderNo,
+    orderNo: payload.orderNo ?? `ORD-MOCK-${String(nextId).padStart(5, '0')}`,
     customerName: payload.customerName,
     deliveryDate: payload.deliveryDate,
     status: 'new',
@@ -142,9 +149,7 @@ const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail
 
 const listOrdersApi = async (): Promise<OrderSummary[]> => {
   const res = await fetchWithAuth('/api/v1/orders', { method: 'GET' });
-  if (!res.ok) {
-    throw await parseApiErrorPayload(res);
-  }
+  if (!res.ok) throw await parseApiErrorPayload(res);
 
   const data = (await res.json()) as ApiOrderResponse[];
   return data.map((row) => {
@@ -155,19 +160,19 @@ const listOrdersApi = async (): Promise<OrderSummary[]> => {
 };
 
 const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail> => {
+  const body: Record<string, unknown> = {
+    customer_id: payload.customerId || DEV_CUSTOMER_ID,
+    delivery_date: payload.deliveryDate,
+    note: payload.note ?? null,
+  };
+  if (payload.orderNo) body.order_no = payload.orderNo;
+
   const res = await fetchWithAuth('/api/v1/orders', {
     method: 'POST',
-    body: JSON.stringify({
-      order_no: payload.orderNo,
-      customer_id: DEV_CUSTOMER_ID,
-      delivery_date: payload.deliveryDate,
-      note: payload.note ?? null,
-    }),
+    body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
-    throw await parseApiErrorPayload(res);
-  }
+  if (!res.ok) throw await parseApiErrorPayload(res);
 
   const data = (await res.json()) as ApiOrderResponse;
   const detail: OrderDetail = {
@@ -181,8 +186,27 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
     })),
   };
 
+  customerNameCache.set(payload.customerId, payload.customerName);
   apiOrderCache.set(detail.id, detail);
   return detail;
+};
+
+export const listCustomers = async (): Promise<CustomerOption[]> => {
+  if (USE_MOCK) {
+    return [
+      { id: 1, label: '1: テスト商事' },
+      { id: 2, label: '2: デモフーズ' },
+    ];
+  }
+
+  const res = await fetchWithAuth('/api/v1/customers', { method: 'GET' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as ApiCustomerResponse[];
+  return data.map((c) => {
+    customerNameCache.set(c.id, c.name);
+    return { id: c.id, label: `${c.id}: ${c.name} (${c.customer_code})` };
+  });
 };
 
 export const listOrders = async (): Promise<OrderSummary[]> => {
