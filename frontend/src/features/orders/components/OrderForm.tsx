@@ -7,80 +7,139 @@ type Props = {
   customers: CustomerOption[];
 };
 
-type FormState = {
-  customerId: string;
-  customerName: string;
-  deliveryDate: string;
-  note: string;
+type ItemForm = {
   productName: string;
   quantity: string;
   unit: string;
 };
 
-type FieldErrors = Partial<Record<keyof FormState, string>>;
+type FormState = {
+  customerId: string;
+  customerName: string;
+  deliveryDate: string;
+  note: string;
+  items: ItemForm[];
+};
+
+type FieldErrors = {
+  customerId?: string;
+  customerName?: string;
+  deliveryDate?: string;
+  note?: string;
+  items?: string;
+  itemRows?: Array<Partial<Record<keyof ItemForm, string>>>;
+};
+
+const newItem = (): ItemForm => ({
+  productName: '',
+  quantity: '',
+  unit: 'kg',
+});
 
 const initialState: FormState = {
   customerId: '',
   customerName: '',
   deliveryDate: '',
   note: '',
-  productName: '',
-  quantity: '',
-  unit: 'kg',
+  items: [newItem()],
 };
 
 const trim = (v: string) => v.trim();
 
 const validate = (form: FormState): FieldErrors => {
-  const errors: FieldErrors = {};
+  const errors: FieldErrors = { itemRows: [] };
 
   if (!form.customerId || Number(form.customerId) <= 0) errors.customerId = '顧客IDは必須です';
   if (!trim(form.customerName)) errors.customerName = '顧客名は必須です';
   if (trim(form.customerName).length > 255) errors.customerName = '顧客名は255文字以内で入力してください';
-
   if (!form.deliveryDate) errors.deliveryDate = '納品日は必須です';
-  if (!trim(form.productName)) errors.productName = '商品名は必須です';
+  if (form.note.length > 1000) errors.note = '備考は1000文字以内で入力してください';
 
-  const quantity = Number(form.quantity);
-  if (!form.quantity) {
-    errors.quantity = '数量は必須です';
-  } else if (!Number.isFinite(quantity) || !Number.isInteger(quantity)) {
-    errors.quantity = '数量は整数で入力してください';
-  } else if (quantity <= 0) {
-    errors.quantity = '数量は1以上で入力してください';
+  if (form.items.length === 0) {
+    errors.items = '明細は最低1行必要です';
   }
 
-  if (!trim(form.unit)) errors.unit = '単位は必須です';
-  if (form.note.length > 1000) errors.note = '備考は1000文字以内で入力してください';
+  form.items.forEach((item, idx) => {
+    const rowError: Partial<Record<keyof ItemForm, string>> = {};
+    if (!trim(item.productName)) rowError.productName = '商品名は必須です';
+
+    const quantity = Number(item.quantity);
+    if (!item.quantity) {
+      rowError.quantity = '数量は必須です';
+    } else if (!Number.isFinite(quantity) || !Number.isInteger(quantity)) {
+      rowError.quantity = '数量は整数で入力してください';
+    } else if (quantity <= 0) {
+      rowError.quantity = '数量は1以上で入力してください';
+    }
+
+    if (!trim(item.unit)) rowError.unit = '単位は必須です';
+
+    errors.itemRows![idx] = rowError;
+  });
 
   return errors;
 };
 
+const hasAnyError = (errors: FieldErrors) => {
+  if (errors.customerId || errors.customerName || errors.deliveryDate || errors.note || errors.items) return true;
+  return (errors.itemRows ?? []).some((row) => Object.keys(row).length > 0);
+};
+
 export const OrderForm = ({ onSubmit, customers }: Props) => {
   const [form, setForm] = useState<FormState>(initialState);
-  const [errors, setErrors] = useState<FieldErrors>({});
+  const [errors, setErrors] = useState<FieldErrors>({ itemRows: [] });
   const [submitError, setSubmitError] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
-  const hasErrors = useMemo(() => Object.keys(errors).length > 0, [errors]);
+  const hasErrors = useMemo(() => hasAnyError(errors), [errors]);
 
-  const handleChange = (key: keyof FormState, value: string) => {
+  const handleHeaderChange = (key: Exclude<keyof FormState, 'items'>, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
+    setErrors((prev) => ({ ...prev, [key]: undefined }));
     setSubmitError('');
   };
 
   const handleCustomerSelect = (value: string) => {
     const selected = customers.find((c) => String(c.id) === value);
-    handleChange('customerId', value);
+    handleHeaderChange('customerId', value);
     if (selected) {
       const name = selected.label.split(':')[1]?.split('(')[0]?.trim() ?? '';
-      handleChange('customerName', name);
+      handleHeaderChange('customerName', name);
     }
+  };
+
+  const handleItemChange = (index: number, key: keyof ItemForm, value: string) => {
+    setForm((prev) => {
+      const next = [...prev.items];
+      next[index] = { ...next[index], [key]: value };
+      return { ...prev, items: next };
+    });
+
+    setErrors((prev) => {
+      const nextRows = [...(prev.itemRows ?? [])];
+      const row = { ...(nextRows[index] ?? {}) };
+      delete row[key];
+      nextRows[index] = row;
+      return { ...prev, items: undefined, itemRows: nextRows };
+    });
+    setSubmitError('');
+  };
+
+  const addItemRow = () => {
+    setForm((prev) => ({ ...prev, items: [...prev.items, newItem()] }));
+    setErrors((prev) => ({ ...prev, items: undefined, itemRows: [...(prev.itemRows ?? []), {}] }));
+  };
+
+  const removeItemRow = (index: number) => {
+    setForm((prev) => {
+      if (prev.items.length <= 1) return prev;
+      const next = prev.items.filter((_, i) => i !== index);
+      return { ...prev, items: next };
+    });
+    setErrors((prev) => {
+      const nextRows = (prev.itemRows ?? []).filter((_, i) => i !== index);
+      return { ...prev, itemRows: nextRows };
+    });
   };
 
   const submit = async (e: FormEvent) => {
@@ -88,7 +147,7 @@ export const OrderForm = ({ onSubmit, customers }: Props) => {
 
     const nextErrors = validate(form);
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (hasAnyError(nextErrors)) return;
 
     setSubmitting(true);
     try {
@@ -97,16 +156,14 @@ export const OrderForm = ({ onSubmit, customers }: Props) => {
         customerName: trim(form.customerName),
         deliveryDate: form.deliveryDate,
         note: form.note ? trim(form.note) : undefined,
-        items: [
-          {
-            productName: trim(form.productName),
-            quantity: Number(form.quantity),
-            unit: trim(form.unit),
-          },
-        ],
+        items: form.items.map((row) => ({
+          productName: trim(row.productName),
+          quantity: Number(row.quantity),
+          unit: trim(row.unit),
+        })),
       });
       setForm(initialState);
-      setErrors({});
+      setErrors({ itemRows: [] });
       setSubmitError('');
     } catch (e) {
       setSubmitError(toUserMessage(e, '注文作成に失敗しました。時間をおいて再試行してください。'));
@@ -118,14 +175,14 @@ export const OrderForm = ({ onSubmit, customers }: Props) => {
   return (
     <form onSubmit={submit} className="card order-form">
       <div className="form-header">
-        <h2>注文作成</h2>
-        <p>要件変更対応: 注文番号はサーバー自動採番です（入力不要）。</p>
+        <h2>注文作成（ヘッダー + 明細）</h2>
+        <p>上段で注文ヘッダーを入力し、下段で明細行を追加してください。</p>
       </div>
 
       {submitError ? <p className="form-error">{submitError}</p> : null}
 
       <section className="form-section">
-        <h3>基本情報</h3>
+        <h3>注文ヘッダー</h3>
         <div className="form-grid two-col">
           <label>
             顧客選択 *
@@ -142,42 +199,74 @@ export const OrderForm = ({ onSubmit, customers }: Props) => {
 
           <label>
             顧客名 *
-            <input value={form.customerName} onChange={(e) => handleChange('customerName', e.target.value)} placeholder="顧客選択で自動入力" />
+            <input value={form.customerName} onChange={(e) => handleHeaderChange('customerName', e.target.value)} placeholder="顧客選択で自動入力" />
             {errors.customerName ? <small className="field-error">{errors.customerName}</small> : null}
           </label>
 
           <label>
             納品日 *
-            <input type="date" value={form.deliveryDate} onChange={(e) => handleChange('deliveryDate', e.target.value)} />
+            <input type="date" value={form.deliveryDate} onChange={(e) => handleHeaderChange('deliveryDate', e.target.value)} />
             {errors.deliveryDate ? <small className="field-error">{errors.deliveryDate}</small> : null}
           </label>
         </div>
       </section>
 
       <section className="form-section">
-        <h3>アイテム情報（先頭1件）</h3>
-        <div className="form-grid three-col">
-          <label>
-            商品名 *
-            <input value={form.productName} onChange={(e) => handleChange('productName', e.target.value)} placeholder="例: 鶏もも肉" />
-            {errors.productName ? <small className="field-error">{errors.productName}</small> : null}
-          </label>
+        <div className="section-row">
+          <h3>明細行</h3>
+          <button type="button" className="secondary" onClick={addItemRow}>
+            + 明細行を追加
+          </button>
+        </div>
+        {errors.items ? <p className="form-error">{errors.items}</p> : null}
 
-          <label>
-            数量 *
-            <input type="number" min={1} step={1} value={form.quantity} onChange={(e) => handleChange('quantity', e.target.value)} />
-            {errors.quantity ? <small className="field-error">{errors.quantity}</small> : null}
-          </label>
-
-          <label>
-            単位 *
-            <select value={form.unit} onChange={(e) => handleChange('unit', e.target.value)}>
-              <option value="kg">kg</option>
-              <option value="case">case</option>
-              <option value="piece">piece</option>
-            </select>
-            {errors.unit ? <small className="field-error">{errors.unit}</small> : null}
-          </label>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>商品名 *</th>
+                <th>数量 *</th>
+                <th>単位 *</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {form.items.map((row, idx) => {
+                const rowError = errors.itemRows?.[idx] ?? {};
+                return (
+                  <tr key={`item-row-${idx}`}>
+                    <td>{idx + 1}</td>
+                    <td>
+                      <input
+                        value={row.productName}
+                        onChange={(e) => handleItemChange(idx, 'productName', e.target.value)}
+                        placeholder="例: 鶏もも肉"
+                      />
+                      {rowError.productName ? <small className="field-error">{rowError.productName}</small> : null}
+                    </td>
+                    <td>
+                      <input type="number" min={1} step={1} value={row.quantity} onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)} />
+                      {rowError.quantity ? <small className="field-error">{rowError.quantity}</small> : null}
+                    </td>
+                    <td>
+                      <select value={row.unit} onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}>
+                        <option value="kg">kg</option>
+                        <option value="case">case</option>
+                        <option value="piece">piece</option>
+                      </select>
+                      {rowError.unit ? <small className="field-error">{rowError.unit}</small> : null}
+                    </td>
+                    <td>
+                      <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>
+                        行削除
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -185,7 +274,7 @@ export const OrderForm = ({ onSubmit, customers }: Props) => {
         <h3>備考</h3>
         <label>
           備考
-          <textarea value={form.note} onChange={(e) => handleChange('note', e.target.value)} rows={3} placeholder="任意入力" />
+          <textarea value={form.note} onChange={(e) => handleHeaderChange('note', e.target.value)} rows={3} placeholder="任意入力" />
           {errors.note ? <small className="field-error">{errors.note}</small> : null}
         </label>
       </section>

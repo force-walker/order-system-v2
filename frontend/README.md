@@ -14,7 +14,7 @@ npm run test
 ## 開発環境変数（`.env.development`）
 
 ```bash
-VITE_APP_BRANCH=feat/frontend-pr6-realign-with-backend-v2
+VITE_APP_BRANCH=feat/frontend-pr7-single-screen-header-items-sync
 VITE_USE_MOCK=false
 VITE_API_BASE_URL=http://127.0.0.1:8000
 VITE_DEV_LOGIN_USER=frontend-dev-admin
