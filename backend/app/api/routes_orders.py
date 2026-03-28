@@ -6,9 +6,19 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus
+from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product
 from app.schemas.common import ApiErrorResponse
-from app.schemas.order import OrderBulkTransitionRequest, OrderBulkTransitionResponse, OrderCreateRequest, OrderResponse
+from app.schemas.order import (
+    OrderBulkTransitionRequest,
+    OrderBulkTransitionResponse,
+    OrderCreateRequest,
+    OrderItemCreateRequest,
+    OrderItemResponse,
+    OrderItemsBulkCreateRequest,
+    OrderItemsBulkCreateResponse,
+    OrderItemUpdateRequest,
+    OrderResponse,
+)
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
@@ -126,3 +136,132 @@ def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> 
     db.commit()
     db.refresh(row)
     return OrderResponse.model_validate(row)
+
+
+def _validate_order_item_pricing(payload: OrderItemCreateRequest | OrderItemUpdateRequest) -> None:
+    pricing_basis = payload.pricing_basis
+    if pricing_basis == PricingBasis.uom_count:
+        if payload.unit_price_uom_count is None:
+            raise HTTPException(status_code=422, detail={"code": "VALIDATION_FAILED", "message": "unit_price_uom_count is required"})
+    if pricing_basis == PricingBasis.uom_kg:
+        if payload.unit_price_uom_kg is None:
+            raise HTTPException(status_code=422, detail={"code": "VALIDATION_FAILED", "message": "unit_price_uom_kg is required"})
+
+
+@router.get("/{order_id}/items", response_model=list[OrderItemResponse])
+def list_order_items(order_id: int, db: Session = Depends(get_db)) -> list[OrderItemResponse]:
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+
+    rows = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
+    return [OrderItemResponse.model_validate(r) for r in rows]
+
+
+@router.post("/{order_id}/items", response_model=OrderItemResponse, status_code=201)
+def create_order_item(order_id: int, payload: OrderItemCreateRequest, db: Session = Depends(get_db)) -> OrderItemResponse:
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+
+    product = db.query(Product).filter(Product.id == payload.product_id).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+
+    _validate_order_item_pricing(payload)
+
+    row = OrderItem(
+        order_id=order_id,
+        product_id=payload.product_id,
+        ordered_qty=payload.ordered_qty,
+        order_uom_type=payload.order_uom_type,
+        pricing_basis=payload.pricing_basis,
+        unit_price_uom_count=payload.unit_price_uom_count,
+        unit_price_uom_kg=payload.unit_price_uom_kg,
+        note=payload.note,
+    )
+    db.add(row)
+    db.flush()
+    order.updated_by = "system_api"
+    db.commit()
+    db.refresh(row)
+    return OrderItemResponse.model_validate(row)
+
+
+@router.post("/{order_id}/items/bulk", response_model=OrderItemsBulkCreateResponse)
+def bulk_create_order_items(order_id: int, payload: OrderItemsBulkCreateRequest, db: Session = Depends(get_db)) -> OrderItemsBulkCreateResponse:
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+
+    success = 0
+    errors: list[dict] = []
+    for idx, item in enumerate(payload.items):
+        product = db.query(Product).filter(Product.id == item.product_id).first()
+        if product is None:
+            errors.append({"index": idx, "field": "product_id", "code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+            continue
+        try:
+            _validate_order_item_pricing(item)
+        except HTTPException as e:
+            errors.append({"index": idx, "field": "pricing_basis", "code": e.detail.get("code", "VALIDATION_FAILED"), "message": e.detail.get("message", "validation failed")})
+            continue
+
+        db.add(
+            OrderItem(
+                order_id=order_id,
+                product_id=item.product_id,
+                ordered_qty=item.ordered_qty,
+                order_uom_type=item.order_uom_type,
+                pricing_basis=item.pricing_basis,
+                unit_price_uom_count=item.unit_price_uom_count,
+                unit_price_uom_kg=item.unit_price_uom_kg,
+                note=item.note,
+            )
+        )
+        success += 1
+
+    order.updated_by = "system_api"
+    db.commit()
+    return OrderItemsBulkCreateResponse(total=len(payload.items), success=success, failed=len(payload.items) - success, errors=errors)
+
+
+@router.patch("/{order_id}/items/{item_id}", response_model=OrderItemResponse)
+def update_order_item(order_id: int, item_id: int, payload: OrderItemUpdateRequest, db: Session = Depends(get_db)) -> OrderItemResponse:
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+
+    row = db.query(OrderItem).filter(OrderItem.id == item_id, OrderItem.order_id == order_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "order item not found"})
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(row, k, v)
+
+    if payload.pricing_basis is not None or payload.unit_price_uom_count is not None or payload.unit_price_uom_kg is not None:
+        pb = payload.pricing_basis or row.pricing_basis
+        temp = OrderItemUpdateRequest(pricing_basis=pb, unit_price_uom_count=row.unit_price_uom_count, unit_price_uom_kg=row.unit_price_uom_kg)
+        _validate_order_item_pricing(temp)
+
+    order.updated_by = "system_api"
+    db.commit()
+    db.refresh(row)
+    return OrderItemResponse.model_validate(row)
+
+
+@router.delete("/{order_id}/items/{item_id}", status_code=204)
+def delete_order_item(order_id: int, item_id: int, db: Session = Depends(get_db)) -> None:
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+
+    row = db.query(OrderItem).filter(OrderItem.id == item_id, OrderItem.order_id == order_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "order item not found"})
+
+    db.delete(row)
+    order.updated_by = "system_api"
+    db.commit()
+    return None
