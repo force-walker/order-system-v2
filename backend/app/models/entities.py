@@ -1,7 +1,7 @@
 import enum
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -111,7 +111,7 @@ class OrderItem(Base):
 class SupplierAllocation(Base):
     __tablename__ = "supplier_allocations"
     __table_args__ = (
-        CheckConstraint("final_qty IS NULL OR final_qty > 0", name="ck_supplier_allocations_final_qty_positive"),
+        CheckConstraint("final_qty IS NULL OR final_qty >= 0", name="ck_supplier_allocations_final_qty_non_negative"),
         CheckConstraint("suggested_qty IS NULL OR suggested_qty > 0", name="ck_supplier_allocations_suggested_qty_positive"),
     )
 
@@ -133,6 +133,13 @@ class SupplierAllocation(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
 
+class PurchaseResultStatus(str, enum.Enum):
+    not_filled = "not_filled"
+    filled = "filled"
+    partially_filled = "partially_filled"
+    substituted = "substituted"
+
+
 class PurchaseResult(Base):
     __tablename__ = "purchase_results"
     __table_args__ = (
@@ -141,7 +148,6 @@ class PurchaseResult(Base):
         CheckConstraint("unit_cost IS NULL OR unit_cost >= 0", name="ck_purchase_results_unit_cost_non_negative"),
         CheckConstraint("final_unit_cost IS NULL OR final_unit_cost >= 0", name="ck_purchase_results_final_unit_cost_non_negative"),
         CheckConstraint("shortage_qty IS NULL OR shortage_qty >= 0", name="ck_purchase_results_shortage_qty_non_negative"),
-        UniqueConstraint("allocation_id", name="uq_purchase_results_allocation_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -154,7 +160,11 @@ class PurchaseResult(Base):
     final_unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     shortage_qty: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     shortage_policy: Mapped[StockoutPolicy | None] = mapped_column(Enum(StockoutPolicy, name="stockoutpolicy"), nullable=True)
-    result_status: Mapped[str] = mapped_column(String(32), index=True)
+    result_status: Mapped[PurchaseResultStatus] = mapped_column(
+        Enum(PurchaseResultStatus, name="purchaseresultstatus"),
+        default=PurchaseResultStatus.not_filled,
+        index=True,
+    )
     invoiceable_flag: Mapped[bool] = mapped_column(Boolean, default=True)
     recorded_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

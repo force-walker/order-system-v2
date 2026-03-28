@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.models.entities import PurchaseResultStatus
+
 
 class PurchaseResultCreateRequest(BaseModel):
     allocation_id: int = Field(gt=0)
@@ -13,7 +15,7 @@ class PurchaseResultCreateRequest(BaseModel):
     final_unit_cost: float | None = Field(default=None, ge=0)
     shortage_qty: float | None = Field(default=None, ge=0)
     shortage_policy: str | None = Field(default=None, min_length=1, max_length=32)
-    result_status: str = Field(min_length=1, max_length=32)
+    result_status: PurchaseResultStatus
     invoiceable_flag: bool = True
     recorded_by: str | None = Field(default=None, min_length=1, max_length=64)
     note: str | None = Field(default=None, max_length=1000)
@@ -28,7 +30,7 @@ class PurchaseResultUpdateRequest(BaseModel):
     final_unit_cost: float | None = Field(default=None, ge=0)
     shortage_qty: float | None = Field(default=None, ge=0)
     shortage_policy: str | None = Field(default=None, min_length=1, max_length=32)
-    result_status: str | None = Field(default=None, min_length=1, max_length=32)
+    result_status: PurchaseResultStatus | None = None
     invoiceable_flag: bool | None = None
     recorded_by: str | None = Field(default=None, min_length=1, max_length=64)
     note: str | None = Field(default=None, max_length=1000)
@@ -49,7 +51,7 @@ class PurchaseResultResponse(BaseModel):
     final_unit_cost: float | None
     shortage_qty: float | None
     shortage_policy: str | None
-    result_status: str
+    result_status: PurchaseResultStatus
     invoiceable_flag: bool
     recorded_by: str | None
     recorded_at: datetime

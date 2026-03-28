@@ -34,7 +34,6 @@ def test_openapi_error_contracts_for_core_apis():
 
     # allocations / purchase-results
     assert "422" in _responses("/api/v1/allocations/{allocation_id}/override", "patch")
-    assert "409" in _responses("/api/v1/purchase-results", "post")
     assert "422" in _responses("/api/v1/purchase-results", "post")
 
     # auth
