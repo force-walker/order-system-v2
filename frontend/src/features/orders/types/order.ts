@@ -30,7 +30,8 @@ export type OrderDetail = OrderSummary & {
 };
 
 export type CreateOrderRequest = {
-  orderNo: string;
+  orderNo?: string;
+  customerId: number;
   customerName: string;
   deliveryDate: string;
   note?: string;
@@ -39,4 +40,9 @@ export type CreateOrderRequest = {
     quantity: number;
     unit: string;
   }>;
+};
+
+export type CustomerOption = {
+  id: number;
+  label: string;
 };
