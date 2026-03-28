@@ -11,8 +11,8 @@ export const AppLayout = () => {
           <p className="branch-badge">branch: {branchName}</p>
         </div>
         <nav className="nav">
-          <NavLink to="/orders/new">注文作成</NavLink>
-          <NavLink to="/orders">注文一覧</NavLink>
+          <NavLink to="/orders/new" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>注文作成</NavLink>
+          <NavLink to="/orders" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>注文一覧</NavLink>
         </nav>
       </header>
       <main>

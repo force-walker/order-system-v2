@@ -91,7 +91,9 @@ export const OrderListPage = () => {
                 return (
                   <tr key={order.id}>
                     <td>{order.id}</td>
-                    <td>{order.orderNo}</td>
+                    <td>
+                      <Link to={`/orders/${order.id}/edit`} className="order-link">{order.orderNo}</Link>
+                    </td>
                     <td>{order.customerName}</td>
                     <td>{order.deliveryDate}</td>
                     <td>

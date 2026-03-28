@@ -20,6 +20,7 @@ export type OrderItem = {
 
 export type OrderSummary = {
   id: number;
+  customerId?: number;
   orderNo: string;
   customerName: string;
   deliveryDate: string;
@@ -39,6 +40,7 @@ export type CreateOrderRequest = {
   deliveryDate: string;
   note?: string;
   items: Array<{
+    id?: number;
     productId?: number;
     productName: string;
     quantity: number;

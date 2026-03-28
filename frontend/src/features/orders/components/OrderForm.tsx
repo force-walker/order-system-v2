@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
 import { toUserMessage } from 'shared/error';
 
@@ -6,9 +6,12 @@ type Props = {
   onSubmit: (payload: CreateOrderRequest) => Promise<void>;
   customers: CustomerOption[];
   products: ProductOption[];
+  initialValue?: CreateOrderRequest;
+  submitLabel?: string;
 };
 
 type ItemForm = {
+  id?: number;
   productId: string;
   productName: string;
   quantity: string;
@@ -43,15 +46,38 @@ const newItem = (): ItemForm => ({
   pricingBasis: 'uom_count',
 });
 
-const initialState: FormState = {
-  customerId: '',
-  customerName: '',
-  deliveryDate: '',
-  note: '',
-  items: [newItem()],
-};
-
 const trim = (v: string) => v.trim();
+
+const toInitialForm = (initialValue?: CreateOrderRequest): FormState => {
+  if (!initialValue) {
+    return {
+      customerId: '',
+      customerName: '',
+      deliveryDate: '',
+      note: '',
+      items: [newItem()],
+    };
+  }
+
+  return {
+    customerId: String(initialValue.customerId),
+    customerName: initialValue.customerName,
+    deliveryDate: initialValue.deliveryDate,
+    note: initialValue.note ?? '',
+    items:
+      initialValue.items.length > 0
+        ? initialValue.items.map((i) => ({
+            id: i.id,
+            productId: i.productId ? String(i.productId) : '',
+            productName: i.productName,
+            quantity: String(i.quantity),
+            unit: i.unit,
+            unitPrice: String(i.unitPrice),
+            pricingBasis: i.pricingBasis,
+          }))
+        : [newItem()],
+  };
+};
 
 const validate = (form: FormState): FieldErrors => {
   const errors: FieldErrors = { itemRows: [] };
@@ -65,6 +91,7 @@ const validate = (form: FormState): FieldErrors => {
   form.items.forEach((item, idx) => {
     const rowError: Partial<Record<keyof ItemForm, string>> = {};
     if (!item.productId) rowError.productId = '商品選択は必須です';
+
     const q = Number(item.quantity);
     if (!item.quantity) rowError.quantity = '数量は必須です';
     else if (!Number.isFinite(q) || q <= 0) rowError.quantity = '数量は1以上で入力してください';
@@ -85,17 +112,37 @@ const hasAnyError = (errors: FieldErrors) => {
   return (errors.itemRows ?? []).some((row) => Object.keys(row).length > 0);
 };
 
-export const OrderForm = ({ onSubmit, customers, products }: Props) => {
-  const [form, setForm] = useState<FormState>(initialState);
+export const OrderForm = ({ onSubmit, customers, products, initialValue, submitLabel = '注文を作成' }: Props) => {
+  const [form, setForm] = useState<FormState>(toInitialForm(initialValue));
   const [errors, setErrors] = useState<FieldErrors>({ itemRows: [] });
   const [submitError, setSubmitError] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    setForm(toInitialForm(initialValue));
+    setErrors({ itemRows: [] });
+    setSubmitError('');
+  }, [initialValue]);
+
   const hasErrors = useMemo(() => hasAnyError(errors), [errors]);
+
+  const clearHeaderError = (key: keyof Omit<FormState, 'items'>) => {
+    setErrors((prev) => ({ ...prev, [key]: undefined }));
+  };
+
+  const clearItemError = (index: number, key: keyof ItemForm) => {
+    setErrors((prev) => {
+      const itemRows = [...(prev.itemRows ?? [])];
+      const row = { ...(itemRows[index] ?? {}) };
+      delete row[key];
+      itemRows[index] = row;
+      return { ...prev, itemRows, items: undefined };
+    });
+  };
 
   const handleHeaderChange = (key: Exclude<keyof FormState, 'items'>, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-    setErrors((prev) => ({ ...prev, [key]: undefined }));
+    clearHeaderError(key);
     setSubmitError('');
   };
 
@@ -114,6 +161,7 @@ export const OrderForm = ({ onSubmit, customers, products }: Props) => {
       next[index] = { ...next[index], [key]: value };
       return { ...prev, items: next };
     });
+    clearItemError(index, key);
     setSubmitError('');
   };
 
@@ -134,6 +182,7 @@ export const OrderForm = ({ onSubmit, customers, products }: Props) => {
       if (prev.items.length <= 1) return prev;
       return { ...prev, items: prev.items.filter((_, i) => i !== index) };
     });
+    setErrors((prev) => ({ ...prev, itemRows: (prev.itemRows ?? []).filter((_, i) => i !== index) }));
   };
 
   const submit = async (e: FormEvent) => {
@@ -150,6 +199,7 @@ export const OrderForm = ({ onSubmit, customers, products }: Props) => {
         deliveryDate: form.deliveryDate,
         note: form.note ? trim(form.note) : undefined,
         items: form.items.map((row) => ({
+          id: row.id,
           productId: Number(row.productId),
           productName: trim(row.productName),
           quantity: Number(row.quantity),
@@ -158,11 +208,9 @@ export const OrderForm = ({ onSubmit, customers, products }: Props) => {
           pricingBasis: row.pricingBasis,
         })),
       });
-      setForm(initialState);
-      setErrors({ itemRows: [] });
       setSubmitError('');
-    } catch (e) {
-      setSubmitError(toUserMessage(e, '注文作成に失敗しました。時間をおいて再試行してください。'));
+    } catch (err) {
+      setSubmitError(toUserMessage(err, '注文保存に失敗しました。時間をおいて再試行してください。'));
     } finally {
       setSubmitting(false);
     }
@@ -171,8 +219,8 @@ export const OrderForm = ({ onSubmit, customers, products }: Props) => {
   return (
     <form onSubmit={submit} className="card order-form">
       <div className="form-header">
-        <h2>注文作成（ヘッダー + 明細）</h2>
-        <p>ヘッダー保存後に明細を一括登録します。</p>
+        <h2>注文作成 / 編集（ヘッダー + 明細）</h2>
+        <p>ヘッダー情報と明細行を同一画面で管理します。</p>
       </div>
 
       {submitError ? <p className="form-error">{submitError}</p> : null}
@@ -222,7 +270,7 @@ export const OrderForm = ({ onSubmit, customers, products }: Props) => {
               {form.items.map((row, idx) => {
                 const e = errors.itemRows?.[idx] ?? {};
                 return (
-                  <tr key={idx}>
+                  <tr key={row.id ?? idx}>
                     <td>{idx + 1}</td>
                     <td>
                       <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
@@ -258,6 +306,7 @@ export const OrderForm = ({ onSubmit, customers, products }: Props) => {
             </tbody>
           </table>
         </div>
+        {errors.items ? <p className="form-error">{errors.items}</p> : null}
       </section>
 
       <section className="form-section">
@@ -269,8 +318,9 @@ export const OrderForm = ({ onSubmit, customers, products }: Props) => {
       </section>
 
       <div className="form-actions">
-        <button type="submit" disabled={submitting || hasErrors}>{submitting ? '作成中...' : '注文を作成'}</button>
+        <button type="submit" disabled={submitting}>{submitting ? '保存中...' : submitLabel}</button>
       </div>
+      {hasErrors ? <small className="subtle">入力エラーがあります。赤字項目を修正してください。</small> : null}
     </form>
   );
 };
