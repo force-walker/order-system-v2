@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
@@ -35,14 +36,24 @@ def write_audit_log(
     action: str,
     actor: str = DEFAULT_AUDIT_ACTOR,
     reason_code: str | None = None,
+    before: dict | None = None,
+    after: dict | None = None,
+    trace_id: str | None = None,
+    request_id: str | None = None,
+    job_id: str | None = None,
 ) -> None:
     db.add(
         AuditLog(
             entity_type=entity_type,
             entity_id=entity_id,
             action=action,
+            before_json=(json.dumps(before, ensure_ascii=False) if before is not None else None),
+            after_json=(json.dumps(after, ensure_ascii=False) if after is not None else None),
             reason_code=reason_code,
             changed_by=actor,
+            trace_id=trace_id,
+            request_id=request_id,
+            job_id=job_id,
             changed_at=datetime.now(UTC),
         )
     )

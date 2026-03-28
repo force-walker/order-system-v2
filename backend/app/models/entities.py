@@ -274,12 +274,20 @@ class AuditLog(Base):
     __table_args__ = (
         Index("ix_audit_logs_entity_type_entity_id_changed_at", "entity_type", "entity_id", "changed_at"),
         Index("ix_audit_logs_changed_by_changed_at", "changed_by", "changed_at"),
+        Index("ix_audit_logs_trace_id", "trace_id"),
+        Index("ix_audit_logs_request_id", "request_id"),
+        Index("ix_audit_logs_job_id", "job_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(64), index=True)
     entity_id: Mapped[int] = mapped_column(index=True)
     action: Mapped[str] = mapped_column(String(64))
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     changed_by: Mapped[str] = mapped_column(String(64), index=True)
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    job_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     changed_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), index=True)
