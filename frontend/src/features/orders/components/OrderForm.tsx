@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
 import { toUserMessage } from 'shared/error';
 
@@ -117,6 +117,12 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
   const [errors, setErrors] = useState<FieldErrors>({ itemRows: [] });
   const [submitError, setSubmitError] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setForm(toInitialForm(initialValue));
+    setErrors({ itemRows: [] });
+    setSubmitError('');
+  }, [initialValue]);
 
   const hasErrors = useMemo(() => hasAnyError(errors), [errors]);
 
