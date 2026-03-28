@@ -1,6 +1,7 @@
 from time import perf_counter
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -18,6 +19,17 @@ from app.core.exception_mapping import map_integrity_error
 from app.core.metrics import api_request_duration_ms, api_request_errors_total, api_requests_total, inflight_requests
 
 app = FastAPI(title="Order System v2 API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.exception_handler(IntegrityError)
