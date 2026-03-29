@@ -150,6 +150,45 @@ def test_create_order_auto_numbering_generates_unique_order_no():
     assert first.json()["order_no"] != second.json()["order_no"]
 
 
+def test_update_order_header_success_and_not_found():
+    cid = _seed_customer("CUST-ORD-UPD")
+    cid2 = _seed_customer("CUST-ORD-UPD-2")
+    client = _client()
+
+    created = client.post(
+        "/api/v1/orders",
+        json={"customer_id": cid, "delivery_date": str(date.today()), "note": "before"},
+    )
+    assert created.status_code == 201
+    oid = created.json()["id"]
+
+    ok = client.patch(
+        f"/api/v1/orders/{oid}",
+        json={"customer_id": cid2, "delivery_date": str(date.today()), "note": "after"},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["customer_id"] == cid2
+    assert ok.json()["note"] == "after"
+
+    nf = client.patch("/api/v1/orders/999999", json={"note": "x"})
+    assert nf.status_code == 404
+    assert nf.json()["detail"]["code"] == "ORDER_NOT_FOUND"
+
+
+def test_update_order_customer_not_found():
+    cid = _seed_customer("CUST-ORD-UPD-NF")
+    client = _client()
+    created = client.post(
+        "/api/v1/orders",
+        json={"customer_id": cid, "delivery_date": str(date.today())},
+    )
+    oid = created.json()["id"]
+
+    bad = client.patch(f"/api/v1/orders/{oid}", json={"customer_id": 999999})
+    assert bad.status_code == 404
+    assert bad.json()["detail"]["code"] == "CUSTOMER_NOT_FOUND"
+
+
 def test_get_order_not_found():
     client = _client()
     res = client.get("/api/v1/orders/999999")
