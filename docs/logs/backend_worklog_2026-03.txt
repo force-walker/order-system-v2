@@ -165,3 +165,30 @@ PROGRESS:
 参照:
 - #03-backend
 - PR: #6, #7, #8
+
+
+
+
+[2026-03-28] Backend progress summary
+
+- Merged PR #40: Implemented `invoice_items` table/model with constraints and indexes.
+- Merged PR #41: Added `created_by` / `updated_by` fields to `orders` and reflected in API response.
+- Merged PR #42: Extended `audit_logs` with `before_json`, `after_json`, `trace_id`, `request_id`, `job_id` and API mapping.
+- Merged PR #43: Closed remaining requirement diffs:
+  - `supplier_allocations.final_qty` adjusted to `>= 0`
+  - `purchase_results` aligned to 1-N (removed allocation unique)
+  - `purchase_results.result_status` constrained by enum
+- Merged PR #44: Added final backend acceptance checklist document.
+- Merged PR #47: Implemented order item endpoints for order-entry UI:
+  - GET/POST/PATCH/DELETE `/api/v1/orders/{order_id}/items...`
+  - POST `/api/v1/orders/{order_id}/items/bulk`
+  - Added `order_items.note` column and migration.
+
+Validation and quality checks performed:
+- CI checks (`backend-lint`, `backend-schema`, `backend-test`) passed for merged PRs.
+- Local validation passed (`pytest` up to 57 passed, `ruff` all passed).
+- For migration changes, clean-DB `alembic upgrade head` verification was executed repeatedly.
+
+Current status:
+- Major DB/API requirement gaps addressed.
+- Backend is in a frontend-resume-ready state.
