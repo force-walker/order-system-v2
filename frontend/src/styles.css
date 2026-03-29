@@ -41,8 +41,12 @@ body { margin: 0; }
 .nav-link,
 .nav-link:visited {
   text-decoration: none;
-  color: #374151;
-  font-weight: 600;
+  color: #111827;
+  font-weight: 700;
+}
+
+.nav-link:hover {
+  color: #1f2937;
 }
 
 .nav-link.active,
