@@ -18,7 +18,17 @@ PYTHONPATH=. python -m pytest -q tests
 
 log "2) クリーンDB migration テスト"
 cd "$ROOT"
-docker-compose down -v
+
+# 既定ではデータ保護のため volume は消さない。
+# 完全クリーン検証が必要な場合のみ: CLEAN_DB=1 ./scripts/regression_check.sh
+if [[ "${CLEAN_DB:-0}" == "1" ]]; then
+  echo "[info] CLEAN_DB=1 のため docker-compose down -v を実行します（DBデータは削除されます）"
+  docker-compose down -v
+else
+  echo "[info] CLEAN_DB!=1 のため docker-compose down（volume保持）を実行します"
+  docker-compose down
+fi
+
 # DBだけ先に起動
 docker-compose up -d db
 # DB起動待ち（最大60秒）
