@@ -169,9 +169,11 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
     const p = products.find((x) => String(x.id) === productId);
     handleItemChange(index, 'productId', productId);
     if (p) {
-      handleItemChange(index, 'productName', p.name);
-      handleItemChange(index, 'unit', p.orderUom);
-      handleItemChange(index, 'pricingBasis', p.pricingBasisDefault);
+      const safeUnit = p.orderUom || 'kg';
+      const safePricing = p.pricingBasisDefault === 'uom_kg' ? 'uom_kg' : 'uom_count';
+      handleItemChange(index, 'productName', p.name || '');
+      handleItemChange(index, 'unit', safeUnit);
+      handleItemChange(index, 'pricingBasis', safePricing);
     }
   };
 

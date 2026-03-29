@@ -239,6 +239,14 @@ const updateOrderHeaderApi = async (orderId: number, payload: CreateOrderRequest
     method: 'PATCH',
     body: JSON.stringify({ customer_id: payload.customerId, delivery_date: payload.deliveryDate, note: payload.note ?? null }),
   });
+
+  if (res.status === 405) {
+    throw new ServiceError('注文ヘッダー更新API（PATCH /orders/{order_id}）がbackend側で未対応です。', {
+      code: 'ORDER_HEADER_PATCH_NOT_IMPLEMENTED',
+      status: 405,
+    });
+  }
+
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
 
