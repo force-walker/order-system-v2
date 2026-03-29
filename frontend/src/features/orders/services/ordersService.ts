@@ -172,11 +172,21 @@ const listOrdersApi = async (): Promise<OrderSummary[]> => {
   const res = await fetchWithAuth('/api/v1/orders', { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiOrderResponse[];
-  return data.map((row) => {
-    const detail = mapApiOrderToDetail(row);
-    apiOrderCache.set(detail.id, detail);
-    return toListItem(detail);
-  });
+
+  const details = await Promise.all(
+    data.map(async (row) => {
+      const detail = mapApiOrderToDetail(row);
+      try {
+        detail.items = await listOrderItemsApi(row.id);
+      } catch {
+        detail.items = [];
+      }
+      apiOrderCache.set(detail.id, detail);
+      return detail;
+    }),
+  );
+
+  return details.map(toListItem);
 };
 
 const listOrderItemsApi = async (orderId: number) => {
@@ -229,6 +239,14 @@ const updateOrderHeaderApi = async (orderId: number, payload: CreateOrderRequest
     method: 'PATCH',
     body: JSON.stringify({ customer_id: payload.customerId, delivery_date: payload.deliveryDate, note: payload.note ?? null }),
   });
+
+  if (res.status === 405) {
+    throw new ServiceError('注文ヘッダー更新API（PATCH /orders/{order_id}）がbackend側で未対応です。', {
+      code: 'ORDER_HEADER_PATCH_NOT_IMPLEMENTED',
+      status: 405,
+    });
+  }
+
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
 

@@ -39,3 +39,43 @@ PROGRESS:
 参照:
 - #04-frontend
 - #03-backend
+
+## 2026-03-28
+
+[2026-03-28][OpenClawBot]
+PROGRESS:
+- 今日やったこと:
+  - Frontend PR6: 要件再同期（注文作成の再整合）
+    - `order_no` 手入力依存を排除（サーバ自動採番前提）
+    - `customer_id` 選択導線を追加
+    - 顧客マスタ取得の loading/empty/error を追加
+    - PR: #45（MERGED）
+  - Frontend PR7: 1画面2層UI（ヘッダー+明細）へ再構成
+    - 明細行の追加/削除UI
+    - 行単位バリデーション強化
+    - 顧客名マッピング安定化、エラー文言補強
+    - PR: #46（MERGED）
+  - Frontend PR8: 注文ヘッダー+明細の実API接続
+    - ヘッダー作成: `POST /api/v1/orders`
+    - 明細一括登録: `POST /api/v1/orders/{order_id}/items/bulk`
+    - 商品マスタ読込を追加し、明細入力項目をAPI要件に整合
+    - PR: #48（MERGED）
+  - Frontend PR9: 編集フロー実装
+    - 注文番号クリックで編集画面遷移 `/orders/:orderId/edit`
+    - 注文編集（ヘッダー更新 + 明細 CRUD）
+    - ナビ表示とバリデーション復帰の改善
+    - PR: #49（MERGED）
+  - CORS修正（同一PC検証中のブロッカー解消）
+    - `backend/app/main.py` に CORSMiddleware 追加
+    - `OPTIONS /api/v1/products` が 405 -> 200 へ改善
+    - PR: #50（MERGED）
+- 明日やること:
+  - 注文一覧の表示整合最終化（アイテム数・編集導線）
+  - クロスOS観点の最終確認（入力/表示）
+- ブロッカー:
+  - 一時的に CORS（preflight 405）が発生したが、PR #50 で解消済み
+
+参照:
+- #04-frontend
+- #03-backend
+- PR #45 #46 #48 #49 #50
