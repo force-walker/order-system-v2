@@ -12,6 +12,7 @@ from app.schemas.order import (
     OrderBulkTransitionRequest,
     OrderBulkTransitionResponse,
     OrderCreateRequest,
+    OrderUpdateRequest,
     OrderItemCreateRequest,
     OrderItemResponse,
     OrderItemsBulkCreateRequest,
@@ -42,6 +43,39 @@ def get_order(order_id: int, db: Session = Depends(get_db)) -> OrderResponse:
     row = db.query(Order).filter(Order.id == order_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    return OrderResponse.model_validate(row)
+
+
+@router.patch(
+    "/{order_id}",
+    response_model=OrderResponse,
+    responses={
+        **ORDER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+    },
+)
+def update_order(order_id: int, payload: OrderUpdateRequest, db: Session = Depends(get_db)) -> OrderResponse:
+    row = db.query(Order).filter(Order.id == order_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+
+    if payload.customer_id is not None:
+        customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+        if customer is None:
+            raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+        row.customer_id = payload.customer_id
+
+    if payload.delivery_date is not None:
+        row.delivery_date = payload.delivery_date
+
+    if payload.note is not None or "note" in payload.model_fields_set:
+        row.note = payload.note
+
+    row.updated_by = "system_api"
+    db.flush()
+    write_audit_log(db, entity_type="order", entity_id=row.id, action=AuditAction.UPDATE)
+    db.commit()
+    db.refresh(row)
     return OrderResponse.model_validate(row)
 
 

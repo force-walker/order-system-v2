@@ -11,6 +11,12 @@ class OrderCreateRequest(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
+class OrderUpdateRequest(BaseModel):
+    customer_id: int | None = Field(default=None, gt=0)
+    delivery_date: date | None = None
+    note: str | None = Field(default=None, max_length=1000)
+
+
 class OrderBulkTransitionRequest(BaseModel):
     from_status: OrderStatus
     to_status: OrderStatus
