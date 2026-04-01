@@ -1,10 +1,23 @@
 # Frontend Mockup Dev Quickstart (Backend-side prerequisites)
 
-Updated: 2026-03-27
+Updated: 2026-04-02
 
 This guide provides:
 1. seed data path for frontend mockup
 2. temporary auth operation rule (admin login flow)
+
+## 0) Python environment note (important)
+
+`backend/.venv` is no longer used.
+Use external venv:
+- `~/.venvs_order_system_v2/bin/python3`
+- `~/.venvs_order_system_v2/bin/pip`
+
+You can activate it via:
+
+```bash
+source ~/.venvs_order_system_v2/bin/activate
+```
 
 ## 1) Start backend stack
 
@@ -13,8 +26,9 @@ From repo root:
 ```bash
 docker-compose up -d db redis
 cd backend
-DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/order_system_v2 .venv/bin/alembic upgrade head
-PYTHONPATH=. .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/order_system_v2 \
+  /home/ikedakojiro/.venvs_order_system_v2/bin/python3 -m alembic upgrade head
+PYTHONPATH=. /home/ikedakojiro/.venvs_order_system_v2/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## 2) Seed frontend mock data
@@ -23,7 +37,7 @@ From `backend/`:
 
 ```bash
 PYTHONPATH=. DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/order_system_v2 \
-  .venv/bin/python scripts/seed_frontend_mock_data.py
+  /home/ikedakojiro/.venvs_order_system_v2/bin/python3 scripts/seed_frontend_mock_data.py
 ```
 
 Seeded entities:

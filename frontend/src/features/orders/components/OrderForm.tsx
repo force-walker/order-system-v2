@@ -11,6 +11,7 @@ type Props = {
 };
 
 type ItemForm = {
+  clientKey: string;
   id?: number;
   productId: string;
   productName: string;
@@ -37,7 +38,17 @@ type FieldErrors = {
   itemRows?: Array<Partial<Record<keyof ItemForm, string>>>;
 };
 
+let rowSeq = 0;
+const nextRowKey = () => `row-${Date.now()}-${rowSeq++}`;
+
+const getTomorrowDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
 const newItem = (): ItemForm => ({
+  clientKey: nextRowKey(),
   productId: '',
   productName: '',
   quantity: '',
@@ -53,7 +64,7 @@ const toInitialForm = (initialValue?: CreateOrderRequest): FormState => {
     return {
       customerId: '',
       customerName: '',
-      deliveryDate: '',
+      deliveryDate: getTomorrowDate(),
       note: '',
       items: [newItem()],
     };
@@ -67,6 +78,7 @@ const toInitialForm = (initialValue?: CreateOrderRequest): FormState => {
     items:
       initialValue.items.length > 0
         ? initialValue.items.map((i) => ({
+            clientKey: i.id ? `existing-${i.id}` : nextRowKey(),
             id: i.id,
             productId: i.productId ? String(i.productId) : '',
             productName: i.productName,
@@ -109,7 +121,7 @@ const validate = (form: FormState): FieldErrors => {
 
 const hasAnyError = (errors: FieldErrors) => {
   if (errors.customerId || errors.customerName || errors.deliveryDate || errors.note || errors.items) return true;
-  return (errors.itemRows ?? []).some((row) => Object.keys(row).length > 0);
+  return (errors.itemRows ?? []).some((row) => row != null && Object.keys(row).length > 0);
 };
 
 export const OrderForm = ({ onSubmit, customers, products, initialValue, submitLabel = '注文を作成' }: Props) => {
@@ -272,7 +284,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
               {form.items.map((row, idx) => {
                 const e = errors.itemRows?.[idx] ?? {};
                 return (
-                  <tr key={row.id ?? idx}>
+                  <tr key={row.clientKey}>
                     <td>{idx + 1}</td>
                     <td>
                       <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
