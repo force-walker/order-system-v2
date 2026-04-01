@@ -121,7 +121,7 @@ const validate = (form: FormState): FieldErrors => {
 
 const hasAnyError = (errors: FieldErrors) => {
   if (errors.customerId || errors.customerName || errors.deliveryDate || errors.note || errors.items) return true;
-  return (errors.itemRows ?? []).some((row) => Object.keys(row).length > 0);
+  return (errors.itemRows ?? []).some((row) => row != null && Object.keys(row).length > 0);
 };
 
 export const OrderForm = ({ onSubmit, customers, products, initialValue, submitLabel = '注文を作成' }: Props) => {
