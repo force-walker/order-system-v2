@@ -21,11 +21,11 @@ if ! command -v gnome-terminal >/dev/null 2>&1; then
 fi
 
 echo "==> start containers (db/redis)"
-docker compose up -d db redis
-docker compose ps
+docker-compose up -d db redis
+docker-compose ps
 
 echo "==> stop api container (host uvicorn will use 8000)"
-docker compose stop api || true
+docker-compose stop api || true
 
 echo "==> verify external python venv"
 if [ ! -x "$PYTHON_BIN" ]; then

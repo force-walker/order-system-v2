@@ -8,7 +8,7 @@ CLEAN_NODE_MODULES="${1:-}"
 cd "$ROOT"
 
 echo "==> stop docker compose services"
-docker compose down
+docker-compose down
 
 echo "==> note"
 echo "backend/frontend terminals should be stopped with Ctrl+C if still running"
