@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$HOME/.openclaw/workspace/order_system_v2"
+
+ROOT="$HOME/.openclaw/workspace/order_system_v2"
+FRONTEND="$ROOT/frontend"
+CLEAN_NODE_MODULES="${1:-}"
+
+cd "$ROOT"
+
+echo "==> stop docker compose services"
 docker compose down
-echo "✅ docker compose down done"
-echo "※ backend/frontend は各ターミナルで Ctrl+C で停止"
+
+echo "==> note"
+echo "backend/frontend terminals should be stopped with Ctrl+C if still running"
+
+if [ "$CLEAN_NODE_MODULES" = "--clean-node-modules" ]; then
+  echo "==> remove frontend/node_modules"
+  rm -rf "$FRONTEND/node_modules"
+fi
+
+echo "✅ stop complete"
