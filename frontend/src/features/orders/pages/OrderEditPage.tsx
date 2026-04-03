@@ -54,7 +54,8 @@ export const OrderEditPage = () => {
   }, [orderIdNum]);
 
   const handleSubmit = async (payload: CreateOrderRequest) => {
-    await updateOrder(orderIdNum, payload);
+    const updated = await updateOrder(orderIdNum, payload);
+    sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `注文を更新しました（ID: ${updated.id}）` }));
     navigate('/orders');
   };
 

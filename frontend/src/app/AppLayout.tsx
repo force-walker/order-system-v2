@@ -1,8 +1,38 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 const branchName = import.meta.env.VITE_APP_BRANCH ?? 'local';
+const commitSha = import.meta.env.VITE_APP_COMMIT_SHA ?? 'dev';
+const buildTime = import.meta.env.VITE_APP_BUILD_TIME ?? 'local-build';
+
+type ToastPayload = {
+  type: 'success' | 'error';
+  message: string;
+};
 
 export const AppLayout = () => {
+  const location = useLocation();
+  const [toast, setToast] = useState<ToastPayload | null>(null);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem('osv2_toast');
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as ToastPayload;
+      setToast(parsed);
+    } catch {
+      // noop
+    } finally {
+      sessionStorage.removeItem('osv2_toast');
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
   return (
     <div className="page">
       <header className="header">
@@ -17,9 +47,17 @@ export const AppLayout = () => {
           <NavLink to="/customers" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>顧客</NavLink>
         </nav>
       </header>
+
+      {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
+
       <main>
         <Outlet />
       </main>
+
+      <footer className="footer-meta">
+        <small>commit: {commitSha}</small>
+        <small>build: {buildTime}</small>
+      </footer>
     </div>
   );
 };
