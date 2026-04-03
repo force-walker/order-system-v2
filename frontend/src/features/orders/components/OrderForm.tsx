@@ -255,7 +255,8 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
 
           <label>
             顧客名 *
-            <input value={form.customerName} onChange={(e) => handleHeaderChange('customerName', e.target.value)} />
+            <input value={form.customerName} readOnly />
+            <small className="subtle">顧客選択に連動して自動設定されます</small>
             {errors.customerName ? <small className="field-error">{errors.customerName}</small> : null}
           </label>
 
