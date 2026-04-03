@@ -138,11 +138,13 @@ const loadProductsApi = async (): Promise<ProductOption[]> => {
 
 const mapApiOrderToDetail = (order: ApiOrderResponse): OrderDetail => {
   const cached = apiOrderCache.get(order.id);
+  const mappedByCustomerId = customerNameCache.get(order.customer_id);
+  const mappedByOrderCache = cached?.customerId === order.customer_id ? cached?.customerName : undefined;
   return {
     id: order.id,
     customerId: order.customer_id,
     orderNo: order.order_no,
-    customerName: cached?.customerName ?? customerNameCache.get(order.customer_id) ?? `顧客#${order.customer_id}`,
+    customerName: mappedByCustomerId ?? mappedByOrderCache ?? `顧客#${order.customer_id}`,
     deliveryDate: order.delivery_date,
     status: order.status,
     note: order.note ?? undefined,
@@ -335,6 +337,7 @@ export const updateOrder = async (orderId: number, payload: CreateOrderRequest):
 
   const existingItems = await listOrderItemsApi(orderId);
   await updateOrderHeaderApi(orderId, payload);
+  customerNameCache.set(payload.customerId, payload.customerName);
 
   const existingMap = new Map(existingItems.map((i) => [i.id, i]));
   const incomingIds = new Set<number>();
