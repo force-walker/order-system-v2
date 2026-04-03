@@ -371,6 +371,11 @@ export const listCustomers = async (): Promise<CustomerOption[]> => {
   return loadCustomersApi();
 };
 
+export const getCustomer = async (customerId: number): Promise<CustomerOption | null> => {
+  const customers = await listCustomers();
+  return customers.find((c) => c.id === customerId) ?? null;
+};
+
 export const listProducts = async (): Promise<ProductOption[]> => {
   if (USE_MOCK) {
     return [
@@ -379,6 +384,11 @@ export const listProducts = async (): Promise<ProductOption[]> => {
     ];
   }
   return loadProductsApi();
+};
+
+export const getProduct = async (productId: number): Promise<ProductOption | null> => {
+  const products = await listProducts();
+  return products.find((p) => p.id === productId) ?? null;
 };
 
 export const listOrders = async (): Promise<OrderSummary[]> => (USE_MOCK ? listOrdersMock() : listOrdersApi());
