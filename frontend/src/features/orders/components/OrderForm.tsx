@@ -334,7 +334,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                   <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>行削除</button>
                 </div>
 
-                <div className="item-grid five-col">
+                <div className="item-grid-row item-grid-row-primary">
                   <label>
                     商品 *
                     <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
@@ -369,7 +369,9 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                       <option value="uom_kg">uom_kg</option>
                     </select>
                   </label>
+                </div>
 
+                <div className="item-grid-row item-grid-row-secondary">
                   <label>
                     推定重量kg
                     <input type="number" min={0} step="0.001" value={row.estimatedWeightKg} onChange={(ev) => handleItemChange(idx, 'estimatedWeightKg', ev.target.value)} />

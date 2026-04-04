@@ -195,8 +195,18 @@ th, td {
   gap: 8px;
 }
 
-.five-col {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+.item-grid-row {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.item-grid-row-primary {
+  grid-template-columns: 2.5fr 1fr 1fr 1fr 1fr;
+}
+
+.item-grid-row-secondary {
+  grid-template-columns: 1fr 1fr 1fr 1fr 2fr;
 }
 
 label {
@@ -245,7 +255,7 @@ button:disabled { opacity: 0.6; }
 @media (max-width: 900px) {
   .two-col,
   .three-col,
-  .five-col {
+  .item-grid-row {
     grid-template-columns: 1fr;
   }
 
