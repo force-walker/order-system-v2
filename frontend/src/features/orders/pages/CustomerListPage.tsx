@@ -10,12 +10,14 @@ type ToastPayload = {
   message: string;
 };
 
+const toTs = (iso?: string) => (iso ? Date.parse(iso) : 0);
+
 export const CustomerListPage = () => {
   const [customers, setCustomers] = useState<CustomerOption[] | null>(null);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<ToastPayload | null>(null);
   const [keyword, setKeyword] = useState('');
-  const [sortMode, setSortMode] = useState<'idAsc' | 'idDesc'>('idAsc');
+  const [sortMode, setSortMode] = useState<'idAsc' | 'idDesc' | 'createdAsc' | 'createdDesc' | 'updatedAsc' | 'updatedDesc'>('idAsc');
 
   useEffect(() => {
     listCustomers()
@@ -45,8 +47,14 @@ export const CustomerListPage = () => {
     const q = keyword.trim().toLowerCase();
     const byKeyword = q.length === 0 ? customers : customers.filter((c) => c.label.toLowerCase().includes(q));
     const sorted = [...byKeyword];
+
     if (sortMode === 'idDesc') sorted.sort((a, b) => b.id - a.id);
+    else if (sortMode === 'createdAsc') sorted.sort((a, b) => toTs(a.createdAt) - toTs(b.createdAt));
+    else if (sortMode === 'createdDesc') sorted.sort((a, b) => toTs(b.createdAt) - toTs(a.createdAt));
+    else if (sortMode === 'updatedAsc') sorted.sort((a, b) => toTs(a.updatedAt) - toTs(b.updatedAt));
+    else if (sortMode === 'updatedDesc') sorted.sort((a, b) => toTs(b.updatedAt) - toTs(a.updatedAt));
     else sorted.sort((a, b) => a.id - b.id);
+
     return sorted;
   }, [customers, keyword, sortMode]);
 
@@ -70,9 +78,13 @@ export const CustomerListPage = () => {
             </label>
             <label className="filter-label">
               並び順
-              <select value={sortMode} onChange={(e) => setSortMode(e.target.value as 'idAsc' | 'idDesc')}>
+              <select value={sortMode} onChange={(e) => setSortMode(e.target.value as any)}>
                 <option value="idAsc">ID 昇順</option>
                 <option value="idDesc">ID 降順</option>
+                <option value="createdAsc">作成日時 昇順</option>
+                <option value="createdDesc">作成日時 降順</option>
+                <option value="updatedAsc">更新日時 昇順</option>
+                <option value="updatedDesc">更新日時 降順</option>
               </select>
             </label>
             <Link to="/customers/new" className="order-link">+ 顧客を作成</Link>
@@ -88,6 +100,8 @@ export const CustomerListPage = () => {
                 <tr>
                   <th>ID</th>
                   <th>表示名</th>
+                  <th>作成日時</th>
+                  <th>更新日時</th>
                   <th>詳細</th>
                 </tr>
               </thead>
@@ -96,6 +110,8 @@ export const CustomerListPage = () => {
                   <tr key={c.id}>
                     <td>{c.id}</td>
                     <td>{c.label}</td>
+                    <td>{c.createdAt ?? '-'}</td>
+                    <td>{c.updatedAt ?? '-'}</td>
                     <td>
                       <Link to={`/customers/${c.id}`} className="order-link">詳細</Link>
                       {' / '}
