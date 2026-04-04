@@ -114,6 +114,26 @@ export const OrderItemDetailPage = () => {
                 </dd>
               </div>
               <div>
+                <dt>推定重量(kg)</dt>
+                <dd>{detail.item.estimatedWeightKg ?? '-'}</dd>
+              </div>
+              <div>
+                <dt>目標単価</dt>
+                <dd>{detail.item.targetPrice ?? '-'}</dd>
+              </div>
+              <div>
+                <dt>価格上限</dt>
+                <dd>{detail.item.priceCeiling ?? '-'}</dd>
+              </div>
+              <div>
+                <dt>代替指示</dt>
+                <dd>{detail.item.stockoutPolicy ?? '-'}</dd>
+              </div>
+              <div>
+                <dt>コメント</dt>
+                <dd>{detail.item.comment ?? '-'}</dd>
+              </div>
+              <div>
                 <dt>備考</dt>
                 <dd>{detail.item.note ?? '-'}</dd>
               </div>
