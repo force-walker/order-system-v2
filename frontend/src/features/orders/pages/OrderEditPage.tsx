@@ -47,6 +47,11 @@ export const OrderEditPage = () => {
             unit: i.unit,
             unitPrice: i.unitPrice ?? 0,
             pricingBasis: i.pricingBasis ?? 'uom_count',
+            estimatedWeightKg: i.estimatedWeightKg,
+            targetPrice: i.targetPrice,
+            priceCeiling: i.priceCeiling,
+            stockoutPolicy: i.stockoutPolicy,
+            comment: i.comment,
           })),
         });
       })
