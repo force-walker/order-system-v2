@@ -334,7 +334,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                   <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>行削除</button>
                 </div>
 
-                <div className="item-grid two-col">
+                <div className="item-grid five-col">
                   <label>
                     商品 *
                     <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
