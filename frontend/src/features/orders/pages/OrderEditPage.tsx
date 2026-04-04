@@ -65,7 +65,14 @@ export const OrderEditPage = () => {
 
   return (
     <section>
-      <OrderForm onSubmit={handleSubmit} customers={customers} products={products} initialValue={initialValue} submitLabel="注文を保存" />
+      <OrderForm
+        onSubmit={handleSubmit}
+        onDiscard={() => setInitialValue((prev) => (prev ? { ...prev } : prev))}
+        customers={customers}
+        products={products}
+        initialValue={initialValue}
+        submitLabel="注文を保存"
+      />
     </section>
   );
 };

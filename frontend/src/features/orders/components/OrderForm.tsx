@@ -8,6 +8,7 @@ type Props = {
   products: ProductOption[];
   initialValue?: CreateOrderRequest;
   submitLabel?: string;
+  onDiscard?: () => void;
 };
 
 type ItemForm = {
@@ -124,7 +125,7 @@ const hasAnyError = (errors: FieldErrors) => {
   return (errors.itemRows ?? []).some((row) => row != null && Object.keys(row).length > 0);
 };
 
-export const OrderForm = ({ onSubmit, customers, products, initialValue, submitLabel = '注文を作成' }: Props) => {
+export const OrderForm = ({ onSubmit, customers, products, initialValue, submitLabel = '注文を作成', onDiscard }: Props) => {
   const [form, setForm] = useState<FormState>(toInitialForm(initialValue));
   const [errors, setErrors] = useState<FieldErrors>({ itemRows: [] });
   const [submitError, setSubmitError] = useState<string>('');
@@ -197,6 +198,16 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
       return { ...prev, items: prev.items.filter((_, i) => i !== index) };
     });
     setErrors((prev) => ({ ...prev, itemRows: (prev.itemRows ?? []).filter((_, i) => i !== index) }));
+  };
+
+  const handleDiscard = () => {
+    if (onDiscard) {
+      onDiscard();
+      return;
+    }
+    setForm(toInitialForm(initialValue));
+    setErrors({ itemRows: [] });
+    setSubmitError('');
   };
 
   const submit = async (e: FormEvent) => {
@@ -332,6 +343,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
       </section>
 
       <div className="form-actions">
+        <button type="button" className="secondary" onClick={handleDiscard}>変更を破棄</button>
         <button type="submit" disabled={submitting}>{submitting ? '保存中...' : submitLabel}</button>
       </div>
       {hasErrors ? <small className="subtle">入力エラーがあります。赤字項目を修正してください。</small> : null}

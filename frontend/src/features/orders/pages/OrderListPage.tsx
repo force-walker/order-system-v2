@@ -15,10 +15,16 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   cancelled: '取消',
 };
 
+type ToastPayload = {
+  type: 'success' | 'error';
+  message: string;
+};
+
 export const OrderListPage = () => {
   const [orders, setOrders] = useState<OrderSummary[] | null>(null);
   const [error, setError] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [toast, setToast] = useState<ToastPayload | null>(null);
 
   useEffect(() => {
     listOrders()
@@ -27,7 +33,24 @@ export const OrderListPage = () => {
         setOrders(sorted);
       })
       .catch((e) => setError(toUserMessage(e, '一覧取得に失敗しました')));
+
+    const raw = sessionStorage.getItem('osv2_toast');
+    if (raw) {
+      try {
+        setToast(JSON.parse(raw) as ToastPayload);
+      } catch {
+        // noop
+      } finally {
+        sessionStorage.removeItem('osv2_toast');
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
@@ -48,7 +71,9 @@ export const OrderListPage = () => {
   }
 
   return (
-    <section className="card">
+    <section>
+      {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
+      <div className="card">
       <div className="list-header">
         <div>
           <h2>注文一覧</h2>
@@ -114,6 +139,7 @@ export const OrderListPage = () => {
           </table>
         </div>
       )}
+      </div>
     </section>
   );
 };
