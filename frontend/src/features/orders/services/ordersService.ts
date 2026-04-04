@@ -36,6 +36,8 @@ type ApiCustomerResponse = {
   customer_code: string;
   name: string;
   active: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 type ApiProductResponse = {
@@ -49,6 +51,8 @@ type ApiProductResponse = {
   weight_capture_required: boolean;
   pricing_basis_default: 'uom_count' | 'uom_kg';
   active: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 type ApiOrderItemResponse = {
@@ -133,7 +137,12 @@ const loadCustomersApi = async (): Promise<CustomerOption[]> => {
   const data = (await res.json()) as ApiCustomerResponse[];
   return data.map((c) => {
     customerNameCache.set(c.id, c.name);
-    return { id: c.id, label: `${c.id}: ${c.name} (${c.customer_code})` };
+    return {
+      id: c.id,
+      label: `${c.id}: ${c.name} (${c.customer_code})`,
+      createdAt: c.created_at,
+      updatedAt: c.updated_at,
+    };
   });
 };
 
@@ -148,6 +157,8 @@ const loadProductsApi = async (): Promise<ProductOption[]> => {
       name: p.name,
       orderUom: p.order_uom,
       pricingBasisDefault: p.pricing_basis_default,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at,
     };
     productCache.set(p.id, option);
     return option;
