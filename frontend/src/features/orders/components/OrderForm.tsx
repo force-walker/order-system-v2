@@ -64,7 +64,7 @@ const newItem = (): ItemForm => ({
   estimatedWeightKg: '',
   targetPrice: '',
   priceCeiling: '',
-  stockoutPolicy: 'substitute',
+  stockoutPolicy: 'cancel',
   comment: '',
 });
 
@@ -100,7 +100,7 @@ const toInitialForm = (initialValue?: CreateOrderRequest): FormState => {
             estimatedWeightKg: i.estimatedWeightKg !== undefined ? String(i.estimatedWeightKg) : '',
             targetPrice: i.targetPrice !== undefined ? String(i.targetPrice) : '',
             priceCeiling: i.priceCeiling !== undefined ? String(i.priceCeiling) : '',
-            stockoutPolicy: i.stockoutPolicy ?? 'substitute',
+            stockoutPolicy: i.stockoutPolicy ?? 'cancel',
             comment: i.comment ?? '',
           }))
         : [newItem()],
@@ -124,9 +124,8 @@ const validate = (form: FormState): FieldErrors => {
     if (!item.quantity) rowError.quantity = '数量は必須です';
     else if (!Number.isFinite(q) || q <= 0) rowError.quantity = '数量は1以上で入力してください';
 
-    const p = Number(item.unitPrice);
-    if (!item.unitPrice) rowError.unitPrice = '単価は必須です';
-    else if (!Number.isFinite(p) || p < 0) rowError.unitPrice = '単価は0以上で入力してください';
+    const p = Number(item.unitPrice || '0');
+    if (item.unitPrice && (!Number.isFinite(p) || p < 0)) rowError.unitPrice = '単価は0以上で入力してください';
 
     if (!item.unit) rowError.unit = '単位は必須です';
 
@@ -331,10 +330,9 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
               <div key={row.clientKey} className="item-card">
                 <div className="section-row">
                   <h4>明細 {idx + 1}</h4>
-                  <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>行削除</button>
                 </div>
 
-                <div className="item-grid five-col">
+                <div className="item-grid-row item-grid-row-primary">
                   <label>
                     商品 *
                     <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
@@ -357,52 +355,47 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                   </label>
 
                   <label>
-                    単価 *
-                    <input type="number" min={0} step="0.01" value={row.unitPrice} onChange={(ev) => handleItemChange(idx, 'unitPrice', ev.target.value)} />
-                    {e.unitPrice ? <small className="field-error">{e.unitPrice}</small> : null}
-                  </label>
-
-                  <label>
-                    課金基準
-                    <select value={row.pricingBasis} onChange={(ev) => handleItemChange(idx, 'pricingBasis', ev.target.value as 'uom_count' | 'uom_kg')}>
-                      <option value="uom_count">uom_count</option>
-                      <option value="uom_kg">uom_kg</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    推定重量kg
-                    <input type="number" min={0} step="0.001" value={row.estimatedWeightKg} onChange={(ev) => handleItemChange(idx, 'estimatedWeightKg', ev.target.value)} />
-                    {e.estimatedWeightKg ? <small className="field-error">{e.estimatedWeightKg}</small> : null}
-                  </label>
-
-                  <label>
-                    目標単価
-                    <input type="number" min={0} step="0.01" value={row.targetPrice} onChange={(ev) => handleItemChange(idx, 'targetPrice', ev.target.value)} />
-                    {e.targetPrice ? <small className="field-error">{e.targetPrice}</small> : null}
-                  </label>
-
-                  <label>
-                    価格上限
-                    <input type="number" min={0} step="0.01" value={row.priceCeiling} onChange={(ev) => handleItemChange(idx, 'priceCeiling', ev.target.value)} />
-                    {e.priceCeiling ? <small className="field-error">{e.priceCeiling}</small> : null}
-                  </label>
-
-                  <label>
-                    代替指示
-                    <select value={row.stockoutPolicy} onChange={(ev) => handleItemChange(idx, 'stockoutPolicy', ev.target.value as 'backorder' | 'substitute' | 'cancel' | 'split')}>
-                      <option value="substitute">substitute</option>
-                      <option value="backorder">backorder</option>
-                      <option value="cancel">cancel</option>
-                      <option value="split">split</option>
-                    </select>
-                  </label>
-
-                  <label>
                     コメント
                     <input value={row.comment} onChange={(ev) => handleItemChange(idx, 'comment', ev.target.value)} placeholder="代替指示など" />
                   </label>
+
+                  <div className="item-delete-cell">
+                    <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>行削除</button>
+                  </div>
                 </div>
+
+                <details className="item-advanced">
+                  <summary>詳細項目を表示</summary>
+                  <div className="item-grid-row item-grid-row-secondary">
+                    <label>
+                      推定重量kg
+                      <input type="number" min={0} step="0.001" value={row.estimatedWeightKg} onChange={(ev) => handleItemChange(idx, 'estimatedWeightKg', ev.target.value)} />
+                      {e.estimatedWeightKg ? <small className="field-error">{e.estimatedWeightKg}</small> : null}
+                    </label>
+
+                    <label>
+                      目標単価
+                      <input type="number" min={0} step="0.01" value={row.targetPrice} onChange={(ev) => handleItemChange(idx, 'targetPrice', ev.target.value)} />
+                      {e.targetPrice ? <small className="field-error">{e.targetPrice}</small> : null}
+                    </label>
+
+                    <label>
+                      価格上限
+                      <input type="number" min={0} step="0.01" value={row.priceCeiling} onChange={(ev) => handleItemChange(idx, 'priceCeiling', ev.target.value)} />
+                      {e.priceCeiling ? <small className="field-error">{e.priceCeiling}</small> : null}
+                    </label>
+
+                    <label>
+                      代替指示
+                      <select value={row.stockoutPolicy} onChange={(ev) => handleItemChange(idx, 'stockoutPolicy', ev.target.value as 'backorder' | 'substitute' | 'cancel' | 'split')}>
+                        <option value="substitute">substitute</option>
+                        <option value="backorder">backorder</option>
+                        <option value="cancel">cancel</option>
+                        <option value="split">split</option>
+                      </select>
+                    </label>
+                  </div>
+                </details>
               </div>
             );
           })}
