@@ -1,12 +1,14 @@
 export class ServiceError extends Error {
   code?: string;
   status?: number;
+  detailMessage?: string;
 
-  constructor(message: string, options?: { code?: string; status?: number }) {
+  constructor(message: string, options?: { code?: string; status?: number; detailMessage?: string }) {
     super(message);
     this.name = 'ServiceError';
     this.code = options?.code;
     this.status = options?.status;
+    this.detailMessage = options?.detailMessage;
   }
 }
 
@@ -17,7 +19,7 @@ type ApiErrorPayload = {
   };
 };
 
-const DEFAULT_MESSAGES: Record<string, string> = {
+const CODE_MESSAGES: Record<string, string> = {
   login_failed: 'ログインに失敗しました。設定を確認してください。',
   list_orders_failed: '注文一覧の取得に失敗しました。',
   create_order_failed: '注文作成に失敗しました。',
@@ -30,6 +32,23 @@ const DEFAULT_MESSAGES: Record<string, string> = {
   PRODUCT_CODE_ALREADY_EXISTS: '商品コードが既に存在します。',
 };
 
+const STATUS_MESSAGES: Record<number, string> = {
+  404: '対象データが見つかりません。',
+  409: 'データ競合が発生しました。内容を確認して再実行してください。',
+  422: '入力内容に不備があります。必須項目や形式を確認してください。',
+};
+
+const enrichUnknownMessage = (status?: number, code?: string, detailMessage?: string) => {
+  const info = [
+    status ? `status=${status}` : undefined,
+    code ? `code=${code}` : undefined,
+    detailMessage ? `message=${detailMessage}` : undefined,
+  ].filter(Boolean);
+
+  if (info.length === 0) return '不明な失敗です。';
+  return `処理に失敗しました (${info.join(', ')})`;
+};
+
 export const parseApiErrorPayload = async (res: Response): Promise<ServiceError> => {
   let payload: ApiErrorPayload | null = null;
   try {
@@ -38,15 +57,27 @@ export const parseApiErrorPayload = async (res: Response): Promise<ServiceError>
     payload = null;
   }
 
+  const status = res.status;
   const code = payload?.detail?.code;
   const detailMessage = payload?.detail?.message;
-  const message = detailMessage || (code ? DEFAULT_MESSAGES[code] : undefined) || `APIエラーが発生しました (status: ${res.status})`;
 
-  return new ServiceError(message, { code, status: res.status });
+  const statusMessage = STATUS_MESSAGES[status];
+  const codeMessage = code ? CODE_MESSAGES[code] : undefined;
+
+  const message = codeMessage || detailMessage || statusMessage || enrichUnknownMessage(status, code, detailMessage);
+
+  return new ServiceError(message, { code, status, detailMessage });
+};
+
+export const isInlineFormError = (error: unknown): boolean => {
+  return error instanceof ServiceError && error.status === 422;
 };
 
 export const toUserMessage = (error: unknown, fallback: string): string => {
-  if (error instanceof ServiceError) return error.message;
+  if (error instanceof ServiceError) {
+    if (error.message && error.message.trim()) return error.message;
+    return enrichUnknownMessage(error.status, error.code, error.detailMessage);
+  }
 
   if (error instanceof Error && error.message) {
     const m = error.message.toLowerCase();
