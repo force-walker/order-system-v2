@@ -12,11 +12,11 @@ import type {
   ProductOption,
   ProductUpdateRequest,
 } from 'features/orders/types/order';
+import { apiJson, apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload, ServiceError } from 'shared/error';
 
 const STORAGE_KEY = 'osv2_mock_orders';
 const TOKEN_STORAGE_KEY = 'osv2_access_token';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
 const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true';
 const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
 const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
@@ -105,28 +105,23 @@ const ensureDevToken = async (): Promise<string> => {
   const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
   if (cached) return cached;
 
-  const res = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+  const data = await apiJson<{ access_token: string }>('/api/v1/auth/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE }),
+    body: { user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE },
   });
 
-  if (!res.ok) throw new ServiceError('ログインに失敗しました。設定を確認してください。', { code: 'login_failed', status: res.status });
-  const data = (await res.json()) as { access_token: string };
   localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
   return data.access_token;
 };
 
-const fetchWithAuth = async (path: string, init?: RequestInit) => {
+const fetchWithAuth = async (path: string, init?: { method?: string; body?: unknown }) => {
   const token = await ensureDevToken();
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers ?? {}),
-    },
+  const res = await apiRequest(path, {
+    method: init?.method,
+    body: init?.body,
+    authToken: token,
   });
+
   if (res.status === 401) localStorage.removeItem(TOKEN_STORAGE_KEY);
   return res;
 };
@@ -230,14 +225,14 @@ const listOrderItemsApi = async (orderId: number) => {
 const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail> => {
   const res = await fetchWithAuth('/api/v1/orders', {
     method: 'POST',
-    body: JSON.stringify({ customer_id: payload.customerId, delivery_date: payload.deliveryDate, note: payload.note ?? null }),
+    body: { customer_id: payload.customerId, delivery_date: payload.deliveryDate, note: payload.note ?? null },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const order = (await res.json()) as ApiOrderResponse;
 
   const itemRes = await fetchWithAuth(`/api/v1/orders/${order.id}/items/bulk`, {
     method: 'POST',
-    body: JSON.stringify({
+    body: {
       items: payload.items.map((i) => ({
         product_id: i.productId,
         ordered_qty: i.quantity,
@@ -247,7 +242,7 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
         unit_price_uom_kg: i.pricingBasis === 'uom_kg' ? i.unitPrice : null,
         note: null,
       })),
-    }),
+    },
   });
   if (!itemRes.ok) throw await parseApiErrorPayload(itemRes);
 
@@ -268,7 +263,7 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
 const updateOrderHeaderApi = async (orderId: number, payload: CreateOrderRequest) => {
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ customer_id: payload.customerId, delivery_date: payload.deliveryDate, note: payload.note ?? null }),
+    body: { customer_id: payload.customerId, delivery_date: payload.deliveryDate, note: payload.note ?? null },
   });
 
   if (!res.ok) throw await parseApiErrorPayload(res);
@@ -277,7 +272,7 @@ const updateOrderHeaderApi = async (orderId: number, payload: CreateOrderRequest
 const createOrderItemApi = async (orderId: number, item: CreateOrderRequest['items'][number]) => {
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}/items`, {
     method: 'POST',
-    body: JSON.stringify({
+    body: {
       product_id: item.productId,
       ordered_qty: item.quantity,
       order_uom_type: item.pricingBasis,
@@ -285,7 +280,7 @@ const createOrderItemApi = async (orderId: number, item: CreateOrderRequest['ite
       unit_price_uom_count: item.pricingBasis === 'uom_count' ? item.unitPrice : null,
       unit_price_uom_kg: item.pricingBasis === 'uom_kg' ? item.unitPrice : null,
       note: null,
-    }),
+    },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
@@ -293,14 +288,14 @@ const createOrderItemApi = async (orderId: number, item: CreateOrderRequest['ite
 const updateOrderItemApi = async (orderId: number, item: CreateOrderRequest['items'][number]) => {
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}/items/${item.id}`, {
     method: 'PATCH',
-    body: JSON.stringify({
+    body: {
       ordered_qty: item.quantity,
       order_uom_type: item.pricingBasis,
       pricing_basis: item.pricingBasis,
       unit_price_uom_count: item.pricingBasis === 'uom_count' ? item.unitPrice : null,
       unit_price_uom_kg: item.pricingBasis === 'uom_kg' ? item.unitPrice : null,
       note: null,
-    }),
+    },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
@@ -436,7 +431,7 @@ export const createCustomer = async (payload: CustomerCreateRequest): Promise<Cu
 
   const res = await fetchWithAuth('/api/v1/customers', {
     method: 'POST',
-    body: JSON.stringify({ customer_code: payload.customerCode, name: payload.name, active: payload.active }),
+    body: { customer_code: payload.customerCode, name: payload.name, active: payload.active },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 
@@ -462,7 +457,7 @@ export const updateCustomer = async (customerId: number, payload: CustomerUpdate
 
   const res = await fetchWithAuth(`/api/v1/customers/${customerId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ name: payload.name, active: payload.active }),
+    body: { name: payload.name, active: payload.active },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 
@@ -558,7 +553,7 @@ export const createProduct = async (payload: ProductCreateRequest): Promise<Prod
 
   const res = await fetchWithAuth('/api/v1/products', {
     method: 'POST',
-    body: JSON.stringify({
+    body: {
       sku: payload.sku,
       name: payload.name,
       order_uom: payload.orderUom,
@@ -567,7 +562,7 @@ export const createProduct = async (payload: ProductCreateRequest): Promise<Prod
       is_catch_weight: payload.isCatchWeight,
       weight_capture_required: payload.weightCaptureRequired,
       pricing_basis_default: payload.pricingBasisDefault,
-    }),
+    },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const row = (await res.json()) as ApiProductResponse;
@@ -603,7 +598,7 @@ export const updateProduct = async (productId: number, payload: ProductUpdateReq
 
   const res = await fetchWithAuth(`/api/v1/products/${productId}`, {
     method: 'PATCH',
-    body: JSON.stringify({
+    body: {
       name: payload.name,
       order_uom: payload.orderUom,
       purchase_uom: payload.purchaseUom,
@@ -611,7 +606,7 @@ export const updateProduct = async (productId: number, payload: ProductUpdateReq
       is_catch_weight: payload.isCatchWeight,
       weight_capture_required: payload.weightCaptureRequired,
       active: payload.active,
-    }),
+    },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const row = (await res.json()) as ApiProductResponse;
