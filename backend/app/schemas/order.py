@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-from app.models.entities import LineStatus, OrderStatus, PricingBasis
+from app.models.entities import LineStatus, OrderStatus, PricingBasis, StockoutPolicy
 
 
 class OrderCreateRequest(BaseModel):
@@ -48,19 +48,29 @@ class OrderItemCreateRequest(BaseModel):
     product_id: int = Field(gt=0)
     ordered_qty: float = Field(gt=0)
     order_uom_type: PricingBasis
+    estimated_weight_kg: float | None = Field(default=None, gt=0)
+    target_price: float | None = Field(default=None, ge=0)
+    price_ceiling: float | None = Field(default=None, ge=0)
+    stockout_policy: StockoutPolicy | None = None
     pricing_basis: PricingBasis = PricingBasis.uom_count
     unit_price_uom_count: float | None = Field(default=None, ge=0)
     unit_price_uom_kg: float | None = Field(default=None, ge=0)
     note: str | None = Field(default=None, max_length=1000)
+    comment: str | None = Field(default=None, max_length=1000)
 
 
 class OrderItemUpdateRequest(BaseModel):
     ordered_qty: float | None = Field(default=None, gt=0)
     order_uom_type: PricingBasis | None = None
+    estimated_weight_kg: float | None = Field(default=None, gt=0)
+    target_price: float | None = Field(default=None, ge=0)
+    price_ceiling: float | None = Field(default=None, ge=0)
+    stockout_policy: StockoutPolicy | None = None
     pricing_basis: PricingBasis | None = None
     unit_price_uom_count: float | None = Field(default=None, ge=0)
     unit_price_uom_kg: float | None = Field(default=None, ge=0)
     note: str | None = Field(default=None, max_length=1000)
+    comment: str | None = Field(default=None, max_length=1000)
 
 
 class OrderItemResponse(BaseModel):
@@ -71,10 +81,14 @@ class OrderItemResponse(BaseModel):
     order_uom_type: PricingBasis
     estimated_weight_kg: float | None
     actual_weight_kg: float | None
+    target_price: float | None
+    price_ceiling: float | None
+    stockout_policy: StockoutPolicy | None
     pricing_basis: PricingBasis
     unit_price_uom_count: float | None
     unit_price_uom_kg: float | None
     note: str | None
+    comment: str | None
     line_status: LineStatus
     created_at: datetime
     updated_at: datetime
