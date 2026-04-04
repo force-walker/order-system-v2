@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { CustomerCreateRequest, CustomerDetail } from 'features/orders/types/order';
+import { toUserMessage } from 'shared/error';
 
 type Props = {
   initialValue?: CustomerDetail;
@@ -45,8 +46,8 @@ export const CustomerForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
     setSubmitting(true);
     try {
       await onSubmit({ customerCode: form.customerCode.trim(), name: form.name.trim(), active: form.active });
-    } catch {
-      setError('顧客の保存に失敗しました');
+    } catch (e) {
+      setError(toUserMessage(e, '顧客の保存に失敗しました'));
     } finally {
       setSubmitting(false);
     }
