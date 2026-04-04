@@ -61,10 +61,15 @@ type ApiOrderItemResponse = {
   product_id: number;
   ordered_qty: number;
   order_uom_type: 'uom_count' | 'uom_kg';
+  estimated_weight_kg: number | null;
+  target_price: number | null;
+  price_ceiling: number | null;
+  stockout_policy: 'backorder' | 'substitute' | 'cancel' | 'split' | null;
   pricing_basis: 'uom_count' | 'uom_kg';
   unit_price_uom_count: number | null;
   unit_price_uom_kg: number | null;
   note: string | null;
+  comment: string | null;
 };
 
 const apiOrderCache = new Map<number, OrderDetail>();
@@ -189,6 +194,11 @@ const mapApiOrderItem = (item: ApiOrderItemResponse) => {
     unit: p?.orderUom ?? item.order_uom_type,
     unitPrice: unitPrice ?? 0,
     pricingBasis,
+    estimatedWeightKg: item.estimated_weight_kg ?? undefined,
+    targetPrice: item.target_price ?? undefined,
+    priceCeiling: item.price_ceiling ?? undefined,
+    stockoutPolicy: item.stockout_policy ?? undefined,
+    comment: item.comment ?? undefined,
     note: item.note ?? undefined,
   };
 };
@@ -237,10 +247,15 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
         product_id: i.productId,
         ordered_qty: i.quantity,
         order_uom_type: i.pricingBasis,
+        estimated_weight_kg: i.estimatedWeightKg ?? null,
+        target_price: i.targetPrice ?? null,
+        price_ceiling: i.priceCeiling ?? null,
+        stockout_policy: i.stockoutPolicy ?? null,
         pricing_basis: i.pricingBasis,
         unit_price_uom_count: i.pricingBasis === 'uom_count' ? i.unitPrice : null,
         unit_price_uom_kg: i.pricingBasis === 'uom_kg' ? i.unitPrice : null,
         note: null,
+        comment: i.comment ?? null,
       })),
     },
   });
@@ -276,10 +291,15 @@ const createOrderItemApi = async (orderId: number, item: CreateOrderRequest['ite
       product_id: item.productId,
       ordered_qty: item.quantity,
       order_uom_type: item.pricingBasis,
+      estimated_weight_kg: item.estimatedWeightKg ?? null,
+      target_price: item.targetPrice ?? null,
+      price_ceiling: item.priceCeiling ?? null,
+      stockout_policy: item.stockoutPolicy ?? null,
       pricing_basis: item.pricingBasis,
       unit_price_uom_count: item.pricingBasis === 'uom_count' ? item.unitPrice : null,
       unit_price_uom_kg: item.pricingBasis === 'uom_kg' ? item.unitPrice : null,
       note: null,
+      comment: item.comment ?? null,
     },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
@@ -291,10 +311,15 @@ const updateOrderItemApi = async (orderId: number, item: CreateOrderRequest['ite
     body: {
       ordered_qty: item.quantity,
       order_uom_type: item.pricingBasis,
+      estimated_weight_kg: item.estimatedWeightKg ?? null,
+      target_price: item.targetPrice ?? null,
+      price_ceiling: item.priceCeiling ?? null,
+      stockout_policy: item.stockoutPolicy ?? null,
       pricing_basis: item.pricingBasis,
       unit_price_uom_count: item.pricingBasis === 'uom_count' ? item.unitPrice : null,
       unit_price_uom_kg: item.pricingBasis === 'uom_kg' ? item.unitPrice : null,
       note: null,
+      comment: item.comment ?? null,
     },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
@@ -331,6 +356,11 @@ const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail
       unit: item.unit,
       unitPrice: item.unitPrice,
       pricingBasis: item.pricingBasis,
+      estimatedWeightKg: item.estimatedWeightKg,
+      targetPrice: item.targetPrice,
+      priceCeiling: item.priceCeiling,
+      stockoutPolicy: item.stockoutPolicy,
+      comment: item.comment,
     })),
   };
   writeOrders([newOrder, ...current]);
@@ -354,6 +384,11 @@ export const updateOrder = async (orderId: number, payload: CreateOrderRequest):
       unit: i.unit,
       unitPrice: i.unitPrice,
       pricingBasis: i.pricingBasis,
+      estimatedWeightKg: i.estimatedWeightKg,
+      targetPrice: i.targetPrice,
+      priceCeiling: i.priceCeiling,
+      stockoutPolicy: i.stockoutPolicy,
+      comment: i.comment,
     }));
     writeOrders([...current]);
     return target;
