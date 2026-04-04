@@ -15,6 +15,8 @@ import type {
 import { apiJson, apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload, ServiceError } from 'shared/error';
 
+const DEBUG_ORDER_ITEM_FIELDS = (import.meta.env.VITE_DEBUG_ORDER_ITEM_FIELDS ?? 'true') === 'true';
+
 const STORAGE_KEY = 'osv2_mock_orders';
 const TOKEN_STORAGE_KEY = 'osv2_access_token';
 const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true';
@@ -229,6 +231,9 @@ const listOrderItemsApi = async (orderId: number) => {
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}/items`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiOrderItemResponse[];
+  if (DEBUG_ORDER_ITEM_FIELDS) {
+    console.debug('[order-items][read][response]', data);
+  }
   return data.map(mapApiOrderItem);
 };
 
@@ -240,28 +245,37 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
   if (!res.ok) throw await parseApiErrorPayload(res);
   const order = (await res.json()) as ApiOrderResponse;
 
+  const bulkPayload = {
+    items: payload.items.map((i) => ({
+      product_id: i.productId,
+      ordered_qty: i.quantity,
+      order_uom_type: i.pricingBasis,
+      estimated_weight_kg: i.estimatedWeightKg ?? null,
+      target_price: i.targetPrice ?? null,
+      price_ceiling: i.priceCeiling ?? null,
+      stockout_policy: i.stockoutPolicy ?? null,
+      pricing_basis: i.pricingBasis,
+      unit_price_uom_count: i.pricingBasis === 'uom_count' ? i.unitPrice : null,
+      unit_price_uom_kg: i.pricingBasis === 'uom_kg' ? i.unitPrice : null,
+      note: null,
+      comment: i.comment ?? null,
+    })),
+  };
+
+  if (DEBUG_ORDER_ITEM_FIELDS) {
+    console.debug('[order-items][create][request]', bulkPayload);
+  }
+
   const itemRes = await fetchWithAuth(`/api/v1/orders/${order.id}/items/bulk`, {
     method: 'POST',
-    body: {
-      items: payload.items.map((i) => ({
-        product_id: i.productId,
-        ordered_qty: i.quantity,
-        order_uom_type: i.pricingBasis,
-        estimated_weight_kg: i.estimatedWeightKg ?? null,
-        target_price: i.targetPrice ?? null,
-        price_ceiling: i.priceCeiling ?? null,
-        stockout_policy: i.stockoutPolicy ?? null,
-        pricing_basis: i.pricingBasis,
-        unit_price_uom_count: i.pricingBasis === 'uom_count' ? i.unitPrice : null,
-        unit_price_uom_kg: i.pricingBasis === 'uom_kg' ? i.unitPrice : null,
-        note: null,
-        comment: i.comment ?? null,
-      })),
-    },
+    body: bulkPayload,
   });
   if (!itemRes.ok) throw await parseApiErrorPayload(itemRes);
 
   const itemResult = (await itemRes.json()) as { failed: number };
+  if (DEBUG_ORDER_ITEM_FIELDS) {
+    console.debug('[order-items][create][response]', itemResult);
+  }
   if (itemResult.failed > 0) throw new ServiceError(`明細登録で ${itemResult.failed} 件失敗しました`, { code: 'ORDER_ITEM_BULK_FAILED', status: 409 });
 
   const items = await listOrderItemsApi(order.id);
@@ -285,42 +299,52 @@ const updateOrderHeaderApi = async (orderId: number, payload: CreateOrderRequest
 };
 
 const createOrderItemApi = async (orderId: number, item: CreateOrderRequest['items'][number]) => {
+  const itemPayload = {
+    product_id: item.productId,
+    ordered_qty: item.quantity,
+    order_uom_type: item.pricingBasis,
+    estimated_weight_kg: item.estimatedWeightKg ?? null,
+    target_price: item.targetPrice ?? null,
+    price_ceiling: item.priceCeiling ?? null,
+    stockout_policy: item.stockoutPolicy ?? null,
+    pricing_basis: item.pricingBasis,
+    unit_price_uom_count: item.pricingBasis === 'uom_count' ? item.unitPrice : null,
+    unit_price_uom_kg: item.pricingBasis === 'uom_kg' ? item.unitPrice : null,
+    note: null,
+    comment: item.comment ?? null,
+  };
+  if (DEBUG_ORDER_ITEM_FIELDS) {
+    console.debug('[order-items][update-flow][create][request]', itemPayload);
+  }
+
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}/items`, {
     method: 'POST',
-    body: {
-      product_id: item.productId,
-      ordered_qty: item.quantity,
-      order_uom_type: item.pricingBasis,
-      estimated_weight_kg: item.estimatedWeightKg ?? null,
-      target_price: item.targetPrice ?? null,
-      price_ceiling: item.priceCeiling ?? null,
-      stockout_policy: item.stockoutPolicy ?? null,
-      pricing_basis: item.pricingBasis,
-      unit_price_uom_count: item.pricingBasis === 'uom_count' ? item.unitPrice : null,
-      unit_price_uom_kg: item.pricingBasis === 'uom_kg' ? item.unitPrice : null,
-      note: null,
-      comment: item.comment ?? null,
-    },
+    body: itemPayload,
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
 
 const updateOrderItemApi = async (orderId: number, item: CreateOrderRequest['items'][number]) => {
+  const itemPayload = {
+    ordered_qty: item.quantity,
+    order_uom_type: item.pricingBasis,
+    estimated_weight_kg: item.estimatedWeightKg ?? null,
+    target_price: item.targetPrice ?? null,
+    price_ceiling: item.priceCeiling ?? null,
+    stockout_policy: item.stockoutPolicy ?? null,
+    pricing_basis: item.pricingBasis,
+    unit_price_uom_count: item.pricingBasis === 'uom_count' ? item.unitPrice : null,
+    unit_price_uom_kg: item.pricingBasis === 'uom_kg' ? item.unitPrice : null,
+    note: null,
+    comment: item.comment ?? null,
+  };
+  if (DEBUG_ORDER_ITEM_FIELDS) {
+    console.debug('[order-items][update-flow][update][request]', { itemId: item.id, payload: itemPayload });
+  }
+
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}/items/${item.id}`, {
     method: 'PATCH',
-    body: {
-      ordered_qty: item.quantity,
-      order_uom_type: item.pricingBasis,
-      estimated_weight_kg: item.estimatedWeightKg ?? null,
-      target_price: item.targetPrice ?? null,
-      price_ceiling: item.priceCeiling ?? null,
-      stockout_policy: item.stockoutPolicy ?? null,
-      pricing_basis: item.pricingBasis,
-      unit_price_uom_count: item.pricingBasis === 'uom_count' ? item.unitPrice : null,
-      unit_price_uom_kg: item.pricingBasis === 'uom_kg' ? item.unitPrice : null,
-      note: null,
-      comment: item.comment ?? null,
-    },
+    body: itemPayload,
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
