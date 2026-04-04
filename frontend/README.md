@@ -1,58 +1,54 @@
-# Frontend Mockup (PR1 start)
+# Frontend MVP Guide
 
-## 実行方法
+## 起動（推奨）
+
+リポジトリルートで以下を実行:
+
+```bash
+./start-dev.sh
+```
+
+停止:
+
+```bash
+./stop-dev.sh
+# 必要なら node_modules も削除
+./stop-dev.sh --clean-node-modules
+```
+
+## 手動起動（frontendのみ）
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
-
-# test
-npm run test
 ```
 
-## 開発環境変数（`.env.development`）
+## テスト・ビルド
 
 ```bash
-VITE_APP_BRANCH=feat/frontend-pr10-edit-flow-stabilization
-VITE_USE_MOCK=false
-VITE_API_BASE_URL=http://127.0.0.1:8000
-VITE_DEV_LOGIN_USER=frontend-dev-admin
-VITE_DEV_LOGIN_ROLE=admin
-VITE_DEV_CUSTOMER_ID=1
+cd frontend
+npm run test
+npm run build
 ```
 
-- `VITE_USE_MOCK=true` の場合はローカルモックで動作
-- `VITE_USE_MOCK=false` の場合は API 接続（login → token保持 → orders GET/POST）
+## ブランチ表示ルール
 
-## モックアップ完了条件
+`frontend/.env.development` の `VITE_APP_BRANCH` を、
+作業ブランチ名に合わせて更新する。
 
-- 注文作成 → 注文一覧 → 注文アイテム詳細 の遷移
-- Loading / Empty / Error の状態確認
+例:
 
-## PR分割（3〜5本）
+```env
+VITE_APP_BRANCH=feat/frontend-pr17-mvp-finalization
+```
 
-### PR1: 土台 + ルーティング + 3画面骨格（このコミット）
-- React + Vite + TS 初期化
-- `/orders/new` `/orders` `/orders/:orderId/items/:itemId`
-- 共通状態UI（Loading/Empty/Error）
+## MVP 主要フロー確認
 
-### PR2: 注文作成フォームUI反映 + バリデーション
-- UI案（OrderInput）への寄せ
-- 入力エラーの改善
-- 必須/形式チェック整理
+1. 注文作成
+2. 注文一覧（検索/状態フィルタ/並び順）
+3. 注文編集（ヘッダー更新・明細追加/更新/削除）
+4. 顧客作成・編集
+5. 商品作成・編集
 
-### PR3: 注文一覧/アイテム詳細の表示改善
-- テーブル列調整
-- ステータス表示改善
-- UI案（Invoice）とのトーン統一
-
-### PR4: API接続の最小実装
-- login→token保持
-- `GET /orders`, `POST /orders` 接続
-- モック/実API切替フラグ
-
-### PR5: 仕上げ
-- エラーハンドリング統一
-- 最低限のコンポーネントテスト
-- docsと進捗投稿更新
+保存成功時は一覧ページでトースト表示される。
