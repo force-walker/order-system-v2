@@ -1,61 +1,115 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { listProducts } from 'features/orders/services/ordersService';
 import type { ProductOption } from 'features/orders/types/order';
 import { toUserMessage } from 'shared/error';
 
+type ToastPayload = {
+  type: 'success' | 'error';
+  message: string;
+};
+
 export const ProductListPage = () => {
   const [products, setProducts] = useState<ProductOption[] | null>(null);
   const [error, setError] = useState('');
+  const [toast, setToast] = useState<ToastPayload | null>(null);
+  const [keyword, setKeyword] = useState('');
+  const [pricingFilter, setPricingFilter] = useState<'all' | 'uom_count' | 'uom_kg'>('all');
 
   useEffect(() => {
     listProducts()
       .then(setProducts)
       .catch((e) => setError(toUserMessage(e, '商品一覧の取得に失敗しました')));
+
+    const raw = sessionStorage.getItem('osv2_toast');
+    if (raw) {
+      try {
+        setToast(JSON.parse(raw) as ToastPayload);
+      } catch {
+        // noop
+      } finally {
+        sessionStorage.removeItem('osv2_toast');
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  const filteredProducts = useMemo(() => {
+    if (!products) return [];
+    const q = keyword.trim().toLowerCase();
+    const byKeyword = q.length === 0 ? products : products.filter((p) => `${p.name} ${p.label}`.toLowerCase().includes(q));
+    const byPricing = pricingFilter === 'all' ? byKeyword : byKeyword.filter((p) => p.pricingBasisDefault === pricingFilter);
+    return byPricing;
+  }, [products, keyword, pricingFilter]);
 
   if (error) return <ErrorState title="商品一覧の取得に失敗" description={error} />;
   if (!products) return <LoadingState title="商品一覧を読み込み中" description="しばらくお待ちください" />;
   if (products.length === 0) return <EmptyState title="商品データがありません" description="商品マスタを登録してください" />;
 
   return (
-    <section className="card">
-      <div className="list-header">
-        <div>
-          <h2>商品マスタ</h2>
-          <p className="subtle">作成・編集対応</p>
+    <section>
+      {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
+      <div className="card">
+        <div className="list-header">
+          <div>
+            <h2>商品マスタ</h2>
+            <p className="subtle">作成・編集対応</p>
+          </div>
+          <div className="list-controls">
+            <label className="filter-label">
+              検索
+              <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="商品名 / SKU" />
+            </label>
+            <label className="filter-label">
+              課金基準
+              <select value={pricingFilter} onChange={(e) => setPricingFilter(e.target.value as 'all' | 'uom_count' | 'uom_kg')}>
+                <option value="all">すべて</option>
+                <option value="uom_count">uom_count</option>
+                <option value="uom_kg">uom_kg</option>
+              </select>
+            </label>
+            <Link to="/products/new" className="order-link">+ 商品を作成</Link>
+          </div>
         </div>
-        <Link to="/products/new" className="order-link">+ 商品を作成</Link>
-      </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>商品名</th>
-              <th>注文単位</th>
-              <th>課金基準</th>
-              <th>詳細</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map((p) => (
-              <tr key={p.id}>
-                <td>{p.id}</td>
-                <td>{p.name}</td>
-                <td>{p.orderUom}</td>
-                <td>{p.pricingBasisDefault}</td>
-                <td>
-                  <Link to={`/products/${p.id}`} className="order-link">詳細</Link>
-                  {' / '}
-                  <Link to={`/products/${p.id}/edit`} className="order-link">編集</Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {filteredProducts.length === 0 ? (
+          <EmptyState title="条件に合う商品がありません" description="検索・フィルタ条件を見直してください" />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>商品名</th>
+                  <th>注文単位</th>
+                  <th>課金基準</th>
+                  <th>詳細</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.id}</td>
+                    <td>{p.name}</td>
+                    <td>{p.orderUom}</td>
+                    <td>{p.pricingBasisDefault}</td>
+                    <td>
+                      <Link to={`/products/${p.id}`} className="order-link">詳細</Link>
+                      {' / '}
+                      <Link to={`/products/${p.id}/edit`} className="order-link">編集</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </section>
   );
