@@ -8,6 +8,8 @@ import { ProductListPage } from 'features/orders/pages/ProductListPage';
 import { ProductDetailPage } from 'features/orders/pages/ProductDetailPage';
 import { CustomerListPage } from 'features/orders/pages/CustomerListPage';
 import { CustomerDetailPage } from 'features/orders/pages/CustomerDetailPage';
+import { CustomerCreatePage } from 'features/orders/pages/CustomerCreatePage';
+import { CustomerEditPage } from 'features/orders/pages/CustomerEditPage';
 
 export const App = () => {
   return (
@@ -21,7 +23,9 @@ export const App = () => {
         <Route path="/products" element={<ProductListPage />} />
         <Route path="/products/:productId" element={<ProductDetailPage />} />
         <Route path="/customers" element={<CustomerListPage />} />
+        <Route path="/customers/new" element={<CustomerCreatePage />} />
         <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
+        <Route path="/customers/:customerId/edit" element={<CustomerEditPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/orders/new" replace />} />
     </Routes>

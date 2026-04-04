@@ -24,8 +24,9 @@ export const CustomerListPage = () => {
       <div className="list-header">
         <div>
           <h2>顧客マスタ</h2>
-          <p className="subtle">参照用（読み取り専用）</p>
+          <p className="subtle">作成・編集対応</p>
         </div>
+        <Link to="/customers/new" className="order-link">+ 顧客を作成</Link>
       </div>
       <div className="table-wrap">
         <table>
@@ -41,7 +42,11 @@ export const CustomerListPage = () => {
               <tr key={c.id}>
                 <td>{c.id}</td>
                 <td>{c.label}</td>
-                <td><Link to={`/customers/${c.id}`} className="order-link">詳細</Link></td>
+                <td>
+                  <Link to={`/customers/${c.id}`} className="order-link">詳細</Link>
+                  {' / '}
+                  <Link to={`/customers/${c.id}/edit`} className="order-link">編集</Link>
+                </td>
               </tr>
             ))}
           </tbody>

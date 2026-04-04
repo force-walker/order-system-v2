@@ -1,5 +1,14 @@
 import { mockOrders } from 'features/orders/mocks/orders';
-import type { CreateOrderRequest, CustomerOption, OrderDetail, OrderSummary, ProductOption } from 'features/orders/types/order';
+import type {
+  CreateOrderRequest,
+  CustomerCreateRequest,
+  CustomerDetail,
+  CustomerOption,
+  CustomerUpdateRequest,
+  OrderDetail,
+  OrderSummary,
+  ProductOption,
+} from 'features/orders/types/order';
 import { parseApiErrorPayload, ServiceError } from 'shared/error';
 
 const STORAGE_KEY = 'osv2_mock_orders';
@@ -23,6 +32,7 @@ type ApiCustomerResponse = {
   id: number;
   customer_code: string;
   name: string;
+  active: boolean;
 };
 
 type ApiProductResponse = {
@@ -370,6 +380,81 @@ export const listCustomers = async (): Promise<CustomerOption[]> => {
 export const getCustomer = async (customerId: number): Promise<CustomerOption | null> => {
   const customers = await listCustomers();
   return customers.find((c) => c.id === customerId) ?? null;
+};
+
+export const getCustomerDetail = async (customerId: number): Promise<CustomerDetail | null> => {
+  if (USE_MOCK) {
+    const row = [
+      { id: 1, customerCode: 'CUST-001', name: 'テスト商事', active: true },
+      { id: 2, customerCode: 'CUST-002', name: 'デモフーズ', active: true },
+    ].find((c) => c.id === customerId);
+    return row ?? null;
+  }
+
+  const res = await fetchWithAuth(`/api/v1/customers/${customerId}`, { method: 'GET' });
+  if (res.status === 404) return null;
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const row = (await res.json()) as ApiCustomerResponse;
+  customerNameCache.set(row.id, row.name);
+  return {
+    id: row.id,
+    customerCode: row.customer_code,
+    name: row.name,
+    active: row.active,
+  };
+};
+
+export const createCustomer = async (payload: CustomerCreateRequest): Promise<CustomerDetail> => {
+  if (USE_MOCK) {
+    return {
+      id: Date.now(),
+      customerCode: payload.customerCode,
+      name: payload.name,
+      active: payload.active,
+    };
+  }
+
+  const res = await fetchWithAuth('/api/v1/customers', {
+    method: 'POST',
+    body: JSON.stringify({ customer_code: payload.customerCode, name: payload.name, active: payload.active }),
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const row = (await res.json()) as ApiCustomerResponse;
+  customerNameCache.set(row.id, row.name);
+  return {
+    id: row.id,
+    customerCode: row.customer_code,
+    name: row.name,
+    active: row.active,
+  };
+};
+
+export const updateCustomer = async (customerId: number, payload: CustomerUpdateRequest): Promise<CustomerDetail> => {
+  if (USE_MOCK) {
+    return {
+      id: customerId,
+      customerCode: `CUST-${String(customerId).padStart(3, '0')}`,
+      name: payload.name ?? 'テスト商事',
+      active: payload.active ?? true,
+    };
+  }
+
+  const res = await fetchWithAuth(`/api/v1/customers/${customerId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name: payload.name, active: payload.active }),
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const row = (await res.json()) as ApiCustomerResponse;
+  customerNameCache.set(row.id, row.name);
+  return {
+    id: row.id,
+    customerCode: row.customer_code,
+    name: row.name,
+    active: row.active,
+  };
 };
 
 export const listProducts = async (): Promise<ProductOption[]> => {
