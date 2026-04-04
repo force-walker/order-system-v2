@@ -80,3 +80,37 @@ export type ProductOption = {
   orderUom: string;
   pricingBasisDefault: 'uom_count' | 'uom_kg';
 };
+
+export type ProductDetail = {
+  id: number;
+  sku: string;
+  name: string;
+  orderUom: string;
+  purchaseUom: string;
+  invoiceUom: string;
+  pricingBasisDefault: 'uom_count' | 'uom_kg';
+  isCatchWeight: boolean;
+  weightCaptureRequired: boolean;
+  active: boolean;
+};
+
+export type ProductCreateRequest = {
+  sku: string;
+  name: string;
+  orderUom: string;
+  purchaseUom: string;
+  invoiceUom: string;
+  pricingBasisDefault: 'uom_count' | 'uom_kg';
+  isCatchWeight: boolean;
+  weightCaptureRequired: boolean;
+};
+
+export type ProductUpdateRequest = {
+  name?: string;
+  orderUom?: string;
+  purchaseUom?: string;
+  invoiceUom?: string;
+  isCatchWeight?: boolean;
+  weightCaptureRequired?: boolean;
+  active?: boolean;
+};

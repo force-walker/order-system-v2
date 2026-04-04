@@ -24,8 +24,9 @@ export const ProductListPage = () => {
       <div className="list-header">
         <div>
           <h2>商品マスタ</h2>
-          <p className="subtle">参照用（読み取り専用）</p>
+          <p className="subtle">作成・編集対応</p>
         </div>
+        <Link to="/products/new" className="order-link">+ 商品を作成</Link>
       </div>
 
       <div className="table-wrap">
@@ -48,6 +49,8 @@ export const ProductListPage = () => {
                 <td>{p.pricingBasisDefault}</td>
                 <td>
                   <Link to={`/products/${p.id}`} className="order-link">詳細</Link>
+                  {' / '}
+                  <Link to={`/products/${p.id}/edit`} className="order-link">編集</Link>
                 </td>
               </tr>
             ))}

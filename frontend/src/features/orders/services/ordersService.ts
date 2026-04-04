@@ -7,7 +7,10 @@ import type {
   CustomerUpdateRequest,
   OrderDetail,
   OrderSummary,
+  ProductCreateRequest,
+  ProductDetail,
   ProductOption,
+  ProductUpdateRequest,
 } from 'features/orders/types/order';
 import { parseApiErrorPayload, ServiceError } from 'shared/error';
 
@@ -40,7 +43,12 @@ type ApiProductResponse = {
   sku: string;
   name: string;
   order_uom: string;
+  purchase_uom: string;
+  invoice_uom: string;
+  is_catch_weight: boolean;
+  weight_capture_required: boolean;
   pricing_basis_default: 'uom_count' | 'uom_kg';
+  active: boolean;
 };
 
 type ApiOrderItemResponse = {
@@ -470,6 +478,144 @@ export const listProducts = async (): Promise<ProductOption[]> => {
 export const getProduct = async (productId: number): Promise<ProductOption | null> => {
   const products = await listProducts();
   return products.find((p) => p.id === productId) ?? null;
+};
+
+export const getProductDetail = async (productId: number): Promise<ProductDetail | null> => {
+  if (USE_MOCK) {
+    const row = [
+      {
+        id: 1,
+        sku: 'PRD-001',
+        name: '鶏もも肉',
+        orderUom: 'kg',
+        purchaseUom: 'kg',
+        invoiceUom: 'kg',
+        pricingBasisDefault: 'uom_kg' as const,
+        isCatchWeight: true,
+        weightCaptureRequired: true,
+        active: true,
+      },
+      {
+        id: 2,
+        sku: 'PRD-002',
+        name: '玉ねぎ',
+        orderUom: 'case',
+        purchaseUom: 'case',
+        invoiceUom: 'case',
+        pricingBasisDefault: 'uom_count' as const,
+        isCatchWeight: false,
+        weightCaptureRequired: false,
+        active: true,
+      },
+    ].find((p) => p.id === productId);
+    return row ?? null;
+  }
+
+  const res = await fetchWithAuth(`/api/v1/products/${productId}`, { method: 'GET' });
+  if (res.status === 404) return null;
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const row = (await res.json()) as ApiProductResponse;
+  return {
+    id: row.id,
+    sku: row.sku,
+    name: row.name,
+    orderUom: row.order_uom,
+    purchaseUom: row.purchase_uom,
+    invoiceUom: row.invoice_uom,
+    pricingBasisDefault: row.pricing_basis_default,
+    isCatchWeight: row.is_catch_weight,
+    weightCaptureRequired: row.weight_capture_required,
+    active: row.active,
+  };
+};
+
+export const createProduct = async (payload: ProductCreateRequest): Promise<ProductDetail> => {
+  if (USE_MOCK) {
+    return {
+      id: Date.now(),
+      sku: payload.sku,
+      name: payload.name,
+      orderUom: payload.orderUom,
+      purchaseUom: payload.purchaseUom,
+      invoiceUom: payload.invoiceUom,
+      pricingBasisDefault: payload.pricingBasisDefault,
+      isCatchWeight: payload.isCatchWeight,
+      weightCaptureRequired: payload.weightCaptureRequired,
+      active: true,
+    };
+  }
+
+  const res = await fetchWithAuth('/api/v1/products', {
+    method: 'POST',
+    body: JSON.stringify({
+      sku: payload.sku,
+      name: payload.name,
+      order_uom: payload.orderUom,
+      purchase_uom: payload.purchaseUom,
+      invoice_uom: payload.invoiceUom,
+      is_catch_weight: payload.isCatchWeight,
+      weight_capture_required: payload.weightCaptureRequired,
+      pricing_basis_default: payload.pricingBasisDefault,
+    }),
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const row = (await res.json()) as ApiProductResponse;
+  return {
+    id: row.id,
+    sku: row.sku,
+    name: row.name,
+    orderUom: row.order_uom,
+    purchaseUom: row.purchase_uom,
+    invoiceUom: row.invoice_uom,
+    pricingBasisDefault: row.pricing_basis_default,
+    isCatchWeight: row.is_catch_weight,
+    weightCaptureRequired: row.weight_capture_required,
+    active: row.active,
+  };
+};
+
+export const updateProduct = async (productId: number, payload: ProductUpdateRequest): Promise<ProductDetail> => {
+  if (USE_MOCK) {
+    return {
+      id: productId,
+      sku: `PRD-${String(productId).padStart(3, '0')}`,
+      name: payload.name ?? 'サンプル商品',
+      orderUom: payload.orderUom ?? 'kg',
+      purchaseUom: payload.purchaseUom ?? 'kg',
+      invoiceUom: payload.invoiceUom ?? 'kg',
+      pricingBasisDefault: 'uom_count',
+      isCatchWeight: payload.isCatchWeight ?? false,
+      weightCaptureRequired: payload.weightCaptureRequired ?? false,
+      active: payload.active ?? true,
+    };
+  }
+
+  const res = await fetchWithAuth(`/api/v1/products/${productId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      name: payload.name,
+      order_uom: payload.orderUom,
+      purchase_uom: payload.purchaseUom,
+      invoice_uom: payload.invoiceUom,
+      is_catch_weight: payload.isCatchWeight,
+      weight_capture_required: payload.weightCaptureRequired,
+      active: payload.active,
+    }),
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const row = (await res.json()) as ApiProductResponse;
+  return {
+    id: row.id,
+    sku: row.sku,
+    name: row.name,
+    orderUom: row.order_uom,
+    purchaseUom: row.purchase_uom,
+    invoiceUom: row.invoice_uom,
+    pricingBasisDefault: row.pricing_basis_default,
+    isCatchWeight: row.is_catch_weight,
+    weightCaptureRequired: row.weight_capture_required,
+    active: row.active,
+  };
 };
 
 export const listOrders = async (): Promise<OrderSummary[]> => (USE_MOCK ? listOrdersMock() : listOrdersApi());

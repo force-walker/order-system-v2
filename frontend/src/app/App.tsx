@@ -6,6 +6,8 @@ import { OrderItemDetailPage } from 'features/orders/pages/OrderItemDetailPage';
 import { OrderEditPage } from 'features/orders/pages/OrderEditPage';
 import { ProductListPage } from 'features/orders/pages/ProductListPage';
 import { ProductDetailPage } from 'features/orders/pages/ProductDetailPage';
+import { ProductCreatePage } from 'features/orders/pages/ProductCreatePage';
+import { ProductEditPage } from 'features/orders/pages/ProductEditPage';
 import { CustomerListPage } from 'features/orders/pages/CustomerListPage';
 import { CustomerDetailPage } from 'features/orders/pages/CustomerDetailPage';
 import { CustomerCreatePage } from 'features/orders/pages/CustomerCreatePage';
@@ -21,7 +23,9 @@ export const App = () => {
         <Route path="/orders/:orderId/items/:itemId" element={<OrderItemDetailPage />} />
         <Route path="/orders/:orderId/edit" element={<OrderEditPage />} />
         <Route path="/products" element={<ProductListPage />} />
+        <Route path="/products/new" element={<ProductCreatePage />} />
         <Route path="/products/:productId" element={<ProductDetailPage />} />
+        <Route path="/products/:productId/edit" element={<ProductEditPage />} />
         <Route path="/customers" element={<CustomerListPage />} />
         <Route path="/customers/new" element={<CustomerCreatePage />} />
         <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
