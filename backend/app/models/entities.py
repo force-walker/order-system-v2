@@ -91,6 +91,8 @@ class OrderItem(Base):
             " AND (pricing_basis != 'uom_kg' OR unit_price_uom_kg IS NOT NULL)",
             name="ck_order_items_price_required_by_pricing_basis",
         ),
+        CheckConstraint("target_price IS NULL OR target_price >= 0", name="ck_order_items_target_price_non_negative"),
+        CheckConstraint("price_ceiling IS NULL OR price_ceiling >= 0", name="ck_order_items_price_ceiling_non_negative"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -100,10 +102,14 @@ class OrderItem(Base):
     order_uom_type: Mapped[PricingBasis] = mapped_column(Enum(PricingBasis, name="pricingbasis"), default=PricingBasis.uom_count)
     estimated_weight_kg: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     actual_weight_kg: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    price_ceiling: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    stockout_policy: Mapped[StockoutPolicy | None] = mapped_column(Enum(StockoutPolicy, name="stockoutpolicy"), nullable=True)
     pricing_basis: Mapped[PricingBasis] = mapped_column(Enum(PricingBasis, name="pricingbasis"), default=PricingBasis.uom_count)
     unit_price_uom_count: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     unit_price_uom_kg: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     line_status: Mapped[LineStatus] = mapped_column(Enum(LineStatus, name="linestatus"), default=LineStatus.open, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

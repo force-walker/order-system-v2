@@ -209,10 +209,15 @@ def create_order_item(order_id: int, payload: OrderItemCreateRequest, db: Sessio
         product_id=payload.product_id,
         ordered_qty=payload.ordered_qty,
         order_uom_type=payload.order_uom_type,
+        estimated_weight_kg=payload.estimated_weight_kg,
+        target_price=payload.target_price,
+        price_ceiling=payload.price_ceiling,
+        stockout_policy=payload.stockout_policy,
         pricing_basis=payload.pricing_basis,
         unit_price_uom_count=payload.unit_price_uom_count,
         unit_price_uom_kg=payload.unit_price_uom_kg,
         note=payload.note,
+        comment=payload.comment,
     )
     db.add(row)
     db.flush()
@@ -247,10 +252,15 @@ def bulk_create_order_items(order_id: int, payload: OrderItemsBulkCreateRequest,
                 product_id=item.product_id,
                 ordered_qty=item.ordered_qty,
                 order_uom_type=item.order_uom_type,
+                estimated_weight_kg=item.estimated_weight_kg,
+                target_price=item.target_price,
+                price_ceiling=item.price_ceiling,
+                stockout_policy=item.stockout_policy,
                 pricing_basis=item.pricing_basis,
                 unit_price_uom_count=item.unit_price_uom_count,
                 unit_price_uom_kg=item.unit_price_uom_kg,
                 note=item.note,
+                comment=item.comment,
             )
         )
         success += 1

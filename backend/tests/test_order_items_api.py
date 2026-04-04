@@ -78,14 +78,24 @@ def test_order_items_crud_and_bulk():
             "product_id": product_id,
             "ordered_qty": 2,
             "order_uom_type": "uom_count",
+            "estimated_weight_kg": 2.2,
+            "target_price": 88,
+            "price_ceiling": 120,
+            "stockout_policy": "backorder",
             "pricing_basis": "uom_count",
             "unit_price_uom_count": 100,
             "note": "line-1",
+            "comment": "line comment",
         },
     )
     assert created.status_code == 201
     item_id = created.json()["id"]
     assert created.json()["note"] == "line-1"
+    assert created.json()["comment"] == "line comment"
+    assert float(created.json()["estimated_weight_kg"]) == 2.2
+    assert float(created.json()["target_price"]) == 88.0
+    assert float(created.json()["price_ceiling"]) == 120.0
+    assert created.json()["stockout_policy"] == "backorder"
 
     listed = client.get(f"/api/v1/orders/{order_id}/items")
     assert listed.status_code == 200
