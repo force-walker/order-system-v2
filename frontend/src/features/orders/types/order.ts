@@ -55,6 +55,24 @@ export type CustomerOption = {
   label: string;
 };
 
+export type CustomerDetail = {
+  id: number;
+  customerCode: string;
+  name: string;
+  active: boolean;
+};
+
+export type CustomerCreateRequest = {
+  customerCode: string;
+  name: string;
+  active: boolean;
+};
+
+export type CustomerUpdateRequest = {
+  name?: string;
+  active?: boolean;
+};
+
 export type ProductOption = {
   id: number;
   label: string;
