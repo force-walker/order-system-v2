@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { ProductCreateRequest, ProductDetail } from 'features/orders/types/order';
+import { toUserMessage } from 'shared/error';
 
 type Props = {
   initialValue?: ProductDetail;
@@ -49,8 +50,8 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
         isCatchWeight: form.isCatchWeight,
         weightCaptureRequired: form.weightCaptureRequired,
       });
-    } catch {
-      setError('商品の保存に失敗しました');
+    } catch (e) {
+      setError(toUserMessage(e, '商品の保存に失敗しました'));
     } finally {
       setSubmitting(false);
     }

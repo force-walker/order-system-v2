@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { getOrderItem } from 'features/orders/services/ordersService';
 import type { OrderDetail, OrderItem, OrderStatus } from 'features/orders/types/order';
+import { toUserMessage } from 'shared/error';
 
 type DetailState = {
   order: OrderDetail;
@@ -43,7 +44,7 @@ export const OrderItemDetailPage = () => {
         }
         setDetail(result);
       })
-      .catch(() => setError('アイテム詳細の取得に失敗しました'))
+      .catch((e) => setError(toUserMessage(e, 'アイテム詳細の取得に失敗しました')))
       .finally(() => setLoaded(true));
   }, [orderId, itemId]);
 
