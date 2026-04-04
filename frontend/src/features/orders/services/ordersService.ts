@@ -138,11 +138,13 @@ const loadProductsApi = async (): Promise<ProductOption[]> => {
 
 const mapApiOrderToDetail = (order: ApiOrderResponse): OrderDetail => {
   const cached = apiOrderCache.get(order.id);
+  const mappedByCustomerId = customerNameCache.get(order.customer_id);
+  const mappedByOrderCache = cached?.customerId === order.customer_id ? cached?.customerName : undefined;
   return {
     id: order.id,
     customerId: order.customer_id,
     orderNo: order.order_no,
-    customerName: cached?.customerName ?? customerNameCache.get(order.customer_id) ?? `顧客#${order.customer_id}`,
+    customerName: mappedByCustomerId ?? mappedByOrderCache ?? `顧客#${order.customer_id}`,
     deliveryDate: order.delivery_date,
     status: order.status,
     note: order.note ?? undefined,
@@ -240,13 +242,6 @@ const updateOrderHeaderApi = async (orderId: number, payload: CreateOrderRequest
     body: JSON.stringify({ customer_id: payload.customerId, delivery_date: payload.deliveryDate, note: payload.note ?? null }),
   });
 
-  if (res.status === 405) {
-    throw new ServiceError('注文ヘッダー更新API（PATCH /orders/{order_id}）がbackend側で未対応です。', {
-      code: 'ORDER_HEADER_PATCH_NOT_IMPLEMENTED',
-      status: 405,
-    });
-  }
-
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
 
@@ -342,6 +337,7 @@ export const updateOrder = async (orderId: number, payload: CreateOrderRequest):
 
   const existingItems = await listOrderItemsApi(orderId);
   await updateOrderHeaderApi(orderId, payload);
+  customerNameCache.set(payload.customerId, payload.customerName);
 
   const existingMap = new Map(existingItems.map((i) => [i.id, i]));
   const incomingIds = new Set<number>();
