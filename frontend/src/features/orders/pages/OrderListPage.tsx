@@ -24,6 +24,8 @@ export const OrderListPage = () => {
   const [orders, setOrders] = useState<OrderSummary[] | null>(null);
   const [error, setError] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [keyword, setKeyword] = useState('');
+  const [sortMode, setSortMode] = useState<'newest' | 'deliveryAsc' | 'deliveryDesc'>('newest');
   const [toast, setToast] = useState<ToastPayload | null>(null);
 
   useEffect(() => {
@@ -54,9 +56,29 @@ export const OrderListPage = () => {
 
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
-    if (statusFilter === 'all') return orders;
-    return orders.filter((order) => order.status === statusFilter);
-  }, [orders, statusFilter]);
+
+    const normalizedKeyword = keyword.trim().toLowerCase();
+
+    const byStatus = statusFilter === 'all' ? orders : orders.filter((order) => order.status === statusFilter);
+
+    const byKeyword =
+      normalizedKeyword.length === 0
+        ? byStatus
+        : byStatus.filter((order) => {
+            const target = `${order.orderNo} ${order.customerName}`.toLowerCase();
+            return target.includes(normalizedKeyword);
+          });
+
+    const sorted = [...byKeyword];
+    if (sortMode === 'deliveryAsc') {
+      sorted.sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
+    } else if (sortMode === 'deliveryDesc') {
+      sorted.sort((a, b) => b.deliveryDate.localeCompare(a.deliveryDate));
+    } else {
+      sorted.sort((a, b) => b.id - a.id);
+    }
+    return sorted;
+  }, [orders, statusFilter, keyword, sortMode]);
 
   if (error) {
     return <ErrorState title="注文一覧の取得に失敗" description={error} />;
@@ -79,19 +101,39 @@ export const OrderListPage = () => {
           <h2>注文一覧</h2>
           <p className="subtle">新しい注文順で表示しています。</p>
         </div>
-        <label className="filter-label">
-          状態フィルタ
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | OrderStatus)}>
-            <option value="all">すべて</option>
-            <option value="new">新規</option>
-            <option value="confirmed">確定</option>
-            <option value="allocated">引当済</option>
-            <option value="purchased">仕入済</option>
-            <option value="shipped">出荷済</option>
-            <option value="invoiced">請求済</option>
-            <option value="cancelled">取消</option>
-          </select>
-        </label>
+        <div className="list-controls">
+          <label className="filter-label">
+            検索
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="注文番号 / 顧客名"
+            />
+          </label>
+
+          <label className="filter-label">
+            状態フィルタ
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | OrderStatus)}>
+              <option value="all">すべて</option>
+              <option value="new">新規</option>
+              <option value="confirmed">確定</option>
+              <option value="allocated">引当済</option>
+              <option value="purchased">仕入済</option>
+              <option value="shipped">出荷済</option>
+              <option value="invoiced">請求済</option>
+              <option value="cancelled">取消</option>
+            </select>
+          </label>
+
+          <label className="filter-label">
+            並び順
+            <select value={sortMode} onChange={(e) => setSortMode(e.target.value as 'newest' | 'deliveryAsc' | 'deliveryDesc')}>
+              <option value="newest">新しい注文順</option>
+              <option value="deliveryAsc">納品日 昇順</option>
+              <option value="deliveryDesc">納品日 降順</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       {filteredOrders.length === 0 ? (
