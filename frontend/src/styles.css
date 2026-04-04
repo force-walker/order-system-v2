@@ -202,7 +202,7 @@ th, td {
 }
 
 .item-grid-row-primary {
-  grid-template-columns: 6fr 0.8fr 0.8fr 0.8fr 0.8fr;
+  grid-template-columns: 4fr 1fr 1fr 1fr 1fr;
 }
 
 .item-grid-row-secondary {
