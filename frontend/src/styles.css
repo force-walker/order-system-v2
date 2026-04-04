@@ -175,6 +175,30 @@ th, td {
   margin-bottom: 8px;
 }
 
+.item-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.item-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.item-card h4 {
+  margin: 0;
+}
+
+.item-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.five-col {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 label {
   display: grid;
   gap: 4px;
@@ -220,7 +244,8 @@ button:disabled { opacity: 0.6; }
 
 @media (max-width: 900px) {
   .two-col,
-  .three-col {
+  .three-col,
+  .five-col {
     grid-template-columns: 1fr;
   }
 

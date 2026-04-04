@@ -15,6 +15,11 @@ export type OrderItem = {
   unit: string;
   unitPrice?: number;
   pricingBasis?: 'uom_count' | 'uom_kg';
+  estimatedWeightKg?: number;
+  targetPrice?: number;
+  priceCeiling?: number;
+  stockoutPolicy?: 'backorder' | 'substitute' | 'cancel' | 'split';
+  comment?: string;
   note?: string;
 };
 
@@ -47,6 +52,11 @@ export type CreateOrderRequest = {
     unit: string;
     unitPrice: number;
     pricingBasis: 'uom_count' | 'uom_kg';
+    estimatedWeightKg?: number;
+    targetPrice?: number;
+    priceCeiling?: number;
+    stockoutPolicy?: 'backorder' | 'substitute' | 'cancel' | 'split';
+    comment?: string;
   }>;
 };
 
