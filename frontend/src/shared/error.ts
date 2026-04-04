@@ -24,6 +24,10 @@ const DEFAULT_MESSAGES: Record<string, string> = {
   STATUS_NO_TARGET_LINES: '対象データが見つかりませんでした。条件を見直してください。',
   VALIDATION_ERROR: '入力内容に不備があります。必須項目や形式を確認してください。',
   ORDER_CONFLICT: '注文状態の競合が発生しました。最新状態で再度お試しください。',
+  CUSTOMER_NOT_FOUND: '指定した顧客が見つかりません。',
+  CUSTOMER_CODE_ALREADY_EXISTS: '顧客コードが既に存在します。',
+  PRODUCT_NOT_FOUND: '指定した商品が見つかりません。',
+  PRODUCT_CODE_ALREADY_EXISTS: '商品コードが既に存在します。',
 };
 
 export const parseApiErrorPayload = async (res: Response): Promise<ServiceError> => {
@@ -43,6 +47,14 @@ export const parseApiErrorPayload = async (res: Response): Promise<ServiceError>
 
 export const toUserMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ServiceError) return error.message;
-  if (error instanceof Error && error.message) return error.message;
+
+  if (error instanceof Error && error.message) {
+    const m = error.message.toLowerCase();
+    if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network error')) {
+      return 'APIへ接続できません。backend起動状態とCORS設定を確認してください。';
+    }
+    return error.message;
+  }
+
   return fallback;
 };
