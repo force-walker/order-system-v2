@@ -60,9 +60,9 @@ export const ProductListPage = () => {
     return sorted;
   }, [products, keyword, pricingFilter, sortMode]);
 
-  if (error) return <ErrorState title="商品一覧の取得に失敗" description={error} />;
+  if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (!products) return <LoadingState title="商品一覧を読み込み中" description="しばらくお待ちください" />;
-  if (products.length === 0) return <EmptyState title="商品データがありません" description="商品マスタを登録してください" />;
+  if (products.length === 0) return <EmptyState title="データがありません" description="条件を見直すか、データ登録後に再度お試しください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
 
   return (
     <section>
@@ -102,7 +102,7 @@ export const ProductListPage = () => {
         </div>
 
         {filteredProducts.length === 0 ? (
-          <EmptyState title="条件に合う商品がありません" description="検索・フィルタ条件を見直してください" />
+          <EmptyState title="データがありません" description="条件に合うデータがありません。検索・フィルタ条件を見直してください。" actionLabel="条件をリセット" onAction={() => { setKeyword(''); setPricingFilter('all'); setSortMode('idAsc'); }} />
         ) : (
           <div className="table-wrap">
             <table>

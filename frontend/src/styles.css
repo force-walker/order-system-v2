@@ -308,6 +308,10 @@ button:disabled { opacity: 0.6; }
 
 .state-box h3 { margin: 0 0 8px; }
 
+.state-actions {
+  margin-top: 10px;
+}
+
 .detail-layout {
   display: grid;
   gap: 12px;
