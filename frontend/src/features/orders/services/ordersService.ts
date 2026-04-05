@@ -14,6 +14,23 @@ import type {
 } from 'features/orders/types/order';
 import { apiJson, apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload, ServiceError } from 'shared/error';
+import {
+  toApiCustomerCreate,
+  toApiCustomerUpdate,
+  toApiOrderCreateHeader,
+  toApiProductCreate,
+  toApiProductUpdate,
+  toCustomerDetail,
+  toCustomerOption,
+  toProductDetail,
+  toProductOption,
+  type ApiCustomerResponse,
+  type ApiLoginRequest,
+  type ApiOrderCreateRequest,
+  type ApiOrderResponse,
+  type ApiProductResponse,
+  type ApiTokenResponse,
+} from './ordersDto';
 
 const DEBUG_ORDER_ITEM_FIELDS = (import.meta.env.VITE_DEBUG_ORDER_ITEM_FIELDS ?? 'true') === 'true';
 
@@ -22,40 +39,6 @@ const TOKEN_STORAGE_KEY = 'osv2_access_token';
 const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true';
 const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
 const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
-
-type ApiOrderResponse = {
-  id: number;
-  order_no: string;
-  customer_id: number;
-  delivery_date: string;
-  status: OrderSummary['status'];
-  note: string | null;
-  created_at: string;
-};
-
-type ApiCustomerResponse = {
-  id: number;
-  customer_code: string;
-  name: string;
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-type ApiProductResponse = {
-  id: number;
-  sku: string;
-  name: string;
-  order_uom: string;
-  purchase_uom: string;
-  invoice_uom: string;
-  is_catch_weight: boolean;
-  weight_capture_required: boolean;
-  pricing_basis_default: 'uom_count' | 'uom_kg';
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-};
 
 type ApiOrderItemResponse = {
   id: number;
@@ -112,9 +95,10 @@ const ensureDevToken = async (): Promise<string> => {
   const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
   if (cached) return cached;
 
-  const data = await apiJson<{ access_token: string }>('/api/v1/auth/login', {
+  const loginBody: ApiLoginRequest = { user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE };
+  const data = await apiJson<ApiTokenResponse>('/api/v1/auth/login', {
     method: 'POST',
-    body: { user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE },
+    body: loginBody,
   });
 
   localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
@@ -139,12 +123,7 @@ const loadCustomersApi = async (): Promise<CustomerOption[]> => {
   const data = (await res.json()) as ApiCustomerResponse[];
   return data.map((c) => {
     customerNameCache.set(c.id, c.name);
-    return {
-      id: c.id,
-      label: `${c.id}: ${c.name} (${c.customer_code})`,
-      createdAt: c.created_at,
-      updatedAt: c.updated_at,
-    };
+    return toCustomerOption(c);
   });
 };
 
@@ -153,15 +132,7 @@ const loadProductsApi = async (): Promise<ProductOption[]> => {
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiProductResponse[];
   return data.map((p) => {
-    const option: ProductOption = {
-      id: p.id,
-      label: `${p.id}: ${p.name} (${p.pricing_basis_default})`,
-      name: p.name,
-      orderUom: p.order_uom,
-      pricingBasisDefault: p.pricing_basis_default,
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-    };
+    const option = toProductOption(p);
     productCache.set(p.id, option);
     return option;
   });
@@ -238,9 +209,16 @@ const listOrderItemsApi = async (orderId: number) => {
 };
 
 const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail> => {
+  const orderBody: ApiOrderCreateRequest = toApiOrderCreateHeader(
+    payload.customerId,
+    payload.deliveryDate,
+    payload.note,
+    payload.orderNo,
+  );
+
   const res = await fetchWithAuth('/api/v1/orders', {
     method: 'POST',
-    body: { customer_id: payload.customerId, delivery_date: payload.deliveryDate, note: payload.note ?? null },
+    body: orderBody,
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const order = (await res.json()) as ApiOrderResponse;
@@ -470,12 +448,7 @@ export const getCustomerDetail = async (customerId: number): Promise<CustomerDet
 
   const row = (await res.json()) as ApiCustomerResponse;
   customerNameCache.set(row.id, row.name);
-  return {
-    id: row.id,
-    customerCode: row.customer_code,
-    name: row.name,
-    active: row.active,
-  };
+  return toCustomerDetail(row);
 };
 
 export const createCustomer = async (payload: CustomerCreateRequest): Promise<CustomerDetail> => {
@@ -488,20 +461,17 @@ export const createCustomer = async (payload: CustomerCreateRequest): Promise<Cu
     };
   }
 
+  const customerBody = toApiCustomerCreate(payload);
+
   const res = await fetchWithAuth('/api/v1/customers', {
     method: 'POST',
-    body: { customer_code: payload.customerCode, name: payload.name, active: payload.active },
+    body: customerBody,
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 
   const row = (await res.json()) as ApiCustomerResponse;
   customerNameCache.set(row.id, row.name);
-  return {
-    id: row.id,
-    customerCode: row.customer_code,
-    name: row.name,
-    active: row.active,
-  };
+  return toCustomerDetail(row);
 };
 
 export const updateCustomer = async (customerId: number, payload: CustomerUpdateRequest): Promise<CustomerDetail> => {
@@ -514,20 +484,17 @@ export const updateCustomer = async (customerId: number, payload: CustomerUpdate
     };
   }
 
+  const customerPatchBody = toApiCustomerUpdate(payload);
+
   const res = await fetchWithAuth(`/api/v1/customers/${customerId}`, {
     method: 'PATCH',
-    body: { name: payload.name, active: payload.active },
+    body: customerPatchBody,
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 
   const row = (await res.json()) as ApiCustomerResponse;
   customerNameCache.set(row.id, row.name);
-  return {
-    id: row.id,
-    customerCode: row.customer_code,
-    name: row.name,
-    active: row.active,
-  };
+  return toCustomerDetail(row);
 };
 
 export const listProducts = async (): Promise<ProductOption[]> => {
@@ -610,33 +577,15 @@ export const createProduct = async (payload: ProductCreateRequest): Promise<Prod
     };
   }
 
+  const productBody = toApiProductCreate(payload);
+
   const res = await fetchWithAuth('/api/v1/products', {
     method: 'POST',
-    body: {
-      sku: payload.sku,
-      name: payload.name,
-      order_uom: payload.orderUom,
-      purchase_uom: payload.purchaseUom,
-      invoice_uom: payload.invoiceUom,
-      is_catch_weight: payload.isCatchWeight,
-      weight_capture_required: payload.weightCaptureRequired,
-      pricing_basis_default: payload.pricingBasisDefault,
-    },
+    body: productBody,
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const row = (await res.json()) as ApiProductResponse;
-  return {
-    id: row.id,
-    sku: row.sku,
-    name: row.name,
-    orderUom: row.order_uom,
-    purchaseUom: row.purchase_uom,
-    invoiceUom: row.invoice_uom,
-    pricingBasisDefault: row.pricing_basis_default,
-    isCatchWeight: row.is_catch_weight,
-    weightCaptureRequired: row.weight_capture_required,
-    active: row.active,
-  };
+  return toProductDetail(row);
 };
 
 export const updateProduct = async (productId: number, payload: ProductUpdateRequest): Promise<ProductDetail> => {
@@ -655,32 +604,15 @@ export const updateProduct = async (productId: number, payload: ProductUpdateReq
     };
   }
 
+  const productPatchBody = toApiProductUpdate(payload);
+
   const res = await fetchWithAuth(`/api/v1/products/${productId}`, {
     method: 'PATCH',
-    body: {
-      name: payload.name,
-      order_uom: payload.orderUom,
-      purchase_uom: payload.purchaseUom,
-      invoice_uom: payload.invoiceUom,
-      is_catch_weight: payload.isCatchWeight,
-      weight_capture_required: payload.weightCaptureRequired,
-      active: payload.active,
-    },
+    body: productPatchBody,
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const row = (await res.json()) as ApiProductResponse;
-  return {
-    id: row.id,
-    sku: row.sku,
-    name: row.name,
-    orderUom: row.order_uom,
-    purchaseUom: row.purchase_uom,
-    invoiceUom: row.invoice_uom,
-    pricingBasisDefault: row.pricing_basis_default,
-    isCatchWeight: row.is_catch_weight,
-    weightCaptureRequired: row.weight_capture_required,
-    active: row.active,
-  };
+  return toProductDetail(row);
 };
 
 export const listOrders = async (): Promise<OrderSummary[]> => (USE_MOCK ? listOrdersMock() : listOrdersApi());
