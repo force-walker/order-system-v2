@@ -55,10 +55,10 @@ export const OrderCreatePage = () => {
     navigate('/orders');
   };
 
-  if (error) return <ErrorState title="注文作成を開始できません" description={error} />;
+  if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (!customers || !products) return <LoadingState title="注文作成フォームを準備中" description="顧客・商品マスタを読み込んでいます" />;
-  if (customers.length === 0) return <EmptyState title="顧客データがありません" description="顧客マスタ登録後に再度お試しください" />;
-  if (products.length === 0) return <EmptyState title="商品データがありません" description="商品マスタ登録後に再度お試しください" />;
+  if (customers.length === 0) return <EmptyState title="データがありません" description="条件を見直すか、データ登録後に再度お試しください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
+  if (products.length === 0) return <EmptyState title="データがありません" description="条件を見直すか、データ登録後に再度お試しください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
 
   return (
     <section>

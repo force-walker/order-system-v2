@@ -81,7 +81,7 @@ export const OrderListPage = () => {
   }, [orders, statusFilter, keyword, sortMode]);
 
   if (error) {
-    return <ErrorState title="注文一覧の取得に失敗" description={error} />;
+    return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   }
 
   if (!orders) {
@@ -89,7 +89,7 @@ export const OrderListPage = () => {
   }
 
   if (orders.length === 0) {
-    return <EmptyState title="注文データがありません" description="まずは注文作成画面から登録してください" />;
+    return <EmptyState title="データがありません" description="条件を見直すか、データ登録後に再度お試しください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
   }
 
   return (
@@ -137,7 +137,7 @@ export const OrderListPage = () => {
       </div>
 
       {filteredOrders.length === 0 ? (
-        <EmptyState title="条件に合う注文がありません" description="フィルタ条件を変更してください" />
+        <EmptyState title="データがありません" description="条件に合うデータがありません。検索・フィルタ条件を見直してください。" actionLabel="条件をリセット" onAction={() => { setKeyword(''); setStatusFilter('all'); setSortMode('newest'); }} />
       ) : (
         <div className="table-wrap">
           <table>

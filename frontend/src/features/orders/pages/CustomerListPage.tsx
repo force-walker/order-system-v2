@@ -58,9 +58,9 @@ export const CustomerListPage = () => {
     return sorted;
   }, [customers, keyword, sortMode]);
 
-  if (error) return <ErrorState title="顧客一覧の取得に失敗" description={error} />;
+  if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (!customers) return <LoadingState title="顧客一覧を読み込み中" />;
-  if (customers.length === 0) return <EmptyState title="顧客データがありません" />;
+  if (customers.length === 0) return <EmptyState title="データがありません" description="条件を見直すか、データ登録後に再度お試しください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
 
   return (
     <section>
@@ -92,7 +92,7 @@ export const CustomerListPage = () => {
         </div>
 
         {filteredCustomers.length === 0 ? (
-          <EmptyState title="条件に合う顧客がありません" description="検索条件を見直してください" />
+          <EmptyState title="データがありません" description="条件に合うデータがありません。検索条件を見直してください。" actionLabel="条件をリセット" onAction={() => setKeyword('')} />
         ) : (
           <div className="table-wrap">
             <table>

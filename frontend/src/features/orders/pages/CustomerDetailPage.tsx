@@ -21,9 +21,9 @@ export const CustomerDetailPage = () => {
       .catch((e) => setError(toUserMessage(e, '顧客詳細の取得に失敗しました')));
   }, [customerId]);
 
-  if (error) return <ErrorState title="顧客詳細の取得に失敗" description={error} />;
+  if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (customer === undefined) return <LoadingState title="顧客詳細を読み込み中" />;
-  if (customer === null) return <EmptyState title="顧客が見つかりません" />;
+  if (customer === null) return <EmptyState title="データがありません" description="対象データが見つかりません。一覧から再度選択してください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
 
   return (
     <section className="card detail-layout">

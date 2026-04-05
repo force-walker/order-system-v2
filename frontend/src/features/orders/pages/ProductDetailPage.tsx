@@ -21,9 +21,9 @@ export const ProductDetailPage = () => {
       .catch((e) => setError(toUserMessage(e, '商品詳細の取得に失敗しました')));
   }, [productId]);
 
-  if (error) return <ErrorState title="商品詳細の取得に失敗" description={error} />;
+  if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (product === undefined) return <LoadingState title="商品詳細を読み込み中" />;
-  if (product === null) return <EmptyState title="商品が見つかりません" />;
+  if (product === null) return <EmptyState title="データがありません" description="対象データが見つかりません。一覧から再度選択してください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
 
   return (
     <section className="card detail-layout">

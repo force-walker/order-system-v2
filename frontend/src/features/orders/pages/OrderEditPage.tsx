@@ -64,9 +64,9 @@ export const OrderEditPage = () => {
     navigate('/orders');
   };
 
-  if (error) return <ErrorState title="注文編集を開始できません" description={error} />;
+  if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (!customers || !products) return <LoadingState title="注文編集フォームを準備中" description="データを読み込んでいます" />;
-  if (!initialValue) return <EmptyState title="注文データが見つかりません" description="一覧から再度選択してください" />;
+  if (!initialValue) return <EmptyState title="データがありません" description="対象データが見つかりません。一覧から再度選択してください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
 
   return (
     <section>

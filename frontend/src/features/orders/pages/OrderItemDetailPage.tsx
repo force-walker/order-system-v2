@@ -51,7 +51,7 @@ export const OrderItemDetailPage = () => {
   const itemCount = useMemo(() => detail?.order.items.length ?? 0, [detail]);
 
   if (error) {
-    return <ErrorState title="アイテム詳細を表示できません" description={error} />;
+    return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   }
 
   if (!loaded) {
@@ -59,7 +59,7 @@ export const OrderItemDetailPage = () => {
   }
 
   if (!detail) {
-    return <EmptyState title="対象データがありません" description="一覧から再度選択してください" />;
+    return <EmptyState title="データがありません" description="対象データが見つかりません。一覧から再度選択してください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
   }
 
   return (
