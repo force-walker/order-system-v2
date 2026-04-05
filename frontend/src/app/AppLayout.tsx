@@ -17,6 +17,7 @@ export const AppLayout = () => {
           <NavLink to="/orders" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>注文一覧</NavLink>
           <NavLink to="/products" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>商品</NavLink>
           <NavLink to="/customers" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>顧客</NavLink>
+          <NavLink to="/dev/ui-states" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>UI States</NavLink>
         </nav>
       </header>
 
