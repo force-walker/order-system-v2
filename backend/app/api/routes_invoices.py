@@ -1,6 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
@@ -11,6 +11,7 @@ from app.schemas.invoice import (
     InvoiceCreateRequest,
     InvoiceFinalizeResponse,
     InvoiceGenerateRequest,
+    InvoiceItemResponse,
     InvoiceResetRequest,
     InvoiceResetResponse,
     InvoiceResponse,
@@ -100,6 +101,22 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
     return InvoiceResponse.model_validate(row)
 
 
+@router.get("", response_model=list[InvoiceResponse])
+def list_invoices(
+    order_id: int | None = Query(default=None, gt=0),
+    status: InvoiceStatus | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> list[InvoiceResponse]:
+    query = db.query(Invoice)
+    if order_id is not None:
+        order = _get_order_or_404(db, order_id)
+        query = query.filter(Invoice.customer_id == order.customer_id, Invoice.delivery_date == order.delivery_date)
+    if status is not None:
+        query = query.filter(Invoice.status == status)
+    rows = query.order_by(Invoice.id.desc()).all()
+    return [InvoiceResponse.model_validate(row) for row in rows]
+
+
 @router.get(
     "/{invoice_id}",
     response_model=InvoiceResponse,
@@ -108,6 +125,17 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
 def get_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceResponse:
     row = _get_invoice_or_404(db, invoice_id)
     return InvoiceResponse.model_validate(row)
+
+
+@router.get(
+    "/{invoice_id}/items",
+    response_model=list[InvoiceItemResponse],
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def list_invoice_items(invoice_id: int, db: Session = Depends(get_db)) -> list[InvoiceItemResponse]:
+    _get_invoice_or_404(db, invoice_id)
+    rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.id.asc()).all()
+    return [InvoiceItemResponse.model_validate(row) for row in rows]
 
 
 @router.post(
