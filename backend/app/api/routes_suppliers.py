@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Supplier
+from app.models.entities import PurchaseResult, Supplier, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.supplier import SupplierCreateRequest, SupplierResponse, SupplierUpdateRequest
 
@@ -74,3 +75,38 @@ def update_supplier(supplier_id: int, payload: SupplierUpdateRequest, db: Sessio
     db.commit()
     db.refresh(row)
     return SupplierResponse.model_validate(row)
+
+
+@router.delete(
+    "/{supplier_id}",
+    status_code=204,
+    responses={
+        **SUPPLIER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def delete_supplier(supplier_id: int, db: Session = Depends(get_db)) -> Response:
+    row = db.query(Supplier).filter(Supplier.id == supplier_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "supplier not found"})
+
+    has_allocation_ref = (
+        db.query(SupplierAllocation.id)
+        .filter(or_(SupplierAllocation.suggested_supplier_id == supplier_id, SupplierAllocation.final_supplier_id == supplier_id))
+        .first()
+        is not None
+    )
+    has_purchase_ref = db.query(PurchaseResult.id).filter(PurchaseResult.supplier_id == supplier_id).first() is not None
+
+    if has_allocation_ref or has_purchase_ref:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "SUPPLIER_IN_USE", "message": "supplier is referenced by allocation or purchase result"},
+        )
+
+    db.delete(row)
+    db.flush()
+    write_audit_log(db, entity_type="supplier", entity_id=supplier_id, action=AuditAction.CANCEL)
+    db.commit()
+    return Response(status_code=204)
