@@ -235,14 +235,28 @@ def test_update_supplier_success_and_not_found():
     supplier_id = _seed_supplier("SUP-UPD")
     client = _client()
 
-    ok = client.patch(f"/api/v1/suppliers/{supplier_id}", json={"name": "Updated Supplier", "active": False})
+    ok = client.patch(
+        f"/api/v1/suppliers/{supplier_id}",
+        json={"supplier_code": "SUP-UPD-NEW", "name": "Updated Supplier", "active": False},
+    )
     assert ok.status_code == 200
+    assert ok.json()["supplier_code"] == "SUP-UPD-NEW"
     assert ok.json()["name"] == "Updated Supplier"
     assert ok.json()["active"] is False
 
     nf = client.patch("/api/v1/suppliers/999999", json={"name": "x"})
     assert nf.status_code == 404
     assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
+
+
+def test_update_supplier_code_duplicate_is_409():
+    sid1 = _seed_supplier("SUP-CODE-1")
+    _seed_supplier("SUP-CODE-2")
+    client = _client()
+
+    dup = client.patch(f"/api/v1/suppliers/{sid1}", json={"supplier_code": "SUP-CODE-2"})
+    assert dup.status_code == 409
+    assert dup.json()["detail"]["code"] == "SUPPLIER_CODE_ALREADY_EXISTS"
 
 
 def test_update_supplier_validation_error_is_422():

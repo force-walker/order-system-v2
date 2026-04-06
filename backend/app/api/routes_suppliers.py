@@ -72,7 +72,11 @@ def create_supplier(payload: SupplierCreateRequest, db: Session = Depends(get_db
 @router.patch(
     "/{supplier_id}",
     response_model=SupplierResponse,
-    responses={**SUPPLIER_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+    responses={
+        **SUPPLIER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
 )
 def update_supplier(supplier_id: int, payload: SupplierUpdateRequest, db: Session = Depends(get_db)) -> SupplierResponse:
     row = db.query(Supplier).filter(Supplier.id == supplier_id).first()
@@ -80,6 +84,15 @@ def update_supplier(supplier_id: int, payload: SupplierUpdateRequest, db: Sessio
         raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "supplier not found"})
 
     data = payload.model_dump(exclude_unset=True)
+
+    if "supplier_code" in data and data["supplier_code"] != row.supplier_code:
+        conflict = db.query(Supplier).filter(Supplier.supplier_code == data["supplier_code"], Supplier.id != supplier_id).first()
+        if conflict is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "SUPPLIER_CODE_ALREADY_EXISTS", "message": "supplier code already exists"},
+            )
+
     for k, v in data.items():
         setattr(row, k, v)
 
