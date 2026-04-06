@@ -8,7 +8,18 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Supplier
+from app.models.entities import (
+    Customer,
+    Order,
+    OrderItem,
+    OrderStatus,
+    PricingBasis,
+    Product,
+    PurchaseResult,
+    PurchaseResultStatus,
+    Supplier,
+    SupplierAllocation,
+)
 
 
 engine = create_engine(
@@ -49,6 +60,133 @@ def _seed_supplier(code: str = "SUP-001") -> int:
     sid = row.id
     db.close()
     return sid
+
+
+def _seed_allocation_reference_supplier(supplier_id: int) -> None:
+    db = TestingSessionLocal()
+
+    c = Customer(customer_code=f"C-SUP-{datetime.now(UTC).timestamp()}", name="C", active=True)
+    db.add(c)
+    db.flush()
+
+    p = Product(
+        sku=f"SKU-SUP-{datetime.now(UTC).timestamp()}",
+        name="P",
+        order_uom="count",
+        purchase_uom="count",
+        invoice_uom="count",
+        is_catch_weight=False,
+        weight_capture_required=False,
+        pricing_basis_default=PricingBasis.uom_count,
+        active=True,
+    )
+    db.add(p)
+    db.flush()
+
+    o = Order(
+        order_no=f"ORD-SUP-{datetime.now(UTC).timestamp()}",
+        customer_id=c.id,
+        order_datetime=datetime.now(UTC),
+        delivery_date=datetime.now(UTC).date(),
+        status=OrderStatus.confirmed,
+        note=None,
+    )
+    db.add(o)
+    db.flush()
+
+    item = OrderItem(
+        order_id=o.id,
+        product_id=p.id,
+        ordered_qty=1,
+        pricing_basis=PricingBasis.uom_count,
+        unit_price_uom_count=100,
+        unit_price_uom_kg=None,
+    )
+    db.add(item)
+    db.flush()
+
+    db.add(
+        SupplierAllocation(
+            order_item_id=item.id,
+            suggested_supplier_id=supplier_id,
+            final_supplier_id=supplier_id,
+            suggested_qty=1,
+            final_qty=1,
+            final_uom="count",
+        )
+    )
+    db.commit()
+    db.close()
+
+
+def _seed_purchase_result_reference_supplier(supplier_id: int) -> None:
+    db = TestingSessionLocal()
+
+    c = Customer(customer_code=f"C-SUP-PR-{datetime.now(UTC).timestamp()}", name="C", active=True)
+    db.add(c)
+    db.flush()
+
+    p = Product(
+        sku=f"SKU-SUP-PR-{datetime.now(UTC).timestamp()}",
+        name="P",
+        order_uom="count",
+        purchase_uom="count",
+        invoice_uom="count",
+        is_catch_weight=False,
+        weight_capture_required=False,
+        pricing_basis_default=PricingBasis.uom_count,
+        active=True,
+    )
+    db.add(p)
+    db.flush()
+
+    o = Order(
+        order_no=f"ORD-SUP-PR-{datetime.now(UTC).timestamp()}",
+        customer_id=c.id,
+        order_datetime=datetime.now(UTC),
+        delivery_date=datetime.now(UTC).date(),
+        status=OrderStatus.confirmed,
+        note=None,
+    )
+    db.add(o)
+    db.flush()
+
+    item = OrderItem(
+        order_id=o.id,
+        product_id=p.id,
+        ordered_qty=1,
+        pricing_basis=PricingBasis.uom_count,
+        unit_price_uom_count=100,
+        unit_price_uom_kg=None,
+    )
+    db.add(item)
+    db.flush()
+
+    alloc = SupplierAllocation(
+        order_item_id=item.id,
+        suggested_supplier_id=supplier_id,
+        final_supplier_id=supplier_id,
+        suggested_qty=1,
+        final_qty=1,
+        final_uom="count",
+    )
+    db.add(alloc)
+    db.flush()
+
+    db.add(
+        PurchaseResult(
+            allocation_id=alloc.id,
+            supplier_id=supplier_id,
+            purchased_qty=1,
+            purchased_uom="count",
+            result_status=PurchaseResultStatus.filled,
+            invoiceable_flag=True,
+            recorded_by="tester",
+        )
+    )
+
+    db.commit()
+    db.close()
 
 
 def test_list_suppliers():
@@ -113,3 +251,35 @@ def test_update_supplier_validation_error_is_422():
 
     bad = client.patch(f"/api/v1/suppliers/{supplier_id}", json={"name": ""})
     assert bad.status_code == 422
+
+
+def test_delete_supplier_success_and_not_found():
+    supplier_id = _seed_supplier("SUP-DEL")
+    client = _client()
+
+    deleted = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    assert deleted.status_code == 204
+
+    nf = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    assert nf.status_code == 404
+    assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
+
+
+def test_delete_supplier_in_use_by_allocation_is_409():
+    supplier_id = _seed_supplier("SUP-USED-ALLOC")
+    _seed_allocation_reference_supplier(supplier_id)
+    client = _client()
+
+    blocked = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "SUPPLIER_IN_USE"
+
+
+def test_delete_supplier_in_use_by_purchase_result_is_409():
+    supplier_id = _seed_supplier("SUP-USED-PR")
+    _seed_purchase_result_reference_supplier(supplier_id)
+    client = _client()
+
+    blocked = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "SUPPLIER_IN_USE"
