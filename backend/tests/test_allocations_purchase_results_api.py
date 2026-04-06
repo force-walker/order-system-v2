@@ -34,7 +34,7 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _seed_allocation() -> int:
+def _seed_allocation(final_qty: float = 3, final_supplier_id: int | None = None, suggested_supplier_id: int | None = 100) -> int:
     db = TestingSessionLocal()
     c = Customer(customer_code=f"C-{datetime.now(UTC).timestamp()}", name="C", active=True, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
     db.add(c)
@@ -84,10 +84,11 @@ def _seed_allocation() -> int:
 
     alloc = SupplierAllocation(
         order_item_id=item.id,
-        suggested_supplier_id=100,
+        suggested_supplier_id=suggested_supplier_id,
         suggested_qty=3,
         target_price=10,
-        final_qty=3,
+        final_supplier_id=final_supplier_id,
+        final_qty=final_qty,
         final_uom="count",
     )
     db.add(alloc)
@@ -141,8 +142,8 @@ def test_allocation_validation_error_is_422():
     assert bad.status_code == 422
 
 
-def test_purchase_result_create_update_bulk_upsert():
-    aid = _seed_allocation()
+def test_purchase_result_create_get_list_update_bulk_upsert():
+    aid = _seed_allocation(final_qty=10)
     client = _client()
 
     created = client.post(
@@ -167,6 +168,14 @@ def test_purchase_result_create_update_bulk_upsert():
     assert created.json()["supplier_id"] == 555
     assert float(created.json()["actual_weight_kg"]) == 2.5
     assert created.json()["recorded_by"] == "tester"
+
+    got = client.get(f"/api/v1/purchase-results/{rid}")
+    assert got.status_code == 200
+    assert got.json()["id"] == rid
+
+    listed = client.get(f"/api/v1/purchase-results?allocation_id={aid}")
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
 
     dup = client.post(
         "/api/v1/purchase-results",
@@ -200,3 +209,51 @@ def test_purchase_result_create_update_bulk_upsert():
     )
     assert upsert.status_code == 200
     assert upsert.json()["upserted_count"] == 1
+
+
+def test_purchase_result_defaults_supplier_from_allocation():
+    aid = _seed_allocation(final_qty=3, final_supplier_id=777, suggested_supplier_id=100)
+    client = _client()
+
+    created = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "purchased_qty": 1,
+            "purchased_uom": "count",
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["supplier_id"] == 777
+
+
+def test_purchase_result_quantity_limit_is_422():
+    aid = _seed_allocation(final_qty=3)
+    client = _client()
+
+    first = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "purchased_qty": 2,
+            "purchased_uom": "count",
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "purchased_qty": 2,
+            "purchased_uom": "count",
+            "result_status": "partially_filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert second.status_code == 422
+    assert second.json()["detail"]["code"] == "PURCHASE_QTY_EXCEEDS_ALLOCATION"
