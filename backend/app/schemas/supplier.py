@@ -9,6 +9,11 @@ class SupplierCreateRequest(BaseModel):
     active: bool = True
 
 
+class SupplierUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    active: bool | None = None
+
+
 class SupplierResponse(BaseModel):
     id: int
     supplier_code: str

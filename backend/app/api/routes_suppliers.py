@@ -5,7 +5,7 @@ from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
 from app.models.entities import Supplier
 from app.schemas.common import ApiErrorResponse
-from app.schemas.supplier import SupplierCreateRequest, SupplierResponse
+from app.schemas.supplier import SupplierCreateRequest, SupplierResponse, SupplierUpdateRequest
 
 router = APIRouter(prefix="/api/v1/suppliers", tags=["suppliers"])
 
@@ -50,6 +50,27 @@ def create_supplier(payload: SupplierCreateRequest, db: Session = Depends(get_db
     db.add(row)
     db.flush()
     write_audit_log(db, entity_type="supplier", entity_id=row.id, action=AuditAction.CREATE)
+    db.commit()
+    db.refresh(row)
+    return SupplierResponse.model_validate(row)
+
+
+@router.patch(
+    "/{supplier_id}",
+    response_model=SupplierResponse,
+    responses={**SUPPLIER_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def update_supplier(supplier_id: int, payload: SupplierUpdateRequest, db: Session = Depends(get_db)) -> SupplierResponse:
+    row = db.query(Supplier).filter(Supplier.id == supplier_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "supplier not found"})
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(row, k, v)
+
+    db.flush()
+    write_audit_log(db, entity_type="supplier", entity_id=row.id, action=AuditAction.UPDATE)
     db.commit()
     db.refresh(row)
     return SupplierResponse.model_validate(row)
