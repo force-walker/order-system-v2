@@ -69,3 +69,6 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     purchase_list_params = {p["name"] for p in spec["paths"]["/api/v1/purchase-results"]["get"]["parameters"]}
     assert {"allocation_id", "supplier_id", "limit", "offset"}.issubset(purchase_list_params)
+
+    supplier_list_params = {p["name"] for p in spec["paths"]["/api/v1/suppliers"]["get"]["parameters"]}
+    assert {"q", "active", "limit", "offset"}.issubset(supplier_list_params)
