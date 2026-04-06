@@ -253,36 +253,50 @@ def test_update_supplier_validation_error_is_422():
     assert bad.status_code == 422
 
 
-def test_delete_supplier_success_and_not_found():
+def test_delete_supplier_soft_delete_and_not_found():
     supplier_id = _seed_supplier("SUP-DEL")
     client = _client()
 
     deleted = client.delete(f"/api/v1/suppliers/{supplier_id}")
     assert deleted.status_code == 204
 
-    nf = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    detail = client.get(f"/api/v1/suppliers/{supplier_id}")
+    assert detail.status_code == 200
+    assert detail.json()["active"] is False
+
+    # idempotent soft delete
+    deleted_again = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    assert deleted_again.status_code == 204
+
+    nf = client.delete("/api/v1/suppliers/999999")
     assert nf.status_code == 404
     assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
 
 
-def test_delete_supplier_in_use_by_allocation_is_409():
+def test_delete_supplier_in_use_by_allocation_is_allowed_with_soft_delete():
     supplier_id = _seed_supplier("SUP-USED-ALLOC")
     _seed_allocation_reference_supplier(supplier_id)
     client = _client()
 
-    blocked = client.delete(f"/api/v1/suppliers/{supplier_id}")
-    assert blocked.status_code == 409
-    assert blocked.json()["detail"]["code"] == "SUPPLIER_IN_USE"
+    deleted = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    assert deleted.status_code == 204
+
+    detail = client.get(f"/api/v1/suppliers/{supplier_id}")
+    assert detail.status_code == 200
+    assert detail.json()["active"] is False
 
 
-def test_delete_supplier_in_use_by_purchase_result_is_409():
+def test_delete_supplier_in_use_by_purchase_result_is_allowed_with_soft_delete():
     supplier_id = _seed_supplier("SUP-USED-PR")
     _seed_purchase_result_reference_supplier(supplier_id)
     client = _client()
 
-    blocked = client.delete(f"/api/v1/suppliers/{supplier_id}")
-    assert blocked.status_code == 409
-    assert blocked.json()["detail"]["code"] == "SUPPLIER_IN_USE"
+    deleted = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    assert deleted.status_code == 204
+
+    detail = client.get(f"/api/v1/suppliers/{supplier_id}")
+    assert detail.status_code == 200
+    assert detail.json()["active"] is False
 
 
 def test_list_suppliers_filters_and_paging():

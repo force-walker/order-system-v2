@@ -26,7 +26,6 @@ def test_openapi_error_contracts_for_core_apis():
     assert "404" in _responses("/api/v1/suppliers/{supplier_id}", "get")
     assert "422" in _responses("/api/v1/suppliers/{supplier_id}", "patch")
     assert "404" in _responses("/api/v1/suppliers/{supplier_id}", "patch")
-    assert "409" in _responses("/api/v1/suppliers/{supplier_id}", "delete")
     assert "422" in _responses("/api/v1/suppliers/{supplier_id}", "delete")
     assert "404" in _responses("/api/v1/suppliers/{supplier_id}", "delete")
 
