@@ -240,3 +240,27 @@ def test_finalize_invoice_without_items_is_409():
     fin = client.post(f"/api/v1/invoices/{created.json()['id']}/finalize")
     assert fin.status_code == 409
     assert fin.json()["detail"]["code"] == "INVOICE_ITEMS_REQUIRED"
+
+
+def test_list_invoice_items_and_invoice_filters():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+
+    gen = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-LIST-1", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    assert gen.status_code == 201
+    invoice_id = gen.json()["id"]
+
+    items = client.get(f"/api/v1/invoices/{invoice_id}/items")
+    assert items.status_code == 200
+    assert len(items.json()) == 2
+
+    filtered_by_status = client.get("/api/v1/invoices?status=draft")
+    assert filtered_by_status.status_code == 200
+    assert any(row["id"] == invoice_id for row in filtered_by_status.json())
+
+    filtered_by_order = client.get(f"/api/v1/invoices?order_id={order_id}")
+    assert filtered_by_order.status_code == 200
+    assert any(row["id"] == invoice_id for row in filtered_by_order.json())

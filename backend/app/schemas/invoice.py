@@ -37,6 +37,23 @@ class InvoiceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class InvoiceItemResponse(BaseModel):
+    id: int
+    invoice_id: int
+    order_item_id: int
+    billable_qty: float
+    billable_uom: str
+    invoice_line_status: str
+    sales_unit_price: float
+    unit_cost_basis: float | None
+    line_amount: float
+    tax_amount: float
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class InvoiceFinalizeResponse(BaseModel):
     invoice_id: int
     status: InvoiceStatus
