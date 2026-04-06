@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -16,8 +16,21 @@ SUPPLIER_COMMON_ERROR_RESPONSES = {
 
 
 @router.get("", response_model=list[SupplierResponse])
-def list_suppliers(db: Session = Depends(get_db)) -> list[SupplierResponse]:
-    rows = db.query(Supplier).order_by(Supplier.id.asc()).all()
+def list_suppliers(
+    q: str | None = Query(default=None, min_length=1, max_length=255),
+    active: bool | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[SupplierResponse]:
+    query = db.query(Supplier)
+    if q is not None:
+        pattern = f"%{q}%"
+        query = query.filter(or_(Supplier.supplier_code.ilike(pattern), Supplier.name.ilike(pattern)))
+    if active is not None:
+        query = query.filter(Supplier.active == active)
+
+    rows = query.order_by(Supplier.id.asc()).offset(offset).limit(limit).all()
     return [SupplierResponse.model_validate(row) for row in rows]
 
 

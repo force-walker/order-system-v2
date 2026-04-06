@@ -283,3 +283,25 @@ def test_delete_supplier_in_use_by_purchase_result_is_409():
     blocked = client.delete(f"/api/v1/suppliers/{supplier_id}")
     assert blocked.status_code == 409
     assert blocked.json()["detail"]["code"] == "SUPPLIER_IN_USE"
+
+
+def test_list_suppliers_filters_and_paging():
+    s1 = _seed_supplier("SUP-FLT-001")
+    s2 = _seed_supplier("SUP-FLT-002")
+    s3 = _seed_supplier("SUP-FLT-003")
+
+    client = _client()
+    client.patch(f"/api/v1/suppliers/{s2}", json={"name": "Fresh Supplier", "active": False})
+    client.patch(f"/api/v1/suppliers/{s3}", json={"name": "Frozen Supplier", "active": True})
+
+    by_q = client.get("/api/v1/suppliers?q=Frozen")
+    assert by_q.status_code == 200
+    assert all("Frozen" in row["name"] for row in by_q.json())
+
+    by_active = client.get("/api/v1/suppliers?active=false")
+    assert by_active.status_code == 200
+    assert all(row["active"] is False for row in by_active.json())
+
+    paged = client.get("/api/v1/suppliers?limit=1&offset=1")
+    assert paged.status_code == 200
+    assert len(paged.json()) == 1
