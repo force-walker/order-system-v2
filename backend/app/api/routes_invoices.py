@@ -43,6 +43,13 @@ def _ensure_invoice_no_unique(db: Session, invoice_no: str) -> None:
         raise HTTPException(status_code=409, detail={"code": "INVOICE_NO_ALREADY_EXISTS", "message": "invoice_no already exists"})
 
 
+def _get_invoice_or_404(db: Session, invoice_id: int) -> Invoice:
+    row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "INVOICE_NOT_FOUND", "message": "invoice not found"})
+    return row
+
+
 def _amount(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -76,7 +83,18 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
     )
     db.add(row)
     db.flush()
-    write_audit_log(db, entity_type="invoice", entity_id=row.id, action=AuditAction.CREATE)
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=row.id,
+        action=AuditAction.CREATE,
+        after={
+            "status": row.status.value,
+            "is_locked": row.is_locked,
+            "subtotal": float(row.subtotal),
+            "grand_total": float(row.grand_total),
+        },
+    )
     db.commit()
     db.refresh(row)
     return InvoiceResponse.model_validate(row)
@@ -88,9 +106,7 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
     responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
 )
 def get_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceResponse:
-    row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "INVOICE_NOT_FOUND", "message": "invoice not found"})
+    row = _get_invoice_or_404(db, invoice_id)
     return InvoiceResponse.model_validate(row)
 
 
@@ -175,7 +191,20 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
     invoice.tax_total = 0
     invoice.grand_total = float(_amount(subtotal))
 
-    write_audit_log(db, entity_type="invoice", entity_id=invoice.id, action=AuditAction.CREATE)
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        action=AuditAction.CREATE,
+        after={
+            "status": invoice.status.value,
+            "is_locked": invoice.is_locked,
+            "subtotal": float(invoice.subtotal),
+            "grand_total": float(invoice.grand_total),
+            "source_order_id": order.id,
+            "generated_item_count": len(order_items),
+        },
+    )
     db.commit()
     db.refresh(invoice)
     return InvoiceResponse.model_validate(invoice)
@@ -191,16 +220,28 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
     },
 )
 def finalize_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceFinalizeResponse:
-    row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "INVOICE_NOT_FOUND", "message": "invoice not found"})
+    row = _get_invoice_or_404(db, invoice_id)
     if row.status != InvoiceStatus.draft:
         raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
+    if row.is_locked:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_ALREADY_LOCKED", "message": "invoice is already locked"})
 
+    has_items = db.query(InvoiceItem.id).filter(InvoiceItem.invoice_id == row.id).first() is not None
+    if not has_items:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_ITEMS_REQUIRED", "message": "invoice must have at least one item"})
+
+    before = {"status": row.status.value, "is_locked": row.is_locked}
     row.status = InvoiceStatus.finalized
     row.is_locked = True
     db.flush()
-    write_audit_log(db, entity_type="invoice", entity_id=row.id, action=AuditAction.FINALIZE)
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=row.id,
+        action=AuditAction.FINALIZE,
+        before=before,
+        after={"status": row.status.value, "is_locked": row.is_locked},
+    )
     db.commit()
     return InvoiceFinalizeResponse(invoice_id=row.id, status=row.status, is_locked=row.is_locked)
 
@@ -215,12 +256,11 @@ def finalize_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceF
     },
 )
 def reset_to_draft(invoice_id: int, payload: InvoiceResetRequest, db: Session = Depends(get_db)) -> InvoiceResetResponse:
-    row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "INVOICE_NOT_FOUND", "message": "invoice not found"})
+    row = _get_invoice_or_404(db, invoice_id)
     if row.status != InvoiceStatus.finalized:
         raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_FINALIZED", "message": "invoice is not finalized"})
 
+    before = {"status": row.status.value, "is_locked": row.is_locked}
     row.status = InvoiceStatus.draft
     row.is_locked = False
     db.flush()
@@ -230,6 +270,8 @@ def reset_to_draft(invoice_id: int, payload: InvoiceResetRequest, db: Session = 
         entity_id=row.id,
         action=AuditAction.RESET_TO_DRAFT,
         reason_code=payload.reset_reason_code,
+        before=before,
+        after={"status": row.status.value, "is_locked": row.is_locked},
     )
     db.commit()
     return InvoiceResetResponse(invoice_id=row.id, status=row.status)
@@ -245,15 +287,14 @@ def reset_to_draft(invoice_id: int, payload: InvoiceResetRequest, db: Session = 
     },
 )
 def unlock_invoice(invoice_id: int, payload: InvoiceUnlockRequest, db: Session = Depends(get_db)) -> InvoiceUnlockResponse:
-    row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "INVOICE_NOT_FOUND", "message": "invoice not found"})
+    row = _get_invoice_or_404(db, invoice_id)
     if row.status != InvoiceStatus.finalized or not row.is_locked:
         raise HTTPException(
             status_code=409,
             detail={"code": "INVOICE_NOT_LOCKED_FINALIZED", "message": "target must be finalized and locked"},
         )
 
+    before = {"status": row.status.value, "is_locked": row.is_locked}
     row.is_locked = False
     db.flush()
     write_audit_log(
@@ -262,6 +303,8 @@ def unlock_invoice(invoice_id: int, payload: InvoiceUnlockRequest, db: Session =
         entity_id=row.id,
         action=AuditAction.UNLOCK,
         reason_code=payload.unlock_reason_code,
+        before=before,
+        after={"status": row.status.value, "is_locked": row.is_locked},
     )
     db.commit()
     return InvoiceUnlockResponse(invoice_id=row.id, status=row.status, is_locked=row.is_locked)

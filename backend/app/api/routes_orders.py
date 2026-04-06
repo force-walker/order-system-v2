@@ -112,20 +112,40 @@ def bulk_transition_order(order_id: int, payload: OrderBulkTransitionRequest, db
         raise HTTPException(status_code=409, detail={"code": "ORDER_STATUS_MISMATCH", "message": "order status mismatch"})
 
     from_line, to_line = _TRANSITION_RULES[key]
-    lines = db.query(OrderItem).filter(OrderItem.order_id == order_id, OrderItem.line_status == from_line).all()
-    if not lines:
+    all_lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+    if not all_lines:
         raise HTTPException(status_code=409, detail={"code": "STATUS_NO_TARGET_LINES", "message": "no eligible lines"})
 
-    for line in lines:
+    invalid_lines = [line for line in all_lines if line.line_status != from_line]
+    if invalid_lines:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "LINE_STATUS_MISMATCH", "message": "all order lines must match from_status before transition"},
+        )
+
+    before = {
+        "order_status": order.status.value,
+        "line_status": from_line.value,
+        "line_count": len(all_lines),
+    }
+
+    for line in all_lines:
         line.line_status = to_line
 
     order.status = payload.to_status
     order.updated_by = "system_api"
     db.flush()
-    write_audit_log(db, entity_type="order", entity_id=order.id, action=AuditAction.BULK_TRANSITION)
+    write_audit_log(
+        db,
+        entity_type="order",
+        entity_id=order.id,
+        action=AuditAction.BULK_TRANSITION,
+        before=before,
+        after={"order_status": order.status.value, "line_status": to_line.value, "line_count": len(all_lines)},
+    )
     db.commit()
 
-    return OrderBulkTransitionResponse(order_id=order.id, updated_lines=len(lines), updated_order_status=order.status)
+    return OrderBulkTransitionResponse(order_id=order.id, updated_lines=len(all_lines), updated_order_status=order.status)
 
 
 @router.post(

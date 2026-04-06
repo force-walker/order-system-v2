@@ -134,11 +134,11 @@ def test_create_invoice_invalid_date_range_is_422():
 
 
 def test_create_finalize_unlock_reset_invoice_flow():
-    order_id = _seed_order()
+    order_id = _seed_order(with_items=True)
     client = _client()
 
     created = client.post(
-        "/api/v1/invoices",
+        "/api/v1/invoices/generate",
         json={"invoice_no": "INV-001", "order_id": order_id, "invoice_date": str(date.today())},
     )
     assert created.status_code == 201
@@ -161,7 +161,7 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert unlock.json()["is_locked"] is False
 
     fin2 = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
-    assert fin2.status_code == 409
+    assert fin2.status_code == 200
 
     reset = client.post(
         f"/api/v1/invoices/{invoice_id}/reset-to-draft",
@@ -225,3 +225,18 @@ def test_generate_invoice_missing_actual_weight_is_422():
     )
     assert res.status_code == 422
     assert res.json()["detail"]["code"] == "MISSING_ACTUAL_WEIGHT"
+
+
+def test_finalize_invoice_without_items_is_409():
+    order_id = _seed_order(with_items=False)
+    client = _client()
+
+    created = client.post(
+        "/api/v1/invoices",
+        json={"invoice_no": "INV-NO-ITEMS", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    assert created.status_code == 201
+
+    fin = client.post(f"/api/v1/invoices/{created.json()['id']}/finalize")
+    assert fin.status_code == 409
+    assert fin.json()["detail"]["code"] == "INVOICE_ITEMS_REQUIRED"

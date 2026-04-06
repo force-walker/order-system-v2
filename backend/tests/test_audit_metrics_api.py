@@ -158,3 +158,6 @@ def test_audit_logs_are_written_for_mutating_operations():
         item = timeline.json()["items"][0]
         assert item["action"] == expected_actions[entity_type]
         assert item["actor"]["id"] == "system_api"
+        if entity_type == "invoice":
+            assert item["after"] is not None
+            assert "status" in item["after"]
