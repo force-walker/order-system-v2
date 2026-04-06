@@ -257,3 +257,35 @@ def test_purchase_result_quantity_limit_is_422():
     )
     assert second.status_code == 422
     assert second.json()["detail"]["code"] == "PURCHASE_QTY_EXCEEDS_ALLOCATION"
+
+
+def test_purchase_result_list_filters_supplier_and_paging():
+    aid = _seed_allocation(final_qty=10)
+    client = _client()
+
+    for supplier_id in [101, 102, 101]:
+        created = client.post(
+            "/api/v1/purchase-results",
+            json={
+                "allocation_id": aid,
+                "supplier_id": supplier_id,
+                "purchased_qty": 1,
+                "purchased_uom": "count",
+                "result_status": "filled",
+                "invoiceable_flag": True,
+            },
+        )
+        assert created.status_code == 201
+
+    all_rows = client.get(f"/api/v1/purchase-results?allocation_id={aid}")
+    assert all_rows.status_code == 200
+    assert len(all_rows.json()) == 3
+
+    filtered = client.get(f"/api/v1/purchase-results?allocation_id={aid}&supplier_id=101")
+    assert filtered.status_code == 200
+    assert len(filtered.json()) == 2
+    assert all(row["supplier_id"] == 101 for row in filtered.json())
+
+    paged = client.get(f"/api/v1/purchase-results?allocation_id={aid}&limit=1&offset=1")
+    assert paged.status_code == 200
+    assert len(paged.json()) == 1
