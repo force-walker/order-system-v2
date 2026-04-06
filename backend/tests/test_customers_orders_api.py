@@ -293,6 +293,33 @@ def test_order_bulk_transition_invalid_pair():
     assert bad.json()["detail"]["code"] == "INVALID_TRANSITION_PAIR"
 
 
+def test_order_bulk_transition_line_status_mismatch_is_409():
+    order_id = _seed_order_with_open_line()
+    client = _client()
+
+    # first transition to allocated (line status becomes allocated)
+    ok = client.post(
+        f"/api/v1/orders/{order_id}/bulk-transition",
+        json={"from_status": "confirmed", "to_status": "allocated"},
+    )
+    assert ok.status_code == 200
+
+    # manually force order header back to confirmed to simulate inconsistent state
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).first()
+    assert order is not None
+    order.status = OrderStatus.confirmed
+    db.commit()
+    db.close()
+
+    bad = client.post(
+        f"/api/v1/orders/{order_id}/bulk-transition",
+        json={"from_status": "confirmed", "to_status": "allocated"},
+    )
+    assert bad.status_code == 409
+    assert bad.json()["detail"]["code"] == "LINE_STATUS_MISMATCH"
+
+
 def test_order_bulk_transition_same_status_is_422():
     order_id = _seed_order_with_open_line()
     client = _client()
