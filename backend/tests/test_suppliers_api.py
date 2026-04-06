@@ -91,3 +91,25 @@ def test_create_supplier_validation_error_is_422():
 
     bad = client.post("/api/v1/suppliers", json={"supplier_code": ""})
     assert bad.status_code == 422
+
+
+def test_update_supplier_success_and_not_found():
+    supplier_id = _seed_supplier("SUP-UPD")
+    client = _client()
+
+    ok = client.patch(f"/api/v1/suppliers/{supplier_id}", json={"name": "Updated Supplier", "active": False})
+    assert ok.status_code == 200
+    assert ok.json()["name"] == "Updated Supplier"
+    assert ok.json()["active"] is False
+
+    nf = client.patch("/api/v1/suppliers/999999", json={"name": "x"})
+    assert nf.status_code == 404
+    assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
+
+
+def test_update_supplier_validation_error_is_422():
+    supplier_id = _seed_supplier("SUP-UPD-422")
+    client = _client()
+
+    bad = client.patch(f"/api/v1/suppliers/{supplier_id}", json={"name": ""})
+    assert bad.status_code == 422
