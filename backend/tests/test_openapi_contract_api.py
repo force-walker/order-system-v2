@@ -20,6 +20,11 @@ def test_openapi_error_contracts_for_core_apis():
     assert "409" in _responses("/api/v1/customers", "post")
     assert "422" in _responses("/api/v1/customers", "post")
 
+    # suppliers
+    assert "409" in _responses("/api/v1/suppliers", "post")
+    assert "422" in _responses("/api/v1/suppliers", "post")
+    assert "404" in _responses("/api/v1/suppliers/{supplier_id}", "get")
+
     # orders
     assert "409" in _responses("/api/v1/orders", "post")
     assert "422" in _responses("/api/v1/orders", "post")
