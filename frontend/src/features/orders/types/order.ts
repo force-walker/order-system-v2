@@ -130,3 +130,52 @@ export type ProductUpdateRequest = {
   weightCaptureRequired?: boolean;
   active?: boolean;
 };
+
+export type PurchaseResultStatus = 'not_filled' | 'filled' | 'partially_filled' | 'substituted';
+
+export type PurchaseResultItem = {
+  id: number;
+  allocationId: number;
+  supplierId?: number;
+  purchasedQty: number;
+  purchasedUom: string;
+  actualWeightKg?: number;
+  unitCost?: number;
+  finalUnitCost?: number;
+  shortageQty?: number;
+  shortagePolicy?: string;
+  resultStatus: PurchaseResultStatus;
+  invoiceableFlag: boolean;
+  recordedBy?: string;
+  recordedAt: string;
+  note?: string;
+};
+
+export type PurchaseResultFilter = {
+  allocationId?: number;
+  supplierId?: number;
+  keyword?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type PurchaseResultResponse = {
+  items: PurchaseResultItem[];
+  total: number;
+};
+
+export type PurchaseResultCreateRequest = {
+  allocationId: number;
+  supplierId?: number;
+  purchasedQty: number;
+  purchasedUom: string;
+  actualWeightKg?: number;
+  unitCost?: number;
+  finalUnitCost?: number;
+  shortageQty?: number;
+  shortagePolicy?: string;
+  resultStatus: PurchaseResultStatus;
+  invoiceableFlag: boolean;
+  recordedBy?: string;
+  note?: string;
+};
