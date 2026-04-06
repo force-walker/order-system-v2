@@ -286,7 +286,7 @@ def test_delete_supplier_in_use_by_purchase_result_is_409():
 
 
 def test_list_suppliers_filters_and_paging():
-    s1 = _seed_supplier("SUP-FLT-001")
+    _seed_supplier("SUP-FLT-001")
     s2 = _seed_supplier("SUP-FLT-002")
     s3 = _seed_supplier("SUP-FLT-003")
 
