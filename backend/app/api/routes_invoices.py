@@ -1,13 +1,16 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Invoice, InvoiceStatus, Order
+from app.models.entities import Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, PricingBasis
 from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
     InvoiceCreateRequest,
     InvoiceFinalizeResponse,
+    InvoiceGenerateRequest,
     InvoiceResetRequest,
     InvoiceResetResponse,
     InvoiceResponse,
@@ -22,6 +25,28 @@ INVOICE_COMMON_ERROR_RESPONSES = {
 }
 
 
+def _validate_due_date(invoice_date, due_date) -> None:
+    if due_date is not None and due_date < invoice_date:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_DATE_RANGE", "message": "due_date must be on or after invoice_date"})
+
+
+def _get_order_or_404(db: Session, order_id: int) -> Order:
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    return order
+
+
+def _ensure_invoice_no_unique(db: Session, invoice_no: str) -> None:
+    exists = db.query(Invoice).filter(Invoice.invoice_no == invoice_no).first()
+    if exists is not None:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_NO_ALREADY_EXISTS", "message": "invoice_no already exists"})
+
+
+def _amount(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 @router.post(
     "",
     response_model=InvoiceResponse,
@@ -33,16 +58,9 @@ INVOICE_COMMON_ERROR_RESPONSES = {
     },
 )
 def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
-    if payload.due_date is not None and payload.due_date < payload.invoice_date:
-        raise HTTPException(status_code=422, detail={"code": "INVALID_DATE_RANGE", "message": "due_date must be on or after invoice_date"})
-
-    order = db.query(Order).filter(Order.id == payload.order_id).first()
-    if order is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
-
-    exists = db.query(Invoice).filter(Invoice.invoice_no == payload.invoice_no).first()
-    if exists is not None:
-        raise HTTPException(status_code=409, detail={"code": "INVOICE_NO_ALREADY_EXISTS", "message": "invoice_no already exists"})
+    _validate_due_date(payload.invoice_date, payload.due_date)
+    order = _get_order_or_404(db, payload.order_id)
+    _ensure_invoice_no_unique(db, payload.invoice_no)
 
     row = Invoice(
         invoice_no=payload.invoice_no,
@@ -62,6 +80,105 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
     db.commit()
     db.refresh(row)
     return InvoiceResponse.model_validate(row)
+
+
+@router.get(
+    "/{invoice_id}",
+    response_model=InvoiceResponse,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def get_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceResponse:
+    row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "INVOICE_NOT_FOUND", "message": "invoice not found"})
+    return InvoiceResponse.model_validate(row)
+
+
+@router.post(
+    "/generate",
+    response_model=InvoiceResponse,
+    status_code=201,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
+    _validate_due_date(payload.invoice_date, payload.due_date)
+    order = _get_order_or_404(db, payload.order_id)
+    _ensure_invoice_no_unique(db, payload.invoice_no)
+
+    order_items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+    if not order_items:
+        raise HTTPException(status_code=422, detail={"code": "ORDER_ITEMS_NOT_FOUND", "message": "order has no items"})
+
+    invoice = Invoice(
+        invoice_no=payload.invoice_no,
+        customer_id=order.customer_id,
+        invoice_date=payload.invoice_date,
+        delivery_date=order.delivery_date,
+        due_date=payload.due_date,
+        subtotal=0,
+        tax_total=0,
+        grand_total=0,
+        status=InvoiceStatus.draft,
+        is_locked=False,
+    )
+    db.add(invoice)
+    db.flush()
+
+    subtotal = Decimal("0")
+    for item in order_items:
+        if item.pricing_basis == PricingBasis.uom_kg:
+            if item.actual_weight_kg is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "MISSING_ACTUAL_WEIGHT", "message": f"actual_weight_kg is required for order_item={item.id}"},
+                )
+            billable_qty = Decimal(str(item.actual_weight_kg))
+            unit_price = item.unit_price_uom_kg
+            billable_uom = "kg"
+        else:
+            billable_qty = Decimal(str(item.ordered_qty))
+            unit_price = item.unit_price_uom_count
+            billable_uom = "count"
+
+        if unit_price is None:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "MISSING_UNIT_PRICE", "message": f"unit price is required for order_item={item.id}"},
+            )
+
+        sales_unit_price = _amount(Decimal(str(unit_price)))
+        line_amount = _amount(billable_qty * sales_unit_price)
+        subtotal += line_amount
+
+        db.add(
+            InvoiceItem(
+                invoice_id=invoice.id,
+                order_item_id=item.id,
+                billable_qty=float(billable_qty),
+                billable_uom=billable_uom,
+                invoice_line_status="uninvoiced",
+                sales_unit_price=float(sales_unit_price),
+                unit_cost_basis=None,
+                line_amount=float(line_amount),
+                tax_amount=0,
+            )
+        )
+
+        if item.line_status in {LineStatus.open, LineStatus.allocated, LineStatus.purchased, LineStatus.shipped}:
+            item.line_status = LineStatus.invoiced
+
+    invoice.subtotal = float(_amount(subtotal))
+    invoice.tax_total = 0
+    invoice.grand_total = float(_amount(subtotal))
+
+    write_audit_log(db, entity_type="invoice", entity_id=invoice.id, action=AuditAction.CREATE)
+    db.commit()
+    db.refresh(invoice)
+    return InvoiceResponse.model_validate(invoice)
 
 
 @router.post(

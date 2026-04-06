@@ -12,6 +12,13 @@ class InvoiceCreateRequest(BaseModel):
     due_date: date | None = None
 
 
+class InvoiceGenerateRequest(BaseModel):
+    invoice_no: str = Field(min_length=1, max_length=64)
+    order_id: int = Field(gt=0)
+    invoice_date: date
+    due_date: date | None = None
+
+
 class InvoiceResponse(BaseModel):
     id: int
     invoice_no: str
