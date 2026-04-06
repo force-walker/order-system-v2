@@ -8,7 +8,15 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Customer, Order, OrderStatus
+from app.models.entities import (
+    Customer,
+    InvoiceItem,
+    Order,
+    OrderItem,
+    OrderStatus,
+    PricingBasis,
+    Product,
+)
 
 
 engine = create_engine(
@@ -34,7 +42,7 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _seed_order() -> int:
+def _seed_order(with_items: bool = False, include_kg_without_weight: bool = False) -> int:
     db = TestingSessionLocal()
     c = Customer(customer_code=f"C-I-{datetime.now(UTC).timestamp()}", name="Customer I", active=True)
     db.add(c)
@@ -49,6 +57,58 @@ def _seed_order() -> int:
         note=None,
     )
     db.add(o)
+    db.flush()
+
+    if with_items:
+        p_count = Product(
+            sku=f"SKU-C-{datetime.now(UTC).timestamp()}",
+            name="Count product",
+            order_uom="count",
+            purchase_uom="count",
+            invoice_uom="count",
+            is_catch_weight=False,
+            weight_capture_required=False,
+            pricing_basis_default=PricingBasis.uom_count,
+            active=True,
+        )
+        db.add(p_count)
+        db.flush()
+        db.add(
+            OrderItem(
+                order_id=o.id,
+                product_id=p_count.id,
+                ordered_qty=3,
+                pricing_basis=PricingBasis.uom_count,
+                unit_price_uom_count=200,
+                unit_price_uom_kg=None,
+            )
+        )
+
+        p_kg = Product(
+            sku=f"SKU-K-{datetime.now(UTC).timestamp()}",
+            name="Kg product",
+            order_uom="kg",
+            purchase_uom="kg",
+            invoice_uom="kg",
+            is_catch_weight=True,
+            weight_capture_required=True,
+            pricing_basis_default=PricingBasis.uom_kg,
+            active=True,
+        )
+        db.add(p_kg)
+        db.flush()
+        db.add(
+            OrderItem(
+                order_id=o.id,
+                product_id=p_kg.id,
+                ordered_qty=1,
+                pricing_basis=PricingBasis.uom_kg,
+                unit_price_uom_count=None,
+                unit_price_uom_kg=1000,
+                actual_weight_kg=(None if include_kg_without_weight else 1.25),
+            )
+        )
+
     db.commit()
     oid = o.id
     db.close()
@@ -84,6 +144,10 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert created.status_code == 201
     invoice_id = created.json()["id"]
 
+    got = client.get(f"/api/v1/invoices/{invoice_id}")
+    assert got.status_code == 200
+    assert got.json()["id"] == invoice_id
+
     fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert fin.status_code == 200
     assert fin.json()["status"] == "finalized"
@@ -105,3 +169,59 @@ def test_create_finalize_unlock_reset_invoice_flow():
     )
     assert reset.status_code == 200
     assert reset.json()["status"] == "draft"
+
+
+def test_generate_invoice_from_order_items_success():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+
+    res = client.post(
+        "/api/v1/invoices/generate",
+        json={
+            "invoice_no": "INV-GEN-001",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+        },
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["invoice_no"] == "INV-GEN-001"
+    assert float(body["subtotal"]) == 1850.0
+    assert float(body["grand_total"]) == 1850.0
+
+    db = TestingSessionLocal()
+    invoice_items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == body["id"]).all()
+    db.close()
+    assert len(invoice_items) == 2
+
+
+def test_generate_invoice_without_items_is_422():
+    order_id = _seed_order(with_items=False)
+    client = _client()
+
+    res = client.post(
+        "/api/v1/invoices/generate",
+        json={
+            "invoice_no": "INV-GEN-NOITEM",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+        },
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "ORDER_ITEMS_NOT_FOUND"
+
+
+def test_generate_invoice_missing_actual_weight_is_422():
+    order_id = _seed_order(with_items=True, include_kg_without_weight=True)
+    client = _client()
+
+    res = client.post(
+        "/api/v1/invoices/generate",
+        json={
+            "invoice_no": "INV-GEN-WEIGHT",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+        },
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "MISSING_ACTUAL_WEIGHT"
