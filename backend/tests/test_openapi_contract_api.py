@@ -29,12 +29,19 @@ def test_openapi_error_contracts_for_core_apis():
     # invoices
     assert "409" in _responses("/api/v1/invoices", "post")
     assert "422" in _responses("/api/v1/invoices", "post")
+    assert "409" in _responses("/api/v1/invoices/generate", "post")
+    assert "422" in _responses("/api/v1/invoices/generate", "post")
+    assert "404" in _responses("/api/v1/invoices/{invoice_id}", "get")
+    assert "404" in _responses("/api/v1/invoices/{invoice_id}/items", "get")
+    assert "409" in _responses("/api/v1/invoices/{invoice_id}/finalize", "post")
+    assert "422" in _responses("/api/v1/invoices/{invoice_id}/finalize", "post")
     assert "409" in _responses("/api/v1/invoices/{invoice_id}/unlock", "post")
     assert "422" in _responses("/api/v1/invoices/{invoice_id}/unlock", "post")
 
     # allocations / purchase-results
     assert "422" in _responses("/api/v1/allocations/{allocation_id}/override", "patch")
     assert "422" in _responses("/api/v1/purchase-results", "post")
+    assert "404" in _responses("/api/v1/purchase-results/{result_id}", "get")
 
     # auth
     assert "422" in _responses("/api/v1/auth/login", "post")
@@ -42,3 +49,13 @@ def test_openapi_error_contracts_for_core_apis():
 
     spec = client.get("/openapi.json").json()
     assert "ApiErrorResponse" in spec["components"]["schemas"]
+
+
+def test_openapi_phase2_query_filters_are_exposed():
+    spec = client.get("/openapi.json").json()
+
+    invoice_list_params = {p["name"] for p in spec["paths"]["/api/v1/invoices"]["get"]["parameters"]}
+    assert {"order_id", "status"}.issubset(invoice_list_params)
+
+    purchase_list_params = {p["name"] for p in spec["paths"]["/api/v1/purchase-results"]["get"]["parameters"]}
+    assert {"allocation_id", "supplier_id", "limit", "offset"}.issubset(purchase_list_params)
