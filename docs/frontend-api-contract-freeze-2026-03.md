@@ -1,7 +1,7 @@
 # Frontend Handoff: API Contract Freeze (MVP)
 
-Updated: 2026-03-27
-Status: **Frozen for mockup phase**
+Updated: 2026-04-06
+Status: **Frozen for phase2 UI/API integration**
 
 Purpose:
 - Freeze API contract during frontend mockup implementation.
@@ -42,11 +42,17 @@ During mockup phase, frontend should implement against these only.
 - `PATCH /api/v1/allocations/{allocation_id}/override`
 - `POST /api/v1/allocations/{allocation_id}/split-line`
 - `POST /api/v1/purchase-results`
+- `GET /api/v1/purchase-results`
+- `GET /api/v1/purchase-results/{result_id}`
 - `PATCH /api/v1/purchase-results/{result_id}`
 - `POST /api/v1/purchase-results/bulk-upsert`
 
 ### Invoices
+- `GET /api/v1/invoices`
+- `GET /api/v1/invoices/{invoice_id}`
+- `GET /api/v1/invoices/{invoice_id}/items`
 - `POST /api/v1/invoices`
+- `POST /api/v1/invoices/generate`
 - `POST /api/v1/invoices/{invoice_id}/finalize`
 - `POST /api/v1/invoices/{invoice_id}/reset-to-draft`
 - `POST /api/v1/invoices/{invoice_id}/unlock`
@@ -73,6 +79,11 @@ During mockup phase, frontend should implement against these only.
 - 409: business state conflicts
 
 Frontend should parse `detail.code` first for user messaging/branching.
+
+Phase2で優先対応するcode:
+- Invoice: `INVOICE_ITEMS_REQUIRED`, `INVOICE_NOT_DRAFT`, `INVOICE_NOT_LOCKED_FINALIZED`, `INVOICE_NO_ALREADY_EXISTS`, `ORDER_ITEMS_NOT_FOUND`, `MISSING_ACTUAL_WEIGHT`, `MISSING_UNIT_PRICE`
+- Order transition: `ORDER_STATUS_MISMATCH`, `LINE_STATUS_MISMATCH`, `INVALID_TRANSITION_PAIR`
+- Purchase: `PURCHASE_QTY_EXCEEDS_ALLOCATION`, `ALLOCATION_NOT_FOUND`
 
 ---
 

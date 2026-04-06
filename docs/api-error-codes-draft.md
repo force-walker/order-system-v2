@@ -1,7 +1,7 @@
 # API Error Codes & 409/422 Policy (MVP)
 
-Updated: 2026-03-27
-Status: Draft (current runtime aligned)
+Updated: 2026-04-06
+Status: Draft (phase2 runtime aligned)
 
 ## 1. Standard Error Response (current runtime)
 
@@ -64,10 +64,14 @@ Use **409** when payload is valid but server-side state conflicts:
 - `SKU_ALREADY_EXISTS`
 - `CUSTOMER_CODE_ALREADY_EXISTS`
 - `ORDER_NO_ALREADY_EXISTS`
+- `ORDER_NO_GENERATION_FAILED`
 - `INVOICE_NO_ALREADY_EXISTS`
 - `ORDER_STATUS_MISMATCH`
 - `STATUS_NO_TARGET_LINES`
+- `LINE_STATUS_MISMATCH`
 - `INVOICE_NOT_DRAFT`
+- `INVOICE_ALREADY_LOCKED`
+- `INVOICE_ITEMS_REQUIRED`
 - `INVOICE_NOT_FINALIZED`
 - `INVOICE_NOT_LOCKED_FINALIZED`
 - `JOB_ALREADY_RUNNING`
@@ -78,6 +82,10 @@ Use **409** when payload is valid but server-side state conflicts:
 - `INVALID_TRANSITION_PAIR`
 - `INVALID_DATE_RANGE`
 - `INVALID_ROLE`
+- `ORDER_ITEMS_NOT_FOUND`
+- `MISSING_ACTUAL_WEIGHT`
+- `MISSING_UNIT_PRICE`
+- `PURCHASE_QTY_EXCEEDS_ALLOCATION`
 - FastAPI/Pydantic validation errors (missing required, enum/type mismatch, etc.)
 
 ---
@@ -99,12 +107,32 @@ Use **409** when payload is valid but server-side state conflicts:
   - unsupported pair / same status: `422 INVALID_TRANSITION_PAIR`
   - order current status mismatch: `409 ORDER_STATUS_MISMATCH`
   - no eligible lines: `409 STATUS_NO_TARGET_LINES`
+  - line state not aligned with `from_status`: `409 LINE_STATUS_MISMATCH`
 
 ### Invoices
 - `POST /api/v1/invoices`
   - `due_date < invoice_date`: `422 INVALID_DATE_RANGE`
   - duplicate invoice no: `409 INVOICE_NO_ALREADY_EXISTS`
-- finalize/reset/unlock invalid current status: `409`
+- `POST /api/v1/invoices/generate`
+  - order has no items: `422 ORDER_ITEMS_NOT_FOUND`
+  - catch-weight line without actual weight: `422 MISSING_ACTUAL_WEIGHT`
+  - missing sales unit price on item: `422 MISSING_UNIT_PRICE`
+  - duplicate invoice no: `409 INVOICE_NO_ALREADY_EXISTS`
+- `POST /api/v1/invoices/{invoice_id}/finalize`
+  - not draft: `409 INVOICE_NOT_DRAFT`
+  - already locked draft: `409 INVOICE_ALREADY_LOCKED`
+  - invoice_items empty: `409 INVOICE_ITEMS_REQUIRED`
+- `POST /api/v1/invoices/{invoice_id}/reset-to-draft`
+  - non-finalized: `409 INVOICE_NOT_FINALIZED`
+- `POST /api/v1/invoices/{invoice_id}/unlock`
+  - target not finalized+locked: `409 INVOICE_NOT_LOCKED_FINALIZED`
+
+### Purchase Results
+- `POST /api/v1/purchase-results`
+  - sum purchased qty exceeds allocation final qty: `422 PURCHASE_QTY_EXCEEDS_ALLOCATION`
+- `GET /api/v1/purchase-results`
+  - supports filters: `allocation_id`, `supplier_id`
+  - supports paging: `limit`, `offset`
 
 ### Batch
 - `POST /api/v1/allocations/runs`
