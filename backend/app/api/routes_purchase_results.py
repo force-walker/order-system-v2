@@ -107,14 +107,19 @@ def get_purchase_result(result_id: int, db: Session = Depends(get_db)) -> Purcha
 )
 def list_purchase_results(
     allocation_id: int | None = Query(default=None, gt=0),
+    supplier_id: int | None = Query(default=None, gt=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[PurchaseResultResponse]:
     query = db.query(PurchaseResult)
     if allocation_id is not None:
         _get_allocation_or_404(db, allocation_id)
         query = query.filter(PurchaseResult.allocation_id == allocation_id)
+    if supplier_id is not None:
+        query = query.filter(PurchaseResult.supplier_id == supplier_id)
 
-    rows = query.order_by(PurchaseResult.recorded_at.asc(), PurchaseResult.id.asc()).all()
+    rows = query.order_by(PurchaseResult.recorded_at.asc(), PurchaseResult.id.asc()).offset(offset).limit(limit).all()
     return [PurchaseResultResponse.model_validate(row) for row in rows]
 
 
