@@ -161,7 +161,7 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert unlock.json()["is_locked"] is False
 
     fin2 = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
-    assert fin2.status_code == 200
+    assert fin2.status_code == 409
 
     reset = client.post(
         f"/api/v1/invoices/{invoice_id}/reset-to-draft",

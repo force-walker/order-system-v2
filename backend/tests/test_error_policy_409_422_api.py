@@ -166,7 +166,7 @@ def test_409_for_state_conflicts():
 
     # lock/state conflict
     inv = client.post(
-        "/api/v1/invoices",
+        "/api/v1/invoices/generate",
         json={"invoice_no": "INV-CF", "order_id": order_id, "invoice_date": str(date.today())},
     )
     invoice_id = inv.json()["id"]

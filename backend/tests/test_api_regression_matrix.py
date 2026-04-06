@@ -170,14 +170,14 @@ def test_orders_invoices_and_purchase_results_regression_matrix():
 
     # invoices create/finalize 201/409/422/404
     inv = client.post(
-        "/api/v1/invoices",
+        "/api/v1/invoices/generate",
         json={"invoice_no": "INV-M-1", "order_id": order_id, "invoice_date": str(date.today())},
     )
     assert inv.status_code == 201
     inv_id = inv.json()["id"]
 
     inv_dup = client.post(
-        "/api/v1/invoices",
+        "/api/v1/invoices/generate",
         json={"invoice_no": "INV-M-1", "order_id": order_id, "invoice_date": str(date.today())},
     )
     assert inv_dup.status_code == 409
