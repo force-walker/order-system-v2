@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import PurchaseResult, Supplier, SupplierAllocation
+from app.models.entities import Supplier
 from app.schemas.common import ApiErrorResponse
 from app.schemas.supplier import SupplierCreateRequest, SupplierResponse, SupplierUpdateRequest
 
@@ -96,7 +96,6 @@ def update_supplier(supplier_id: int, payload: SupplierUpdateRequest, db: Sessio
     responses={
         **SUPPLIER_COMMON_ERROR_RESPONSES,
         404: {"model": ApiErrorResponse, "description": "Not Found"},
-        409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
 )
 def delete_supplier(supplier_id: int, db: Session = Depends(get_db)) -> Response:
@@ -104,21 +103,8 @@ def delete_supplier(supplier_id: int, db: Session = Depends(get_db)) -> Response
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "supplier not found"})
 
-    has_allocation_ref = (
-        db.query(SupplierAllocation.id)
-        .filter(or_(SupplierAllocation.suggested_supplier_id == supplier_id, SupplierAllocation.final_supplier_id == supplier_id))
-        .first()
-        is not None
-    )
-    has_purchase_ref = db.query(PurchaseResult.id).filter(PurchaseResult.supplier_id == supplier_id).first() is not None
-
-    if has_allocation_ref or has_purchase_ref:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "SUPPLIER_IN_USE", "message": "supplier is referenced by allocation or purchase result"},
-        )
-
-    db.delete(row)
+    # Soft-delete policy: keep master row for historical references.
+    row.active = False
     db.flush()
     write_audit_log(db, entity_type="supplier", entity_id=supplier_id, action=AuditAction.CANCEL)
     db.commit()
