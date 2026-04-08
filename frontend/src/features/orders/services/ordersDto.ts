@@ -63,17 +63,25 @@ export const toApiOrderCreateHeader = (
   note: note ?? null,
 });
 
-export const toCustomerOption = (row: ApiCustomerResponse): CustomerOption => ({
-  id: row.id,
-  label: `${row.id}: ${row.name} (${row.code})`,
-  customerCode: row.code,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
+const resolveCustomerCode = (row: ApiCustomerResponse): string => {
+  const dynamic = row as unknown as { code?: string; customer_code?: string };
+  return dynamic.code ?? dynamic.customer_code ?? '-';
+};
+
+export const toCustomerOption = (row: ApiCustomerResponse): CustomerOption => {
+  const customerCode = resolveCustomerCode(row);
+  return {
+    id: row.id,
+    label: `${row.id}: ${row.name} (${customerCode})`,
+    customerCode,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
 
 export const toCustomerDetail = (row: ApiCustomerResponse): CustomerDetail => ({
   id: row.id,
-  customerCode: row.code,
+  customerCode: resolveCustomerCode(row),
   name: row.name,
   active: row.active,
 });
