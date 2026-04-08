@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
+from app.core.codegen import generate_next_code
 from app.db.session import get_db
 from app.models.entities import Product
 from app.schemas.common import ApiErrorResponse
@@ -74,12 +75,14 @@ def update_product(product_id: int, payload: ProductUpdateRequest, db: Session =
     },
 )
 def create_product(payload: ProductCreateRequest, db: Session = Depends(get_db)) -> ProductResponse:
-    exists = db.query(Product).filter(Product.sku == payload.sku).first()
+    sku = payload.sku or generate_next_code(db, Product, "sku", prefix="SKU-")
+
+    exists = db.query(Product).filter(Product.sku == sku).first()
     if exists is not None:
         raise HTTPException(status_code=409, detail={"code": "SKU_ALREADY_EXISTS", "message": "sku already exists"})
 
     row = Product(
-        sku=payload.sku,
+        sku=sku,
         name=payload.name,
         order_uom=payload.order_uom,
         purchase_uom=payload.purchase_uom,

@@ -231,6 +231,22 @@ def test_create_supplier_validation_error_is_422():
     assert bad.status_code == 422
 
 
+def test_create_supplier_auto_code_generation_is_sequential():
+    client = _client()
+
+    first = client.post("/api/v1/suppliers", json={"name": "Auto Supplier 1", "active": True})
+    second = client.post("/api/v1/suppliers", json={"name": "Auto Supplier 2", "active": True})
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["supplier_code"].startswith("SUP-")
+    assert second.json()["supplier_code"].startswith("SUP-")
+
+    n1 = int(first.json()["supplier_code"].split("-")[-1])
+    n2 = int(second.json()["supplier_code"].split("-")[-1])
+    assert n2 == n1 + 1
+
+
 def test_update_supplier_success_and_not_found():
     supplier_id = _seed_supplier("SUP-UPD")
     client = _client()

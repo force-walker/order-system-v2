@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
+from app.core.codegen import generate_next_code
 from app.db.session import get_db
 from app.models.entities import Customer
 from app.schemas.common import ApiErrorResponse
@@ -63,11 +64,13 @@ def update_customer(customer_id: int, payload: CustomerUpdateRequest, db: Sessio
     },
 )
 def create_customer(payload: CustomerCreateRequest, db: Session = Depends(get_db)) -> CustomerResponse:
-    exists = db.query(Customer).filter(Customer.customer_code == payload.customer_code).first()
+    customer_code = payload.customer_code or generate_next_code(db, Customer, "customer_code", prefix="CUST-")
+
+    exists = db.query(Customer).filter(Customer.customer_code == customer_code).first()
     if exists is not None:
         raise HTTPException(status_code=409, detail={"code": "CUSTOMER_CODE_ALREADY_EXISTS", "message": "customer code already exists"})
 
-    row = Customer(customer_code=payload.customer_code, name=payload.name, active=payload.active)
+    row = Customer(customer_code=customer_code, name=payload.name, active=payload.active)
     db.add(row)
     db.flush()
     write_audit_log(db, entity_type="customer", entity_id=row.id, action=AuditAction.CREATE)

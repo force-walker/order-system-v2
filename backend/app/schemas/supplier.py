@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class SupplierCreateRequest(BaseModel):
-    supplier_code: str = Field(min_length=1, max_length=64)
+    supplier_code: str | None = Field(default=None, min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     active: bool = True
 

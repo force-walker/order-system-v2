@@ -6,7 +6,7 @@ from app.models.entities import PricingBasis
 
 
 class ProductCreateRequest(BaseModel):
-    sku: str = Field(min_length=1, max_length=64)
+    sku: str | None = Field(default=None, min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     order_uom: str = Field(min_length=1, max_length=32)
     purchase_uom: str = Field(min_length=1, max_length=32)
