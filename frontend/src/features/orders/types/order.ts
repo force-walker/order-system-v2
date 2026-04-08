@@ -75,7 +75,6 @@ export type CustomerDetail = {
 };
 
 export type CustomerCreateRequest = {
-  customerCode: string;
   name: string;
   active: boolean;
 };
@@ -109,7 +108,6 @@ export type ProductDetail = {
 };
 
 export type ProductCreateRequest = {
-  sku: string;
   name: string;
   orderUom: string;
   purchaseUom: string;

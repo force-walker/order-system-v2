@@ -11,7 +11,6 @@ type Props = {
 type FormState = ProductCreateRequest & { active: boolean };
 
 const toInitial = (initial?: ProductDetail): FormState => ({
-  sku: initial?.sku ?? '',
   name: initial?.name ?? '',
   orderUom: initial?.orderUom ?? 'kg',
   purchaseUom: initial?.purchaseUom ?? 'kg',
@@ -34,14 +33,12 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!form.sku.trim()) return setError('SKUは必須です');
     if (!form.name.trim()) return setError('商品名は必須です');
 
     setError('');
     setSubmitting(true);
     try {
       await onSubmit({
-        sku: form.sku.trim(),
         name: form.name.trim(),
         orderUom: form.orderUom.trim(),
         purchaseUom: form.purchaseUom.trim(),
@@ -63,8 +60,9 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
       {error ? <p className="form-error">{error}</p> : null}
 
       <label>
-        SKU *
-        <input value={form.sku} onChange={(e) => setForm((p) => ({ ...p, sku: e.target.value }))} />
+        SKU
+        <input value={initialValue?.sku ?? '作成後に自動採番'} readOnly />
+        <small className="subtle">コードはシステム自動採番です</small>
       </label>
       <label>
         商品名 *

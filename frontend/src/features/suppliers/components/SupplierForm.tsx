@@ -9,13 +9,11 @@ type Props = {
 };
 
 type FormState = {
-  supplierCode: string;
   name: string;
   active: boolean;
 };
 
 const toInitialState = (initial?: Supplier): FormState => ({
-  supplierCode: initial?.supplierCode ?? '',
   name: initial?.name ?? '',
   active: initial?.active ?? true,
 });
@@ -33,10 +31,6 @@ export const SupplierForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!form.supplierCode.trim()) {
-      setError('仕入先コードは必須です');
-      return;
-    }
     if (!form.name.trim()) {
       setError('仕入先名は必須です');
       return;
@@ -45,7 +39,7 @@ export const SupplierForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
     setError('');
     setSubmitting(true);
     try {
-      await onSubmit({ supplierCode: form.supplierCode.trim(), name: form.name.trim(), active: form.active });
+      await onSubmit({ name: form.name.trim(), active: form.active });
     } catch (e) {
       setError(toUserMessage(e, '仕入先の保存に失敗しました'));
     } finally {
@@ -59,8 +53,9 @@ export const SupplierForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
       {error ? <p className="form-error">{error}</p> : null}
 
       <label>
-        仕入先コード *
-        <input value={form.supplierCode} onChange={(e) => setForm((p) => ({ ...p, supplierCode: e.target.value }))} />
+        仕入先コード
+        <input value={initialValue?.supplierCode ?? '作成後に自動採番'} readOnly />
+        <small className="subtle">コードはシステム自動採番です</small>
       </label>
 
       <label>

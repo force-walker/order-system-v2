@@ -91,7 +91,6 @@ export const createSupplier = async (payload: SupplierCreateRequest): Promise<Su
   const res = await fetchWithAuth('/api/v1/suppliers', {
     method: 'POST',
     body: {
-      supplier_code: payload.supplierCode,
       name: payload.name,
       active: payload.active,
     },
