@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { listSuppliers } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
@@ -16,22 +16,12 @@ export const SupplierListPage = () => {
   const [offset, setOffset] = useState(0);
   const [hasNext, setHasNext] = useState(false);
 
-  const load = async (next?: { q?: string; active?: 'all' | 'true' | 'false'; limit?: number; offset?: number }) => {
+  const load = async (params: { active: 'all' | 'true' | 'false'; limit: number; offset: number }) => {
     setLoading(true);
     setError('');
 
-    const nextQ = next?.q ?? q;
-    const nextActive = next?.active ?? active;
-    const nextLimit = next?.limit ?? limit;
-    const nextOffset = next?.offset ?? offset;
-
     try {
-      const result = await listSuppliers({
-        q: nextQ,
-        active: nextActive,
-        limit: nextLimit,
-        offset: nextOffset,
-      });
+      const result = await listSuppliers(params);
       setItems(result.items);
       setHasNext(result.hasNext);
     } catch (e) {
@@ -42,27 +32,28 @@ export const SupplierListPage = () => {
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    load({ active, limit, offset });
+  }, [active, limit, offset]);
 
-  const onSearch = async () => {
-    setOffset(0);
-    await load({ offset: 0 });
+  const filteredItems = useMemo(() => {
+    const keyword = q.trim().toLowerCase();
+    if (!keyword) return items;
+
+    return items.filter((row) => {
+      const target = `${row.supplierCode} ${row.name}`.toLowerCase();
+      return target.includes(keyword);
+    });
+  }, [items, q]);
+
+  const onPrev = () => {
+    setOffset((prev) => Math.max(0, prev - limit));
   };
 
-  const onPrev = async () => {
-    const nextOffset = Math.max(0, offset - limit);
-    setOffset(nextOffset);
-    await load({ offset: nextOffset });
+  const onNext = () => {
+    setOffset((prev) => prev + limit);
   };
 
-  const onNext = async () => {
-    const nextOffset = offset + limit;
-    setOffset(nextOffset);
-    await load({ offset: nextOffset });
-  };
-
-  if (error) return <ErrorState title="仕入先一覧の取得に失敗しました" description={error} actionLabel="再試行" onAction={() => load()} />;
+  if (error) return <ErrorState title="仕入先一覧の取得に失敗しました" description={error} actionLabel="再試行" onAction={() => load({ active, limit, offset })} />;
   if (loading) return <LoadingState title="仕入先一覧を読み込み中" description="しばらくお待ちください" />;
 
   return (
@@ -83,7 +74,13 @@ export const SupplierListPage = () => {
 
           <label className="filter-label">
             active
-            <select value={active} onChange={(e) => setActive(e.target.value as 'all' | 'true' | 'false')}>
+            <select
+              value={active}
+              onChange={(e) => {
+                setActive(e.target.value as 'all' | 'true' | 'false');
+                setOffset(0);
+              }}
+            >
               <option value="all">all</option>
               <option value="true">true</option>
               <option value="false">false</option>
@@ -94,11 +91,9 @@ export const SupplierListPage = () => {
             limit
             <select
               value={limit}
-              onChange={async (e) => {
-                const nextLimit = Number(e.target.value);
-                setLimit(nextLimit);
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
                 setOffset(0);
-                await load({ limit: nextLimit, offset: 0 });
               }}
             >
               {PAGE_SIZE_OPTIONS.map((n) => (
@@ -106,18 +101,20 @@ export const SupplierListPage = () => {
               ))}
             </select>
           </label>
-
-          <button type="button" onClick={onSearch}>検索</button>
         </div>
 
-        {items.length === 0 ? (
-          <EmptyState title="データがありません" description="条件に合う仕入先がありません。検索条件を見直してください。" actionLabel="条件クリア" onAction={() => {
-            setQ('');
-            setActive('all');
-            setLimit(20);
-            setOffset(0);
-            load({ q: '', active: 'all', limit: 20, offset: 0 });
-          }} />
+        {filteredItems.length === 0 ? (
+          <EmptyState
+            title="データがありません"
+            description="条件に合う仕入先がありません。検索条件を見直してください。"
+            actionLabel="条件クリア"
+            onAction={() => {
+              setQ('');
+              setActive('all');
+              setLimit(20);
+              setOffset(0);
+            }}
+          />
         ) : (
           <div className="table-wrap">
             <table>
@@ -131,7 +128,7 @@ export const SupplierListPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {items.map((row) => (
+                {filteredItems.map((row) => (
                   <tr key={row.id}>
                     <td>{row.id}</td>
                     <td>{row.supplierCode}</td>
