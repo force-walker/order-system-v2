@@ -18,3 +18,14 @@ export type SupplierListResult = {
   items: Supplier[];
   hasNext: boolean;
 };
+
+export type SupplierCreateRequest = {
+  supplierCode: string;
+  name: string;
+  active: boolean;
+};
+
+export type SupplierUpdateRequest = {
+  name?: string;
+  active?: boolean;
+};

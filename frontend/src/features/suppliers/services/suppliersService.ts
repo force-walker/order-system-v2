@@ -1,6 +1,12 @@
 import { apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload } from 'shared/error';
-import type { Supplier, SupplierListParams, SupplierListResult } from 'features/suppliers/types/supplier';
+import type {
+  Supplier,
+  SupplierCreateRequest,
+  SupplierListParams,
+  SupplierListResult,
+  SupplierUpdateRequest,
+} from 'features/suppliers/types/supplier';
 
 type ApiLoginRequest = { user_id: string; role: string };
 type ApiTokenResponse = { access_token: string; refresh_token: string };
@@ -34,10 +40,11 @@ const ensureDevToken = async (): Promise<string> => {
   return data.access_token;
 };
 
-const fetchWithAuth = async (path: string) => {
+const fetchWithAuth = async (path: string, init?: { method?: string; body?: unknown }) => {
   const token = await ensureDevToken();
   const res = await apiRequest(path, {
-    method: 'GET',
+    method: init?.method ?? 'GET',
+    body: init?.body,
     authToken: token,
   });
   if (res.status === 401) localStorage.removeItem(TOKEN_STORAGE_KEY);
@@ -70,4 +77,44 @@ export const listSuppliers = async (params: SupplierListParams): Promise<Supplie
     items,
     hasNext: items.length === params.limit,
   };
+};
+
+export const getSupplier = async (supplierId: number): Promise<Supplier | null> => {
+  const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const data = (await res.json()) as ApiSupplier;
+  return toSupplier(data);
+};
+
+export const createSupplier = async (payload: SupplierCreateRequest): Promise<Supplier> => {
+  const res = await fetchWithAuth('/api/v1/suppliers', {
+    method: 'POST',
+    body: {
+      supplier_code: payload.supplierCode,
+      name: payload.name,
+      active: payload.active,
+    },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const data = (await res.json()) as ApiSupplier;
+  return toSupplier(data);
+};
+
+export const updateSupplier = async (supplierId: number, payload: SupplierUpdateRequest): Promise<Supplier> => {
+  const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}`, {
+    method: 'PATCH',
+    body: {
+      name: payload.name,
+      active: payload.active,
+    },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const data = (await res.json()) as ApiSupplier;
+  return toSupplier(data);
+};
+
+export const deactivateSupplier = async (supplierId: number): Promise<void> => {
+  const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
 };
