@@ -3,6 +3,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
+from app.core.codegen import generate_next_code
 from app.db.session import get_db
 from app.models.entities import Product, Supplier, SupplierProduct
 from app.schemas.common import ApiErrorResponse
@@ -57,11 +58,13 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db)) -> SupplierRes
     },
 )
 def create_supplier(payload: SupplierCreateRequest, db: Session = Depends(get_db)) -> SupplierResponse:
-    exists = db.query(Supplier).filter(Supplier.supplier_code == payload.supplier_code).first()
+    supplier_code = payload.supplier_code or generate_next_code(db, Supplier, "supplier_code", prefix="SUP-")
+
+    exists = db.query(Supplier).filter(Supplier.supplier_code == supplier_code).first()
     if exists is not None:
         raise HTTPException(status_code=409, detail={"code": "SUPPLIER_CODE_ALREADY_EXISTS", "message": "supplier code already exists"})
 
-    row = Supplier(supplier_code=payload.supplier_code, name=payload.name, active=payload.active)
+    row = Supplier(supplier_code=supplier_code, name=payload.name, active=payload.active)
     db.add(row)
     db.flush()
     write_audit_log(db, entity_type="supplier", entity_id=row.id, action=AuditAction.CREATE)

@@ -106,7 +106,7 @@ def test_create_product_success_and_duplicate_conflict():
 
 def test_create_product_validation_errors_are_422():
     client = _client()
-    missing_required = client.post("/api/v1/products", json={"sku": "SKU-X"})
+    missing_required = client.post("/api/v1/products", json={"name": "X"})
     assert missing_required.status_code == 422
 
     invalid_enum = client.post(
@@ -135,3 +135,26 @@ def test_update_product_success_and_not_found():
     nf = client.patch("/api/v1/products/999999", json={"name": "x"})
     assert nf.status_code == 404
     assert nf.json()["detail"]["code"] == "PRODUCT_NOT_FOUND"
+
+
+def test_create_product_auto_code_generation_is_sequential():
+    client = _client()
+    common = {
+        "name": "Auto Product",
+        "order_uom": "count",
+        "purchase_uom": "count",
+        "invoice_uom": "count",
+        "pricing_basis_default": "uom_count",
+    }
+
+    first = client.post("/api/v1/products", json=common)
+    second = client.post("/api/v1/products", json=common)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["sku"].startswith("SKU-")
+    assert second.json()["sku"].startswith("SKU-")
+
+    n1 = int(first.json()["sku"].split("-")[-1])
+    n2 = int(second.json()["sku"].split("-")[-1])
+    assert n2 == n1 + 1

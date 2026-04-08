@@ -89,8 +89,24 @@ def test_update_customer_success_and_not_found():
 
 def test_create_customer_validation_error_is_422():
     client = _client()
-    res = client.post("/api/v1/customers", json={"customer_code": "CUST-ONLY"})
+    res = client.post("/api/v1/customers", json={})
     assert res.status_code == 422
+
+
+def test_create_customer_auto_code_generation_is_sequential():
+    client = _client()
+
+    first = client.post("/api/v1/customers", json={"name": "Auto Customer 1", "active": True})
+    second = client.post("/api/v1/customers", json={"name": "Auto Customer 2", "active": True})
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["customer_code"].startswith("CUST-")
+    assert second.json()["customer_code"].startswith("CUST-")
+
+    n1 = int(first.json()["customer_code"].split("-")[-1])
+    n2 = int(second.json()["customer_code"].split("-")[-1])
+    assert n2 == n1 + 1
 
 
 def test_get_customer_not_found():
