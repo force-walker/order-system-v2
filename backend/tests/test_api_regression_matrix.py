@@ -93,7 +93,6 @@ def test_products_regression_status_matrix():
     client = _client()
 
     payload = {
-        "sku": "SKU-M-1",
         "name": "P",
         "order_uom": "count",
         "purchase_uom": "count",
@@ -104,12 +103,13 @@ def test_products_regression_status_matrix():
     ok = client.post("/api/v1/products", json=payload)
     assert ok.status_code == 201
 
-    conflict = client.post("/api/v1/products", json=payload)
-    assert conflict.status_code == 409
+    # manual code input is forbidden by contract
+    manual_code = client.post("/api/v1/products", json={**payload, "sku": "SKU-MANUAL"})
+    assert manual_code.status_code == 422
 
     invalid = client.post(
         "/api/v1/products",
-        json={**payload, "sku": "SKU-M-2", "pricing_basis_default": "bad_enum"},
+        json={**payload, "pricing_basis_default": "bad_enum"},
     )
     assert invalid.status_code == 422
 

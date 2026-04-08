@@ -75,7 +75,7 @@ def update_product(product_id: int, payload: ProductUpdateRequest, db: Session =
     },
 )
 def create_product(payload: ProductCreateRequest, db: Session = Depends(get_db)) -> ProductResponse:
-    sku = payload.sku or generate_next_code(db, Product, "sku", prefix="SKU-")
+    sku = generate_next_code(db, Product, "sku", prefix="SKU-")
 
     exists = db.query(Product).filter(Product.sku == sku).first()
     if exists is not None:

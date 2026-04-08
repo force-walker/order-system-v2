@@ -90,7 +90,6 @@ def _seed_order_and_allocation() -> tuple[int, int]:
 def test_product_enum_all_values_acceptance(basis: str):
     client = _client()
     payload = {
-        "sku": f"SKU-B-{basis}",
         "name": "Enum Product",
         "order_uom": "count",
         "purchase_uom": "count",
@@ -107,7 +106,6 @@ def test_product_unknown_enum_and_empty_string_and_length():
     unknown_enum = client.post(
         "/api/v1/products",
         json={
-            "sku": "SKU-UNK",
             "name": "P",
             "order_uom": "count",
             "purchase_uom": "count",
@@ -120,7 +118,6 @@ def test_product_unknown_enum_and_empty_string_and_length():
     empty_name = client.post(
         "/api/v1/products",
         json={
-            "sku": "SKU-EMPTY",
             "name": "",
             "order_uom": "count",
             "purchase_uom": "count",
@@ -130,7 +127,7 @@ def test_product_unknown_enum_and_empty_string_and_length():
     )
     assert empty_name.status_code == 422
 
-    too_long_sku = client.post(
+    manual_code_forbidden = client.post(
         "/api/v1/products",
         json={
             "sku": "S" * 65,
@@ -141,7 +138,7 @@ def test_product_unknown_enum_and_empty_string_and_length():
             "pricing_basis_default": "uom_count",
         },
     )
-    assert too_long_sku.status_code == 422
+    assert manual_code_forbidden.status_code == 422
 
 
 def test_negative_zero_and_empty_string_boundaries():

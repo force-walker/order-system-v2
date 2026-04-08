@@ -6,7 +6,6 @@ from app.models.entities import PricingBasis
 
 
 class ProductCreateRequest(BaseModel):
-    sku: str | None = Field(default=None, min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     order_uom: str = Field(min_length=1, max_length=32)
     purchase_uom: str = Field(min_length=1, max_length=32)
@@ -14,6 +13,8 @@ class ProductCreateRequest(BaseModel):
     is_catch_weight: bool = False
     weight_capture_required: bool = False
     pricing_basis_default: PricingBasis = PricingBasis.uom_count
+
+    model_config = {"extra": "forbid"}
 
 
 class ProductUpdateRequest(BaseModel):
@@ -43,8 +44,19 @@ class ProductResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProductBulkCreateItem(BaseModel):
+    sku: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    order_uom: str = Field(min_length=1, max_length=32)
+    purchase_uom: str = Field(min_length=1, max_length=32)
+    invoice_uom: str = Field(min_length=1, max_length=32)
+    is_catch_weight: bool = False
+    weight_capture_required: bool = False
+    pricing_basis_default: PricingBasis = PricingBasis.uom_count
+
+
 class ProductBulkCreateRequest(BaseModel):
-    items: list[ProductCreateRequest] = Field(min_length=1, max_length=500)
+    items: list[ProductBulkCreateItem] = Field(min_length=1, max_length=500)
 
 
 class ProductBulkUpdateItem(BaseModel):
@@ -63,7 +75,7 @@ class ProductBulkUpdateRequest(BaseModel):
 
 
 class ProductBulkUpsertRequest(BaseModel):
-    items: list[ProductCreateRequest] = Field(min_length=1, max_length=500)
+    items: list[ProductBulkCreateItem] = Field(min_length=1, max_length=500)
 
 
 class ProductBulkDeleteRequest(BaseModel):
