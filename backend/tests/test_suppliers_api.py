@@ -211,23 +211,21 @@ def test_get_supplier_success_and_not_found():
     assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
 
 
-def test_create_supplier_success_and_duplicate_conflict():
+def test_create_supplier_auto_code_and_manual_code_rejected():
     client = _client()
-    payload = {"supplier_code": "SUP-NEW", "name": "New Supplier", "active": True}
 
-    created = client.post("/api/v1/suppliers", json=payload)
+    created = client.post("/api/v1/suppliers", json={"name": "New Supplier", "active": True})
     assert created.status_code == 201
-    assert created.json()["supplier_code"] == "SUP-NEW"
+    assert created.json()["supplier_code"].startswith("SUP-")
 
-    dup = client.post("/api/v1/suppliers", json=payload)
-    assert dup.status_code == 409
-    assert dup.json()["detail"]["code"] == "SUPPLIER_CODE_ALREADY_EXISTS"
+    manual = client.post("/api/v1/suppliers", json={"supplier_code": "SUP-MANUAL", "name": "Manual", "active": True})
+    assert manual.status_code == 422
 
 
 def test_create_supplier_validation_error_is_422():
     client = _client()
 
-    bad = client.post("/api/v1/suppliers", json={"supplier_code": ""})
+    bad = client.post("/api/v1/suppliers", json={})
     assert bad.status_code == 422
 
 

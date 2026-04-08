@@ -61,16 +61,15 @@ def test_list_customers():
     assert any(x["customer_code"] == "CUST-LIST" for x in res.json())
 
 
-def test_create_customer_success_and_duplicate_conflict():
+def test_create_customer_auto_code_and_manual_code_rejected():
     client = _client()
-    payload = {"customer_code": "CUST-NEW", "name": "New Customer", "active": True}
-    created = client.post("/api/v1/customers", json=payload)
-    assert created.status_code == 201
-    assert created.json()["customer_code"] == "CUST-NEW"
 
-    dup = client.post("/api/v1/customers", json=payload)
-    assert dup.status_code == 409
-    assert dup.json()["detail"]["code"] == "CUSTOMER_CODE_ALREADY_EXISTS"
+    created = client.post("/api/v1/customers", json={"name": "New Customer", "active": True})
+    assert created.status_code == 201
+    assert created.json()["customer_code"].startswith("CUST-")
+
+    manual = client.post("/api/v1/customers", json={"customer_code": "CUST-MANUAL", "name": "Manual", "active": True})
+    assert manual.status_code == 422
 
 
 def test_update_customer_success_and_not_found():

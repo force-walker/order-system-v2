@@ -64,7 +64,7 @@ def update_customer(customer_id: int, payload: CustomerUpdateRequest, db: Sessio
     },
 )
 def create_customer(payload: CustomerCreateRequest, db: Session = Depends(get_db)) -> CustomerResponse:
-    customer_code = payload.customer_code or generate_next_code(db, Customer, "customer_code", prefix="CUST-")
+    customer_code = generate_next_code(db, Customer, "customer_code", prefix="CUST-")
 
     exists = db.query(Customer).filter(Customer.customer_code == customer_code).first()
     if exists is not None:

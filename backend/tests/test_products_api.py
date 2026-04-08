@@ -83,10 +83,9 @@ def test_get_product_by_id():
     assert res.json()["id"] == pid
 
 
-def test_create_product_success_and_duplicate_conflict():
+def test_create_product_auto_code_and_manual_code_rejected():
     client = _client()
     payload = {
-        "sku": "SKU-NEW-1",
         "name": "Created Product",
         "order_uom": "count",
         "purchase_uom": "count",
@@ -97,11 +96,10 @@ def test_create_product_success_and_duplicate_conflict():
     }
     created = client.post("/api/v1/products", json=payload)
     assert created.status_code == 201
-    assert created.json()["sku"] == "SKU-NEW-1"
+    assert created.json()["sku"].startswith("SKU-")
 
-    dup = client.post("/api/v1/products", json=payload)
-    assert dup.status_code == 409
-    assert dup.json()["detail"]["code"] == "SKU_ALREADY_EXISTS"
+    manual = client.post("/api/v1/products", json={**payload, "sku": "SKU-MANUAL"})
+    assert manual.status_code == 422
 
 
 def test_create_product_validation_errors_are_422():
@@ -112,7 +110,6 @@ def test_create_product_validation_errors_are_422():
     invalid_enum = client.post(
         "/api/v1/products",
         json={
-            "sku": "SKU-X2",
             "name": "X",
             "order_uom": "count",
             "purchase_uom": "count",

@@ -58,7 +58,7 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db)) -> SupplierRes
     },
 )
 def create_supplier(payload: SupplierCreateRequest, db: Session = Depends(get_db)) -> SupplierResponse:
-    supplier_code = payload.supplier_code or generate_next_code(db, Supplier, "supplier_code", prefix="SUP-")
+    supplier_code = generate_next_code(db, Supplier, "supplier_code", prefix="SUP-")
 
     exists = db.query(Supplier).filter(Supplier.supplier_code == supplier_code).first()
     if exists is not None:
