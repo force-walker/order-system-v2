@@ -66,6 +66,7 @@ export const toApiOrderCreateHeader = (
 export const toCustomerOption = (row: ApiCustomerResponse): CustomerOption => ({
   id: row.id,
   label: `${row.id}: ${row.name} (${row.code})`,
+  customerCode: row.code,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -80,6 +81,7 @@ export const toCustomerDetail = (row: ApiCustomerResponse): CustomerDetail => ({
 export const toProductOption = (row: ApiProductResponse): ProductOption => ({
   id: row.id,
   label: `${row.id}: ${row.name} (${row.pricing_basis_default})`,
+  sku: row.sku,
   name: row.name,
   orderUom: row.order_uom,
   pricingBasisDefault: row.pricing_basis_default,

@@ -61,7 +61,7 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
 
       <label>
         SKU
-        <input value={initialValue?.sku ?? 'PRD-001 (自動採番例)'} readOnly />
+        <input value={initialValue?.sku ?? 'PRD-自動採番'} readOnly />
         <small className="subtle">コードはシステム自動採番です</small>
       </label>
       <label>

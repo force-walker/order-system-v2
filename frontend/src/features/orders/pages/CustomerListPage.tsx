@@ -99,6 +99,7 @@ export const CustomerListPage = () => {
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>コード</th>
                   <th>表示名</th>
                   <th>作成日時</th>
                   <th>更新日時</th>
@@ -109,6 +110,7 @@ export const CustomerListPage = () => {
                 {filteredCustomers.map((c) => (
                   <tr key={c.id}>
                     <td>{c.id}</td>
+                    <td>{c.customerCode ?? '-'}</td>
                     <td>{c.label}</td>
                     <td>{c.createdAt ?? '-'}</td>
                     <td>{c.updatedAt ?? '-'}</td>
