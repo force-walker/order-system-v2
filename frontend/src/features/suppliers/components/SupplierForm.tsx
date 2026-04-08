@@ -54,7 +54,7 @@ export const SupplierForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
 
       <label>
         仕入先コード
-        <input value={initialValue?.supplierCode ?? '作成後に自動採番'} readOnly />
+        <input value={initialValue?.supplierCode ?? 'SUP-001 (自動採番例)'} readOnly />
         <small className="subtle">コードはシステム自動採番です</small>
       </label>
 

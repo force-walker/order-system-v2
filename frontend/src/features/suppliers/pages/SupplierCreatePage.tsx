@@ -7,7 +7,7 @@ export const SupplierCreatePage = () => {
 
   const handleSubmit = async (payload: Parameters<typeof createSupplier>[0]) => {
     const created = await createSupplier(payload);
-    sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `仕入先を作成しました（ID: ${created.id}）` }));
+    sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `仕入先を作成しました（ID: ${created.id} / CODE: ${created.supplierCode}）` }));
     navigate('/suppliers');
   };
 

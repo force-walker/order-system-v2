@@ -54,7 +54,7 @@ export const CustomerForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
 
       <label>
         顧客コード
-        <input value={initialValue?.customerCode ?? '作成後に自動採番'} readOnly />
+        <input value={initialValue?.customerCode ?? 'CUST-001 (自動採番例)'} readOnly />
         <small className="subtle">コードはシステム自動採番です</small>
       </label>
 

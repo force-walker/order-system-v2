@@ -7,7 +7,7 @@ export const CustomerCreatePage = () => {
 
   const handleSubmit = async (payload: Parameters<typeof createCustomer>[0]) => {
     const created = await createCustomer(payload);
-    sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `顧客を作成しました（ID: ${created.id}）` }));
+    sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `顧客を作成しました（ID: ${created.id} / CODE: ${created.customerCode}）` }));
     navigate('/customers');
   };
 
