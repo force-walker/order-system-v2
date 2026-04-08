@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.core.codegen import generate_next_code
 from app.db.session import get_db
-from app.models.entities import Product
+from app.models.entities import OrderItem, Product, SupplierProduct
 from app.schemas.common import ApiErrorResponse
 from app.schemas.product import (
     BulkOperationError,
@@ -27,8 +27,14 @@ PRODUCT_COMMON_ERROR_RESPONSES = {
 
 
 @router.get("", response_model=list[ProductResponse])
-def list_products(db: Session = Depends(get_db)) -> list[ProductResponse]:
-    rows = db.query(Product).order_by(Product.id.asc()).all()
+def list_products(
+    include_inactive: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> list[ProductResponse]:
+    query = db.query(Product)
+    if not include_inactive:
+        query = query.filter(Product.active.is_(True))
+    rows = query.order_by(Product.id.asc()).all()
     return [ProductResponse.model_validate(r) for r in rows]
 
 
@@ -98,6 +104,68 @@ def create_product(payload: ProductCreateRequest, db: Session = Depends(get_db))
     db.commit()
     db.refresh(row)
     return ProductResponse.model_validate(row)
+
+
+@router.post(
+    "/{product_id}/archive",
+    response_model=ProductResponse,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def archive_product(product_id: int, db: Session = Depends(get_db)) -> ProductResponse:
+    row = db.query(Product).filter(Product.id == product_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+
+    row.active = False
+    db.flush()
+    write_audit_log(db, entity_type="product", entity_id=row.id, action=AuditAction.UPDATE, after={"active": row.active})
+    db.commit()
+    db.refresh(row)
+    return ProductResponse.model_validate(row)
+
+
+@router.post(
+    "/{product_id}/unarchive",
+    response_model=ProductResponse,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def unarchive_product(product_id: int, db: Session = Depends(get_db)) -> ProductResponse:
+    row = db.query(Product).filter(Product.id == product_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+
+    row.active = True
+    db.flush()
+    write_audit_log(db, entity_type="product", entity_id=row.id, action=AuditAction.UPDATE, after={"active": row.active})
+    db.commit()
+    db.refresh(row)
+    return ProductResponse.model_validate(row)
+
+
+@router.delete(
+    "/{product_id}",
+    status_code=204,
+    responses={
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+        422: {"model": ApiErrorResponse, "description": "Validation Error"},
+    },
+)
+def delete_product(product_id: int, db: Session = Depends(get_db)) -> Response:
+    row = db.query(Product).filter(Product.id == product_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+
+    has_order_item_ref = db.query(OrderItem.id).filter(OrderItem.product_id == product_id).first() is not None
+    has_supplier_map_ref = db.query(SupplierProduct.id).filter(SupplierProduct.product_id == product_id).first() is not None
+    if has_order_item_ref or has_supplier_map_ref:
+        raise HTTPException(status_code=409, detail={"code": "PRODUCT_IN_USE", "message": "product is referenced and cannot be deleted"})
+
+    db.delete(row)
+    db.flush()
+    write_audit_log(db, entity_type="product", entity_id=product_id, action=AuditAction.CANCEL)
+    db.commit()
+    return Response(status_code=204)
 
 
 def _bulk_response(total: int, success: int, errors: list[BulkOperationError]) -> ProductBulkOperationResponse:

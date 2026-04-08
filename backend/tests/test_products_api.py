@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import PricingBasis, Product
+from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product
 
 
 engine = create_engine(
@@ -155,3 +155,65 @@ def test_create_product_auto_code_generation_is_sequential():
     n1 = int(first.json()["sku"].split("-")[-1])
     n2 = int(second.json()["sku"].split("-")[-1])
     assert n2 == n1 + 1
+
+
+def _seed_order_item_reference(product_id: int) -> None:
+    db = TestingSessionLocal()
+    customer = Customer(customer_code=f"C-P-{datetime.now(UTC).timestamp()}", name="C", active=True)
+    db.add(customer)
+    db.flush()
+
+    order = Order(
+        order_no=f"ORD-P-{datetime.now(UTC).timestamp()}",
+        customer_id=customer.id,
+        order_datetime=datetime.now(UTC),
+        delivery_date=datetime.now(UTC).date(),
+        status=OrderStatus.confirmed,
+        note=None,
+    )
+    db.add(order)
+    db.flush()
+
+    db.add(
+        OrderItem(
+            order_id=order.id,
+            product_id=product_id,
+            ordered_qty=1,
+            pricing_basis=PricingBasis.uom_count,
+            unit_price_uom_count=100,
+            unit_price_uom_kg=None,
+        )
+    )
+    db.commit()
+    db.close()
+
+
+def test_archive_and_list_filters_include_inactive():
+    pid = _seed_product("SKU-ARCHIVE")
+    client = _client()
+
+    archived = client.post(f"/api/v1/products/{pid}/archive")
+    assert archived.status_code == 200
+    assert archived.json()["active"] is False
+
+    listed_default = client.get("/api/v1/products")
+    assert listed_default.status_code == 200
+    assert all(row["id"] != pid for row in listed_default.json())
+
+    listed_all = client.get("/api/v1/products?include_inactive=true")
+    assert listed_all.status_code == 200
+    assert any(row["id"] == pid for row in listed_all.json())
+
+
+def test_delete_product_in_use_is_409_and_no_ref_is_204():
+    in_use_pid = _seed_product("SKU-IN-USE")
+    _seed_order_item_reference(in_use_pid)
+    client = _client()
+
+    blocked = client.delete(f"/api/v1/products/{in_use_pid}")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "PRODUCT_IN_USE"
+
+    free_pid = _seed_product("SKU-FREE")
+    deleted = client.delete(f"/api/v1/products/{free_pid}")
+    assert deleted.status_code == 204
