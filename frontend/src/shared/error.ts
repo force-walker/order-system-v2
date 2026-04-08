@@ -30,6 +30,10 @@ const CODE_MESSAGES: Record<string, string> = {
   CUSTOMER_CODE_ALREADY_EXISTS: '顧客コードが既に存在します。',
   PRODUCT_NOT_FOUND: '指定した商品が見つかりません。',
   PRODUCT_CODE_ALREADY_EXISTS: '商品コードが既に存在します。',
+  SUPPLIER_NOT_FOUND: '指定した仕入先が見つかりません。',
+  SUPPLIER_CODE_ALREADY_EXISTS: '仕入先コードが既に存在します。',
+  SUPPLIER_PRODUCT_ALREADY_EXISTS: 'この仕入先と商品の紐づけは既に存在します。',
+  SUPPLIER_PRODUCT_NOT_FOUND: '仕入先と商品の紐づけが見つかりません。',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {
