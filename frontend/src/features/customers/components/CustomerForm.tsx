@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { CustomerCreateRequest, CustomerDetail } from 'features/orders/types/order';
+import type { CustomerCreateRequest, CustomerDetail } from 'features/customers/types/customer';
 import { toUserMessage } from 'shared/error';
 
 type Props = {

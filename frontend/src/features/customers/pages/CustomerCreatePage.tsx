@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { CustomerForm } from 'features/orders/components/CustomerForm';
-import { createCustomer } from 'features/orders/services/ordersService';
+import { CustomerForm } from 'features/customers/components/CustomerForm';
+import { createCustomer } from 'features/customers/services/customersService';
 
 export const CustomerCreatePage = () => {
   const navigate = useNavigate();
