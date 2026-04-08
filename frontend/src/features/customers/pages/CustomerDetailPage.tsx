@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { getCustomerDetail } from 'features/orders/services/ordersService';
-import type { CustomerDetail } from 'features/orders/types/order';
+import { getCustomerDetail } from 'features/customers/services/customersService';
+import type { CustomerDetail } from 'features/customers/types/customer';
 import { toUserMessage } from 'shared/error';
 
 export const CustomerDetailPage = () => {

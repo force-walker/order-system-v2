@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { getProductDetail } from 'features/orders/services/ordersService';
-import type { ProductDetail } from 'features/orders/types/order';
+import { getProductDetail } from 'features/products/services/productsService';
+import type { ProductDetail } from 'features/products/types/product';
 import { toUserMessage } from 'shared/error';
 
 export const ProductDetailPage = () => {

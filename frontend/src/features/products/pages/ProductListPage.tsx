@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { listProducts } from 'features/orders/services/ordersService';
-import type { ProductOption } from 'features/orders/types/order';
+import { listProducts } from 'features/products/services/productsService';
+import type { ProductOption } from 'features/products/types/product';
 import { toUserMessage } from 'shared/error';
 
 type ToastPayload = {

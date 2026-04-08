@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { ProductForm } from 'features/orders/components/ProductForm';
-import { getProductDetail, updateProduct } from 'features/orders/services/ordersService';
-import type { ProductDetail } from 'features/orders/types/order';
+import { ProductForm } from 'features/products/components/ProductForm';
+import { getProductDetail, updateProduct } from 'features/products/services/productsService';
+import type { ProductDetail } from 'features/products/types/product';
 import { toUserMessage } from 'shared/error';
 
 export const ProductEditPage = () => {
