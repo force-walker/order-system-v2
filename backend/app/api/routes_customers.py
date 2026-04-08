@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.core.codegen import generate_next_code
 from app.db.session import get_db
-from app.models.entities import Customer
+from app.models.entities import Customer, Order
 from app.schemas.common import ApiErrorResponse
 from app.schemas.customer import CustomerCreateRequest, CustomerResponse, CustomerUpdateRequest
 
@@ -16,8 +16,14 @@ CUSTOMER_COMMON_ERROR_RESPONSES = {
 
 
 @router.get("", response_model=list[CustomerResponse])
-def list_customers(db: Session = Depends(get_db)) -> list[CustomerResponse]:
-    rows = db.query(Customer).order_by(Customer.id.asc()).all()
+def list_customers(
+    include_inactive: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> list[CustomerResponse]:
+    query = db.query(Customer)
+    if not include_inactive:
+        query = query.filter(Customer.active.is_(True))
+    rows = query.order_by(Customer.id.asc()).all()
     return [CustomerResponse.model_validate(r) for r in rows]
 
 
@@ -52,6 +58,67 @@ def update_customer(customer_id: int, payload: CustomerUpdateRequest, db: Sessio
     db.commit()
     db.refresh(row)
     return CustomerResponse.model_validate(row)
+
+
+@router.post(
+    "/{customer_id}/archive",
+    response_model=CustomerResponse,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def archive_customer(customer_id: int, db: Session = Depends(get_db)) -> CustomerResponse:
+    row = db.query(Customer).filter(Customer.id == customer_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+
+    row.active = False
+    db.flush()
+    write_audit_log(db, entity_type="customer", entity_id=row.id, action=AuditAction.UPDATE, after={"active": row.active})
+    db.commit()
+    db.refresh(row)
+    return CustomerResponse.model_validate(row)
+
+
+@router.post(
+    "/{customer_id}/unarchive",
+    response_model=CustomerResponse,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def unarchive_customer(customer_id: int, db: Session = Depends(get_db)) -> CustomerResponse:
+    row = db.query(Customer).filter(Customer.id == customer_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+
+    row.active = True
+    db.flush()
+    write_audit_log(db, entity_type="customer", entity_id=row.id, action=AuditAction.UPDATE, after={"active": row.active})
+    db.commit()
+    db.refresh(row)
+    return CustomerResponse.model_validate(row)
+
+
+@router.delete(
+    "/{customer_id}",
+    status_code=204,
+    responses={
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+        422: {"model": ApiErrorResponse, "description": "Validation Error"},
+    },
+)
+def delete_customer(customer_id: int, db: Session = Depends(get_db)) -> Response:
+    row = db.query(Customer).filter(Customer.id == customer_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+
+    has_order_ref = db.query(Order.id).filter(Order.customer_id == customer_id).first() is not None
+    if has_order_ref:
+        raise HTTPException(status_code=409, detail={"code": "CUSTOMER_IN_USE", "message": "customer is referenced and cannot be deleted"})
+
+    db.delete(row)
+    db.flush()
+    write_audit_log(db, entity_type="customer", entity_id=customer_id, action=AuditAction.CANCEL)
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.post(

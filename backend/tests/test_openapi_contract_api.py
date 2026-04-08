@@ -24,6 +24,11 @@ def test_openapi_error_contracts_for_core_apis():
     # customers
     assert "409" in _responses("/api/v1/customers", "post")
     assert "422" in _responses("/api/v1/customers", "post")
+    assert "404" in _responses("/api/v1/customers/{customer_id}/archive", "post")
+    assert "404" in _responses("/api/v1/customers/{customer_id}/unarchive", "post")
+    assert "404" in _responses("/api/v1/customers/{customer_id}", "delete")
+    assert "409" in _responses("/api/v1/customers/{customer_id}", "delete")
+    assert "422" in _responses("/api/v1/customers/{customer_id}", "delete")
 
     # suppliers
     assert "409" in _responses("/api/v1/suppliers", "post")
@@ -86,3 +91,6 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     product_list_params = {p["name"] for p in spec["paths"]["/api/v1/products"]["get"]["parameters"]}
     assert {"include_inactive"}.issubset(product_list_params)
+
+    customer_list_params = {p["name"] for p in spec["paths"]["/api/v1/customers"]["get"]["parameters"]}
+    assert {"include_inactive"}.issubset(customer_list_params)
