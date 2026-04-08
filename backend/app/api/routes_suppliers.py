@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Supplier
+from app.models.entities import Product, Supplier, SupplierProduct
 from app.schemas.common import ApiErrorResponse
 from app.schemas.supplier import SupplierCreateRequest, SupplierResponse, SupplierUpdateRequest
+from app.schemas.supplier_product import SupplierProductCreateRequest, SupplierProductResponse
 
 router = APIRouter(prefix="/api/v1/suppliers", tags=["suppliers"])
 
@@ -107,5 +108,72 @@ def delete_supplier(supplier_id: int, db: Session = Depends(get_db)) -> Response
     row.active = False
     db.flush()
     write_audit_log(db, entity_type="supplier", entity_id=supplier_id, action=AuditAction.CANCEL)
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.get(
+    "/{supplier_id}/products",
+    response_model=list[SupplierProductResponse],
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def list_supplier_products(supplier_id: int, db: Session = Depends(get_db)) -> list[SupplierProductResponse]:
+    supplier = db.query(Supplier).filter(Supplier.id == supplier_id).first()
+    if supplier is None:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "supplier not found"})
+
+    rows = db.query(SupplierProduct).filter(SupplierProduct.supplier_id == supplier_id).order_by(SupplierProduct.priority.asc(), SupplierProduct.id.asc()).all()
+    return [SupplierProductResponse.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/{supplier_id}/products",
+    response_model=SupplierProductResponse,
+    status_code=201,
+    responses={
+        **SUPPLIER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def create_supplier_product(
+    supplier_id: int,
+    payload: SupplierProductCreateRequest,
+    db: Session = Depends(get_db),
+) -> SupplierProductResponse:
+    supplier = db.query(Supplier).filter(Supplier.id == supplier_id).first()
+    if supplier is None:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "supplier not found"})
+
+    product = db.query(Product).filter(Product.id == payload.product_id).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+
+    exists = db.query(SupplierProduct).filter(SupplierProduct.supplier_id == supplier_id, SupplierProduct.product_id == payload.product_id).first()
+    if exists is not None:
+        raise HTTPException(status_code=409, detail={"code": "SUPPLIER_PRODUCT_ALREADY_EXISTS", "message": "supplier-product mapping already exists"})
+
+    row = SupplierProduct(supplier_id=supplier_id, **payload.model_dump())
+    db.add(row)
+    db.flush()
+    write_audit_log(db, entity_type="supplier_product", entity_id=row.id, action=AuditAction.CREATE)
+    db.commit()
+    db.refresh(row)
+    return SupplierProductResponse.model_validate(row)
+
+
+@router.delete(
+    "/{supplier_id}/products/{product_id}",
+    status_code=204,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def delete_supplier_product(supplier_id: int, product_id: int, db: Session = Depends(get_db)) -> Response:
+    row = db.query(SupplierProduct).filter(SupplierProduct.supplier_id == supplier_id, SupplierProduct.product_id == product_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_PRODUCT_NOT_FOUND", "message": "supplier-product mapping not found"})
+
+    db.delete(row)
+    db.flush()
+    write_audit_log(db, entity_type="supplier_product", entity_id=row.id, action=AuditAction.CANCEL)
     db.commit()
     return Response(status_code=204)
