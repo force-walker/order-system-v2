@@ -71,6 +71,8 @@ class SupplierProduct(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     priority: Mapped[int] = mapped_column(default=100)
     is_preferred: Mapped[bool] = mapped_column(Boolean, default=False)
+    default_unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    lead_time_days: Mapped[int | None] = mapped_column(nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

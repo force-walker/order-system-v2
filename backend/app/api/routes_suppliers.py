@@ -7,7 +7,7 @@ from app.db.session import get_db
 from app.models.entities import Product, Supplier, SupplierProduct
 from app.schemas.common import ApiErrorResponse
 from app.schemas.supplier import SupplierCreateRequest, SupplierResponse, SupplierUpdateRequest
-from app.schemas.supplier_product import SupplierProductCreateRequest, SupplierProductResponse
+from app.schemas.supplier_product import SupplierProductCreateRequest, SupplierProductResponse, SupplierProductUpdateRequest
 
 router = APIRouter(prefix="/api/v1/suppliers", tags=["suppliers"])
 
@@ -157,6 +157,35 @@ def create_supplier_product(
     db.add(row)
     db.flush()
     write_audit_log(db, entity_type="supplier_product", entity_id=row.id, action=AuditAction.CREATE)
+    db.commit()
+    db.refresh(row)
+    return SupplierProductResponse.model_validate(row)
+
+
+@router.patch(
+    "/{supplier_id}/products/{product_id}",
+    response_model=SupplierProductResponse,
+    responses={
+        **SUPPLIER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+    },
+)
+def update_supplier_product(
+    supplier_id: int,
+    product_id: int,
+    payload: SupplierProductUpdateRequest,
+    db: Session = Depends(get_db),
+) -> SupplierProductResponse:
+    row = db.query(SupplierProduct).filter(SupplierProduct.supplier_id == supplier_id, SupplierProduct.product_id == product_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_PRODUCT_NOT_FOUND", "message": "supplier-product mapping not found"})
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(row, k, v)
+
+    db.flush()
+    write_audit_log(db, entity_type="supplier_product", entity_id=row.id, action=AuditAction.UPDATE)
     db.commit()
     db.refresh(row)
     return SupplierProductResponse.model_validate(row)
