@@ -60,6 +60,22 @@ class Supplier(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
 
+class SupplierProduct(Base):
+    __tablename__ = "supplier_products"
+    __table_args__ = (
+        Index("ix_supplier_products_supplier_id_product_id", "supplier_id", "product_id", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    priority: Mapped[int] = mapped_column(default=100)
+    is_preferred: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
 class Product(Base):
     __tablename__ = "products"
 

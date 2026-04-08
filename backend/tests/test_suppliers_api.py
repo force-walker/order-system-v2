@@ -319,3 +319,70 @@ def test_list_suppliers_filters_and_paging():
     paged = client.get("/api/v1/suppliers?limit=1&offset=1")
     assert paged.status_code == 200
     assert len(paged.json()) == 1
+
+
+def _seed_product(sku: str = "SKU-SP-001") -> int:
+    db = TestingSessionLocal()
+    row = Product(
+        sku=sku,
+        name="P",
+        order_uom="count",
+        purchase_uom="count",
+        invoice_uom="count",
+        is_catch_weight=False,
+        weight_capture_required=False,
+        pricing_basis_default=PricingBasis.uom_count,
+        active=True,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    pid = row.id
+    db.close()
+    return pid
+
+
+def test_supplier_products_create_list_delete_flow():
+    supplier_id = _seed_supplier("SUP-PROD-1")
+    product_id = _seed_product("SKU-SP-100")
+    client = _client()
+
+    created = client.post(
+        f"/api/v1/suppliers/{supplier_id}/products",
+        json={"product_id": product_id, "priority": 10, "is_preferred": True, "note": "main"},
+    )
+    assert created.status_code == 201
+    assert created.json()["supplier_id"] == supplier_id
+    assert created.json()["product_id"] == product_id
+
+    dup = client.post(
+        f"/api/v1/suppliers/{supplier_id}/products",
+        json={"product_id": product_id, "priority": 20},
+    )
+    assert dup.status_code == 409
+    assert dup.json()["detail"]["code"] == "SUPPLIER_PRODUCT_ALREADY_EXISTS"
+
+    listed = client.get(f"/api/v1/suppliers/{supplier_id}/products")
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+    deleted = client.delete(f"/api/v1/suppliers/{supplier_id}/products/{product_id}")
+    assert deleted.status_code == 204
+
+    nf = client.delete(f"/api/v1/suppliers/{supplier_id}/products/{product_id}")
+    assert nf.status_code == 404
+    assert nf.json()["detail"]["code"] == "SUPPLIER_PRODUCT_NOT_FOUND"
+
+
+def test_supplier_products_not_found_paths():
+    supplier_id = _seed_supplier("SUP-PROD-NF")
+    product_id = _seed_product("SKU-SP-200")
+    client = _client()
+
+    nf_supplier = client.post("/api/v1/suppliers/999999/products", json={"product_id": product_id})
+    assert nf_supplier.status_code == 404
+    assert nf_supplier.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
+
+    nf_product = client.post(f"/api/v1/suppliers/{supplier_id}/products", json={"product_id": 999999})
+    assert nf_product.status_code == 404
+    assert nf_product.json()["detail"]["code"] == "PRODUCT_NOT_FOUND"
