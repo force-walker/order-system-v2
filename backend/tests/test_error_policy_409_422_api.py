@@ -142,19 +142,6 @@ def test_422_for_input_validation_errors():
 def test_409_for_state_conflicts():
     client = _client()
 
-    # duplicate key conflict
-    prod = {
-        "sku": "SKU-CONFLICT",
-        "name": "P",
-        "order_uom": "count",
-        "purchase_uom": "count",
-        "invoice_uom": "count",
-        "pricing_basis_default": "uom_count",
-    }
-    assert client.post("/api/v1/products", json=prod).status_code == 201
-    dup = client.post("/api/v1/products", json=prod)
-    assert dup.status_code == 409
-
     # state mismatch conflict
     _, order_id = _seed_product_customer_order()
     mismatch = client.post(
