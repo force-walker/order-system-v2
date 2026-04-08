@@ -349,11 +349,20 @@ def test_supplier_products_create_list_delete_flow():
 
     created = client.post(
         f"/api/v1/suppliers/{supplier_id}/products",
-        json={"product_id": product_id, "priority": 10, "is_preferred": True, "note": "main"},
+        json={
+            "product_id": product_id,
+            "priority": 10,
+            "is_preferred": True,
+            "default_unit_cost": 88.5,
+            "lead_time_days": 2,
+            "note": "main",
+        },
     )
     assert created.status_code == 201
     assert created.json()["supplier_id"] == supplier_id
     assert created.json()["product_id"] == product_id
+    assert float(created.json()["default_unit_cost"]) == 88.5
+    assert created.json()["lead_time_days"] == 2
 
     dup = client.post(
         f"/api/v1/suppliers/{supplier_id}/products",
@@ -365,6 +374,16 @@ def test_supplier_products_create_list_delete_flow():
     listed = client.get(f"/api/v1/suppliers/{supplier_id}/products")
     assert listed.status_code == 200
     assert len(listed.json()) == 1
+
+    updated = client.patch(
+        f"/api/v1/suppliers/{supplier_id}/products/{product_id}",
+        json={"priority": 5, "default_unit_cost": 77.0, "lead_time_days": 3, "note": "updated"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["priority"] == 5
+    assert float(updated.json()["default_unit_cost"]) == 77.0
+    assert updated.json()["lead_time_days"] == 3
+    assert updated.json()["note"] == "updated"
 
     deleted = client.delete(f"/api/v1/suppliers/{supplier_id}/products/{product_id}")
     assert deleted.status_code == 204
@@ -386,3 +405,17 @@ def test_supplier_products_not_found_paths():
     nf_product = client.post(f"/api/v1/suppliers/{supplier_id}/products", json={"product_id": 999999})
     assert nf_product.status_code == 404
     assert nf_product.json()["detail"]["code"] == "PRODUCT_NOT_FOUND"
+
+    nf_mapping_patch = client.patch(f"/api/v1/suppliers/{supplier_id}/products/{product_id}", json={"priority": 1})
+    assert nf_mapping_patch.status_code == 404
+    assert nf_mapping_patch.json()["detail"]["code"] == "SUPPLIER_PRODUCT_NOT_FOUND"
+
+
+def test_supplier_products_update_validation_is_422():
+    supplier_id = _seed_supplier("SUP-PROD-VAL")
+    product_id = _seed_product("SKU-SP-300")
+    client = _client()
+
+    client.post(f"/api/v1/suppliers/{supplier_id}/products", json={"product_id": product_id})
+    bad = client.patch(f"/api/v1/suppliers/{supplier_id}/products/{product_id}", json={"lead_time_days": -1})
+    assert bad.status_code == 422
