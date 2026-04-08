@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { listSuppliers } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
@@ -16,7 +16,7 @@ export const SupplierListPage = () => {
   const [offset, setOffset] = useState(0);
   const [hasNext, setHasNext] = useState(false);
 
-  const load = async (params: { q: string; active: 'all' | 'true' | 'false'; limit: number; offset: number }) => {
+  const load = async (params: { active: 'all' | 'true' | 'false'; limit: number; offset: number }) => {
     setLoading(true);
     setError('');
 
@@ -32,12 +32,18 @@ export const SupplierListPage = () => {
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      load({ q, active, limit, offset });
-    }, 250);
+    load({ active, limit, offset });
+  }, [active, limit, offset]);
 
-    return () => window.clearTimeout(timer);
-  }, [q, active, limit, offset]);
+  const filteredItems = useMemo(() => {
+    const keyword = q.trim().toLowerCase();
+    if (!keyword) return items;
+
+    return items.filter((row) => {
+      const target = `${row.supplierCode} ${row.name}`.toLowerCase();
+      return target.includes(keyword);
+    });
+  }, [items, q]);
 
   const onPrev = () => {
     setOffset((prev) => Math.max(0, prev - limit));
@@ -47,7 +53,7 @@ export const SupplierListPage = () => {
     setOffset((prev) => prev + limit);
   };
 
-  if (error) return <ErrorState title="仕入先一覧の取得に失敗しました" description={error} actionLabel="再試行" onAction={() => load({ q, active, limit, offset })} />;
+  if (error) return <ErrorState title="仕入先一覧の取得に失敗しました" description={error} actionLabel="再試行" onAction={() => load({ active, limit, offset })} />;
   if (loading) return <LoadingState title="仕入先一覧を読み込み中" description="しばらくお待ちください" />;
 
   return (
@@ -63,14 +69,7 @@ export const SupplierListPage = () => {
         <div className="list-controls" style={{ marginBottom: 12 }}>
           <label className="filter-label">
             検索(q)
-            <input
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setOffset(0);
-              }}
-              placeholder="supplier_code / name"
-            />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="supplier_code / name" />
           </label>
 
           <label className="filter-label">
@@ -104,7 +103,7 @@ export const SupplierListPage = () => {
           </label>
         </div>
 
-        {items.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <EmptyState
             title="データがありません"
             description="条件に合う仕入先がありません。検索条件を見直してください。"
@@ -129,7 +128,7 @@ export const SupplierListPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {items.map((row) => (
+                {filteredItems.map((row) => (
                   <tr key={row.id}>
                     <td>{row.id}</td>
                     <td>{row.supplierCode}</td>
