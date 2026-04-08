@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { listSuppliers } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
@@ -6,10 +7,16 @@ import { toUserMessage } from 'shared/error';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
+type ToastPayload = {
+  type: 'success' | 'error';
+  message: string;
+};
+
 export const SupplierListPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [items, setItems] = useState<Supplier[]>([]);
+  const [toast, setToast] = useState<ToastPayload | null>(null);
   const [q, setQ] = useState('');
   const [active, setActive] = useState<'all' | 'true' | 'false'>('all');
   const [limit, setLimit] = useState(20);
@@ -35,6 +42,25 @@ export const SupplierListPage = () => {
     load({ active, limit, offset });
   }, [active, limit, offset]);
 
+  useEffect(() => {
+    const raw = sessionStorage.getItem('osv2_toast');
+    if (raw) {
+      try {
+        setToast(JSON.parse(raw) as ToastPayload);
+      } catch {
+        // noop
+      } finally {
+        sessionStorage.removeItem('osv2_toast');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
   const filteredItems = useMemo(() => {
     const keyword = q.trim().toLowerCase();
     if (!keyword) return items;
@@ -58,11 +84,15 @@ export const SupplierListPage = () => {
 
   return (
     <section>
+      {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
       <div className="card">
         <div className="list-header">
           <div>
             <h2>仕入先一覧</h2>
             <p className="subtle">検索(q)・activeフィルタ・ページングに対応</p>
+          </div>
+          <div className="list-controls">
+            <Link to="/suppliers/new" className="order-link">+ 仕入先を作成</Link>
           </div>
         </div>
 
@@ -125,6 +155,7 @@ export const SupplierListPage = () => {
                   <th>name</th>
                   <th>active</th>
                   <th>updated_at</th>
+                  <th>編集</th>
                 </tr>
               </thead>
               <tbody>
@@ -135,6 +166,7 @@ export const SupplierListPage = () => {
                     <td>{row.name}</td>
                     <td>{row.active ? 'true' : 'false'}</td>
                     <td>{new Date(row.updatedAt).toLocaleString('ja-JP')}</td>
+                    <td><Link to={`/suppliers/${row.id}/edit`} className="order-link">編集</Link></td>
                   </tr>
                 ))}
               </tbody>
