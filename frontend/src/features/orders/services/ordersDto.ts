@@ -22,10 +22,9 @@ export type ApiTokenResponse = components['schemas']['TokenResponse'];
 export type ApiLoginRequest = components['schemas']['LoginRequest'];
 
 export const toApiCustomerCreate = (payload: CustomerCreateRequest): ApiCustomerCreateRequest => ({
-  code: payload.customerCode,
   name: payload.name,
   active: payload.active,
-});
+} as unknown as ApiCustomerCreateRequest);
 
 export const toApiCustomerUpdate = (payload: CustomerUpdateRequest): ApiCustomerUpdateRequest => ({
   name: payload.name,
@@ -33,7 +32,6 @@ export const toApiCustomerUpdate = (payload: CustomerUpdateRequest): ApiCustomer
 });
 
 export const toApiProductCreate = (payload: ProductCreateRequest): ApiProductCreateRequest => ({
-  sku: payload.sku,
   name: payload.name,
   order_uom: payload.orderUom,
   purchase_uom: payload.purchaseUom,
@@ -41,7 +39,7 @@ export const toApiProductCreate = (payload: ProductCreateRequest): ApiProductCre
   is_catch_weight: payload.isCatchWeight,
   weight_capture_required: payload.weightCaptureRequired,
   pricing_basis_default: payload.pricingBasisDefault,
-});
+} as unknown as ApiProductCreateRequest);
 
 export const toApiProductUpdate = (payload: ProductUpdateRequest): ApiProductUpdateRequest => ({
   name: payload.name,
@@ -68,6 +66,7 @@ export const toApiOrderCreateHeader = (
 export const toCustomerOption = (row: ApiCustomerResponse): CustomerOption => ({
   id: row.id,
   label: `${row.id}: ${row.name} (${row.code})`,
+  customerCode: row.code,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -82,6 +81,7 @@ export const toCustomerDetail = (row: ApiCustomerResponse): CustomerDetail => ({
 export const toProductOption = (row: ApiProductResponse): ProductOption => ({
   id: row.id,
   label: `${row.id}: ${row.name} (${row.pricing_basis_default})`,
+  sku: row.sku,
   name: row.name,
   orderUom: row.order_uom,
   pricingBasisDefault: row.pricing_basis_default,

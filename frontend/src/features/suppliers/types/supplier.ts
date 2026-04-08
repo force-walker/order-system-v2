@@ -20,7 +20,6 @@ export type SupplierListResult = {
 };
 
 export type SupplierCreateRequest = {
-  supplierCode: string;
   name: string;
   active: boolean;
 };

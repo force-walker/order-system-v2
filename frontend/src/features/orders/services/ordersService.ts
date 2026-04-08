@@ -455,7 +455,7 @@ export const createCustomer = async (payload: CustomerCreateRequest): Promise<Cu
   if (USE_MOCK) {
     return {
       id: Date.now(),
-      customerCode: payload.customerCode,
+      customerCode: `CUST-MOCK-${Date.now()}`,
       name: payload.name,
       active: payload.active,
     };
@@ -565,7 +565,7 @@ export const createProduct = async (payload: ProductCreateRequest): Promise<Prod
   if (USE_MOCK) {
     return {
       id: Date.now(),
-      sku: payload.sku,
+      sku: `PRD-MOCK-${Date.now()}`,
       name: payload.name,
       orderUom: payload.orderUom,
       purchaseUom: payload.purchaseUom,

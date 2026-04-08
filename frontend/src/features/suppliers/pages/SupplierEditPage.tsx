@@ -26,7 +26,7 @@ export const SupplierEditPage = () => {
       .catch((e) => setError(toUserMessage(e, '仕入先情報の取得に失敗しました')));
   }, [supplierIdNum]);
 
-  const handleSubmit = async (payload: { supplierCode: string; name: string; active: boolean }) => {
+  const handleSubmit = async (payload: { name: string; active: boolean }) => {
     const updated = await updateSupplier(supplierIdNum, { name: payload.name, active: payload.active });
     sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `仕入先を更新しました（ID: ${updated.id}）` }));
     navigate('/suppliers');

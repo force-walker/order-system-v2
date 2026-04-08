@@ -63,6 +63,7 @@ export type CreateOrderRequest = {
 export type CustomerOption = {
   id: number;
   label: string;
+  customerCode?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -75,7 +76,6 @@ export type CustomerDetail = {
 };
 
 export type CustomerCreateRequest = {
-  customerCode: string;
   name: string;
   active: boolean;
 };
@@ -88,6 +88,7 @@ export type CustomerUpdateRequest = {
 export type ProductOption = {
   id: number;
   label: string;
+  sku?: string;
   name: string;
   orderUom: string;
   pricingBasisDefault: 'uom_count' | 'uom_kg';
@@ -109,7 +110,6 @@ export type ProductDetail = {
 };
 
 export type ProductCreateRequest = {
-  sku: string;
   name: string;
   orderUom: string;
   purchaseUom: string;

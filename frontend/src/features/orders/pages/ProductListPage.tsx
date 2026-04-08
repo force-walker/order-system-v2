@@ -109,6 +109,7 @@ export const ProductListPage = () => {
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>SKU</th>
                   <th>商品名</th>
                   <th>注文単位</th>
                   <th>課金基準</th>
@@ -121,6 +122,7 @@ export const ProductListPage = () => {
                 {filteredProducts.map((p) => (
                   <tr key={p.id}>
                     <td>{p.id}</td>
+                    <td>{p.sku ?? '-'}</td>
                     <td>{p.name}</td>
                     <td>{p.orderUom}</td>
                     <td>{p.pricingBasisDefault}</td>

@@ -22,7 +22,6 @@ export const ProductEditPage = () => {
   }, [productIdNum]);
 
   const handleSubmit = async (payload: {
-    sku: string;
     name: string;
     orderUom: string;
     purchaseUom: string;
