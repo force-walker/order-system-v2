@@ -12,6 +12,7 @@ import { CustomerListPage } from 'features/orders/pages/CustomerListPage';
 import { CustomerDetailPage } from 'features/orders/pages/CustomerDetailPage';
 import { CustomerCreatePage } from 'features/orders/pages/CustomerCreatePage';
 import { CustomerEditPage } from 'features/orders/pages/CustomerEditPage';
+import { SupplierListPage } from 'features/suppliers/pages/SupplierListPage';
 
 export const App = () => {
   return (
@@ -30,6 +31,7 @@ export const App = () => {
         <Route path="/customers/new" element={<CustomerCreatePage />} />
         <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
         <Route path="/customers/:customerId/edit" element={<CustomerEditPage />} />
+        <Route path="/suppliers" element={<SupplierListPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/orders/new" replace />} />
     </Routes>
