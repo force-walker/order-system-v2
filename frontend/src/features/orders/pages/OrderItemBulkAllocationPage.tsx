@@ -326,27 +326,6 @@ export const OrderItemBulkAllocationPage = () => {
 
         <div className="list-controls" style={{ marginBottom: 12 }}>
           <label className="filter-label">
-            <input
-              type="checkbox"
-              checked={selectVisibleChecked}
-              onChange={(e) => toggleSelectVisible(e.target.checked)}
-            />
-            表示中を一括選択
-          </label>
-          <label className="filter-label">
-            <input
-              type="checkbox"
-              checked={!selectVisibleChecked && visibleIds.some((id) => editById[id]?.selected)}
-              onChange={(e) => {
-                if (e.target.checked) toggleSelectVisible(false);
-              }}
-            />
-            表示中を一括解除
-          </label>
-        </div>
-
-        <div className="list-controls" style={{ marginBottom: 12 }}>
-          <label className="filter-label">
             選択行へ一括仕入先適用
             <select value={bulkSupplierId} onChange={(e) => setBulkSupplierId(e.target.value ? Number(e.target.value) : '')}>
               <option value="">選択してください</option>
@@ -364,7 +343,16 @@ export const OrderItemBulkAllocationPage = () => {
             <table>
               <thead>
                 <tr>
-                  <th>選択</th>
+                  <th>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectVisibleChecked}
+                        onChange={(e) => toggleSelectVisible(e.target.checked)}
+                      />
+                      選択
+                    </label>
+                  </th>
                   <th>注文番号</th>
                   <th>顧客</th>
                   <th>商品</th>
