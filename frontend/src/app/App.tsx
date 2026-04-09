@@ -3,6 +3,7 @@ import { AppLayout } from './AppLayout';
 import { OrderCreatePage } from 'features/orders/pages/OrderCreatePage';
 import { OrderListPage } from 'features/orders/pages/OrderListPage';
 import { OrderItemDetailPage } from 'features/orders/pages/OrderItemDetailPage';
+import { OrderItemBulkAllocationPage } from 'features/orders/pages/OrderItemBulkAllocationPage';
 import { OrderEditPage } from 'features/orders/pages/OrderEditPage';
 import { PurchasePage } from 'features/orders/pages/PurchasePage';
 import { ProductListPage } from 'features/products/pages/ProductListPage';
@@ -25,6 +26,7 @@ export const App = () => {
       <Route element={<AppLayout />}>
         <Route path="/orders" element={<OrderListPage />} />
         <Route path="/orders/new" element={<OrderCreatePage />} />
+        <Route path="/orders/item-allocations" element={<OrderItemBulkAllocationPage />} />
         <Route path="/orders/:orderId/items/:itemId" element={<OrderItemDetailPage />} />
         <Route path="/orders/:orderId/edit" element={<OrderEditPage />} />
         <Route path="/purchases" element={<PurchasePage />} />
