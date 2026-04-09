@@ -115,6 +115,43 @@ def test_get_customer_not_found():
     assert res.json()["detail"]["code"] == "CUSTOMER_NOT_FOUND"
 
 
+def test_customer_archive_and_include_inactive_filter():
+    cid = _seed_customer("CUST-ARCH")
+    client = _client()
+
+    archived = client.post(f"/api/v1/customers/{cid}/archive")
+    assert archived.status_code == 200
+    assert archived.json()["active"] is False
+
+    listed_default = client.get("/api/v1/customers")
+    assert listed_default.status_code == 200
+    assert all(row["id"] != cid for row in listed_default.json())
+
+    listed_all = client.get("/api/v1/customers?include_inactive=true")
+    assert listed_all.status_code == 200
+    assert any(row["id"] == cid for row in listed_all.json())
+
+    unarchived = client.post(f"/api/v1/customers/{cid}/unarchive")
+    assert unarchived.status_code == 200
+    assert unarchived.json()["active"] is True
+
+
+def test_customer_delete_in_use_is_409_and_no_ref_is_204():
+    client = _client()
+
+    in_use_cid = _seed_customer("CUST-INUSE")
+    create_order = client.post("/api/v1/orders", json={"customer_id": in_use_cid, "delivery_date": str(date.today())})
+    assert create_order.status_code == 201
+
+    blocked = client.delete(f"/api/v1/customers/{in_use_cid}")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "CUSTOMER_IN_USE"
+
+    free_cid = _seed_customer("CUST-FREE")
+    deleted = client.delete(f"/api/v1/customers/{free_cid}")
+    assert deleted.status_code == 204
+
+
 def test_create_order_success_and_list():
     cid = _seed_customer("CUST-ORDER")
     payload = {
