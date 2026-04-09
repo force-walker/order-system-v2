@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Order, OrderItem, Product, Supplier, SupplierAllocation, SupplierProduct
+from app.models.entities import Customer, Order, OrderItem, Product, Supplier, SupplierAllocation, SupplierProduct
 from app.schemas.common import ApiErrorResponse
 from app.schemas.order_item_allocation import (
     AllocationSuggestRequest,
@@ -33,21 +33,30 @@ def list_order_item_allocation_work_items(
     unallocated_only: bool = Query(default=False),
     delivery_date: date | None = Query(default=None),
     supplier_id: int | None = Query(default=None, gt=0),
+    product_name: str | None = Query(default=None, min_length=1, max_length=255),
+    customer_name: str | None = Query(default=None, min_length=1, max_length=255),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[OrderItemAllocationWorkItem]:
     query = (
-        db.query(OrderItem, Order, Product)
+        db.query(OrderItem, Order, Product, Customer)
         .join(Order, OrderItem.order_id == Order.id)
         .join(Product, OrderItem.product_id == Product.id)
+        .join(Customer, Order.customer_id == Customer.id)
     )
 
     if delivery_date is not None:
         query = query.filter(Order.delivery_date == delivery_date)
+    if product_name is not None:
+        query = query.filter(Product.name.ilike(f"%{product_name}%"))
+    if customer_name is not None:
+        query = query.filter(Customer.name.ilike(f"%{customer_name}%"))
 
     rows = query.order_by(Order.delivery_date.asc(), Order.id.asc(), OrderItem.id.asc()).all()
 
     result: list[OrderItemAllocationWorkItem] = []
-    for item, order, product in rows:
+    for item, order, product, _customer in rows:
         alloc = _current_allocation(db, item.id)
         has_alloc = alloc is not None and alloc.final_supplier_id is not None and alloc.final_qty is not None and float(alloc.final_qty) > 0
         if unallocated_only and has_alloc:
@@ -68,7 +77,7 @@ def list_order_item_allocation_work_items(
                 allocated_qty=(float(alloc.final_qty) if has_alloc else None),
             )
         )
-    return result
+    return result[offset : offset + limit]
 
 
 @router.post(
