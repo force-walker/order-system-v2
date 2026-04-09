@@ -135,3 +135,51 @@ def test_supplier_product_mapping_not_found_and_validation():
 
     invalid = client.patch("/api/v1/supplier-product-mappings/999999", json={"lead_time_days": -1})
     assert invalid.status_code == 422
+
+
+def test_shared_mapping_visible_from_supplier_and_product_views():
+    supplier_id = _seed_supplier("SUP-MAP-C")
+    product_id = _seed_product("SKU-MAP-C")
+    client = _client()
+
+    created = client.post(
+        "/api/v1/supplier-product-mappings",
+        json={"supplier_id": supplier_id, "product_id": product_id, "priority": 10},
+    )
+    assert created.status_code == 201
+    mapping_id = created.json()["id"]
+
+    supplier_view = client.get(f"/api/v1/suppliers/{supplier_id}/products")
+    assert supplier_view.status_code == 200
+    assert any(row["id"] == mapping_id for row in supplier_view.json())
+
+    product_view = client.get(f"/api/v1/supplier-product-mappings?product_id={product_id}")
+    assert product_view.status_code == 200
+    assert any(row["id"] == mapping_id for row in product_view.json())
+
+    product_detail_view = client.get(f"/api/v1/supplier-product-mappings/products/{product_id}")
+    assert product_detail_view.status_code == 200
+    assert any(row["id"] == mapping_id for row in product_detail_view.json())
+
+    # update via supplier-side endpoint
+    updated_supplier_side = client.patch(
+        f"/api/v1/suppliers/{supplier_id}/products/{product_id}",
+        json={"priority": 3, "note": "supplier-side"},
+    )
+    assert updated_supplier_side.status_code == 200
+
+    reflected_product_side = client.get(f"/api/v1/supplier-product-mappings?product_id={product_id}")
+    assert reflected_product_side.status_code == 200
+    row = [x for x in reflected_product_side.json() if x["id"] == mapping_id][0]
+    assert row["priority"] == 3
+    assert row["note"] == "supplier-side"
+
+    # update via common(flat) endpoint
+    updated_flat = client.patch(f"/api/v1/supplier-product-mappings/{mapping_id}", json={"priority": 1, "note": "flat"})
+    assert updated_flat.status_code == 200
+
+    reflected_supplier_side = client.get(f"/api/v1/suppliers/{supplier_id}/products")
+    assert reflected_supplier_side.status_code == 200
+    row2 = [x for x in reflected_supplier_side.json() if x["id"] == mapping_id][0]
+    assert row2["priority"] == 1
+    assert row2["note"] == "flat"

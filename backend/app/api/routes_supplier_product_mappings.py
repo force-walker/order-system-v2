@@ -25,6 +25,25 @@ def list_supplier_product_mappings(
     return [SupplierProductResponse.model_validate(row) for row in rows]
 
 
+@router.get(
+    "/products/{product_id}",
+    response_model=list[SupplierProductResponse],
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def list_supplier_product_mappings_by_product(product_id: int, db: Session = Depends(get_db)) -> list[SupplierProductResponse]:
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+
+    rows = (
+        db.query(SupplierProduct)
+        .filter(SupplierProduct.product_id == product_id)
+        .order_by(SupplierProduct.priority.asc(), SupplierProduct.id.asc())
+        .all()
+    )
+    return [SupplierProductResponse.model_validate(row) for row in rows]
+
+
 @router.post(
     "",
     response_model=SupplierProductResponse,
