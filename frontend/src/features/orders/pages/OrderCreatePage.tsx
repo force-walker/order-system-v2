@@ -3,7 +3,7 @@ import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncSta
 import { OrderForm } from 'features/orders/components/OrderForm';
 import { createOrder, listCustomers, listProducts } from 'features/orders/services/ordersService';
 import type { CustomerOption, ProductOption } from 'features/orders/types/order';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 import { useNavigate } from 'react-router-dom';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
@@ -27,7 +27,7 @@ export const OrderCreatePage = () => {
         setCustomers(customerRows);
         setProducts(productRows);
       })
-      .catch((e) => setError(toUserMessage(e, 'マスタ情報の取得に失敗しました')));
+      .catch((e) => setError(toActionableMessage(e, 'マスタ情報の取得に失敗しました')));
   }, []);
 
   const runConnectivityCheck = async () => {

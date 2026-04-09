@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveProduct, deleteProduct, listProducts, unarchiveProduct } from 'features/products/services/productsService';
 import type { ProductOption } from 'features/products/types/product';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 type ToastPayload = {
   type: 'success' | 'error';
@@ -27,7 +27,7 @@ export const ProductListPage = () => {
       const data = await listProducts(showArchived);
       setProducts(data);
     } catch (e) {
-      setError(toUserMessage(e, '商品一覧の取得に失敗しました'));
+      setError(toActionableMessage(e, '商品一覧の取得に失敗しました'));
     }
   };
 
@@ -58,7 +58,7 @@ export const ProductListPage = () => {
       setToast({ type: 'success', message: successMessage });
       await load();
     } catch (e) {
-      setToast({ type: 'error', message: toUserMessage(e, '操作に失敗しました') });
+      setToast({ type: 'error', message: toActionableMessage(e, '操作に失敗しました') });
     }
   };
 

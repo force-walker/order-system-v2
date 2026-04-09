@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveProduct, deleteProduct, getProductDetail, unarchiveProduct } from 'features/products/services/productsService';
 import type { ProductDetail } from 'features/products/types/product';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 export const ProductDetailPage = () => {
   const { productId } = useParams();
@@ -22,7 +22,7 @@ export const ProductDetailPage = () => {
       const row = await getProductDetail(id);
       setProduct(row);
     } catch (e) {
-      setError(toUserMessage(e, '商品詳細の取得に失敗しました'));
+      setError(toActionableMessage(e, '商品詳細の取得に失敗しました'));
     }
   };
 
@@ -36,7 +36,7 @@ export const ProductDetailPage = () => {
       sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: success }));
       navigate('/products');
     } catch (e) {
-      setError(toUserMessage(e, '操作に失敗しました'));
+      setError(toActionableMessage(e, '操作に失敗しました'));
     }
   };
 

@@ -4,7 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncSta
 import { CustomerForm } from 'features/customers/components/CustomerForm';
 import { getCustomerDetail, updateCustomer } from 'features/customers/services/customersService';
 import type { CustomerDetail } from 'features/customers/types/customer';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 export const CustomerEditPage = () => {
   const { customerId } = useParams();
@@ -22,7 +22,7 @@ export const CustomerEditPage = () => {
 
     getCustomerDetail(customerIdNum)
       .then(setCustomer)
-      .catch((e) => setError(toUserMessage(e, '顧客情報の取得に失敗しました')));
+      .catch((e) => setError(toActionableMessage(e, '顧客情報の取得に失敗しました')));
   }, [customerIdNum]);
 
   const handleSubmit = async (payload: Parameters<typeof updateCustomer>[1]) => {
