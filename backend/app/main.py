@@ -1,6 +1,7 @@
 from time import perf_counter
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -34,17 +35,40 @@ app.add_middleware(
 )
 
 
+def _error_payload(code: str, message: str, details: list[dict] | None = None) -> dict:
+    return {"detail": {"code": code, "message": message, "details": details}}
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_: Request, exc: RequestValidationError):
+    detail_rows = []
+    for e in exc.errors():
+        detail_rows.append({"loc": list(e.get("loc", [])), "msg": e.get("msg"), "type": e.get("type")})
+    return JSONResponse(status_code=422, content=_error_payload("VALIDATION_ERROR", "request validation failed", detail_rows))
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(_: Request, exc: HTTPException):
+    detail = exc.detail
+    if isinstance(detail, dict):
+        code = detail.get("code", "HTTP_ERROR")
+        message = detail.get("message", str(code))
+        details = detail.get("details")
+        return JSONResponse(status_code=exc.status_code, content=_error_payload(code, message, details))
+    return JSONResponse(status_code=exc.status_code, content=_error_payload("HTTP_ERROR", str(detail)))
+
+
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(_: Request, exc: IntegrityError):
     status, code, message = map_integrity_error(exc)
-    return JSONResponse(status_code=status, content={"detail": {"code": code, "message": message}})
+    return JSONResponse(status_code=status, content=_error_payload(code, message))
 
 
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_error_handler(_: Request, __: SQLAlchemyError):
     return JSONResponse(
         status_code=500,
-        content={"detail": {"code": "DB_ERROR", "message": "database operation failed"}},
+        content=_error_payload("DB_ERROR", "database operation failed"),
     )
 
 
