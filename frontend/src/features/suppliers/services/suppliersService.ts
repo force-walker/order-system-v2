@@ -6,6 +6,7 @@ import type {
   SupplierListParams,
   SupplierListResult,
   SupplierProductMapping,
+  SupplierProductMappingCreateGlobalRequest,
   SupplierProductMappingCreateRequest,
   SupplierProductMappingUpdateRequest,
   SupplierUpdateRequest,
@@ -209,6 +210,60 @@ export const updateSupplierProductMapping = async (
 
 export const deleteSupplierProductMapping = async (supplierId: number, productId: number): Promise<void> => {
   const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}/products/${productId}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
+};
+
+export const listProductSupplierMappings = async (productId: number): Promise<SupplierProductMapping[]> => {
+  const res = await fetchWithAuth(`/api/v1/supplier-product-mappings/products/${productId}`);
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as ApiSupplierProductMapping[];
+  return data.map(toSupplierProductMapping);
+};
+
+export const createSupplierProductMappingGlobal = async (
+  payload: SupplierProductMappingCreateGlobalRequest,
+): Promise<SupplierProductMapping> => {
+  const res = await fetchWithAuth('/api/v1/supplier-product-mappings', {
+    method: 'POST',
+    body: {
+      supplier_id: payload.supplierId,
+      product_id: payload.productId,
+      priority: payload.priority,
+      is_preferred: payload.isPreferred,
+      default_unit_cost: payload.defaultUnitCost,
+      lead_time_days: payload.leadTimeDays,
+      note: payload.note,
+    },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as ApiSupplierProductMapping;
+  return toSupplierProductMapping(data);
+};
+
+export const updateSupplierProductMappingById = async (
+  mappingId: number,
+  payload: SupplierProductMappingUpdateRequest,
+): Promise<SupplierProductMapping> => {
+  const res = await fetchWithAuth(`/api/v1/supplier-product-mappings/${mappingId}`, {
+    method: 'PATCH',
+    body: {
+      priority: payload.priority,
+      is_preferred: payload.isPreferred,
+      default_unit_cost: payload.defaultUnitCost,
+      lead_time_days: payload.leadTimeDays,
+      note: payload.note,
+    },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as ApiSupplierProductMapping;
+  return toSupplierProductMapping(data);
+};
+
+export const deleteSupplierProductMappingById = async (mappingId: number): Promise<void> => {
+  const res = await fetchWithAuth(`/api/v1/supplier-product-mappings/${mappingId}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
 };
 

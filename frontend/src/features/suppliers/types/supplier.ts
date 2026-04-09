@@ -52,6 +52,16 @@ export type SupplierProductMappingCreateRequest = {
   note: string | null;
 };
 
+export type SupplierProductMappingCreateGlobalRequest = {
+  supplierId: number;
+  productId: number;
+  priority: number;
+  isPreferred: boolean;
+  defaultUnitCost: number | null;
+  leadTimeDays: number | null;
+  note: string | null;
+};
+
 export type SupplierProductMappingUpdateRequest = {
   priority?: number;
   isPreferred?: boolean;
