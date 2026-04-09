@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveCustomer, deleteCustomer, listCustomers, unarchiveCustomer } from 'features/customers/services/customersService';
 import type { CustomerOption } from 'features/customers/types/customer';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 type ToastPayload = {
   type: 'success' | 'error';
@@ -26,7 +26,7 @@ export const CustomerListPage = () => {
       const data = await listCustomers(showArchived);
       setCustomers(data);
     } catch (e) {
-      setError(toUserMessage(e, '顧客一覧の取得に失敗しました'));
+      setError(toActionableMessage(e, '顧客一覧の取得に失敗しました'));
     }
   };
 
@@ -57,7 +57,7 @@ export const CustomerListPage = () => {
       setToast({ type: 'success', message: successMessage });
       await load();
     } catch (e) {
-      setToast({ type: 'error', message: toUserMessage(e, '操作に失敗しました') });
+      setToast({ type: 'error', message: toActionableMessage(e, '操作に失敗しました') });
     }
   };
 

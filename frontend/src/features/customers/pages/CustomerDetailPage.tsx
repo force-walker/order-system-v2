@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveCustomer, deleteCustomer, getCustomerDetail, unarchiveCustomer } from 'features/customers/services/customersService';
 import type { CustomerDetail } from 'features/customers/types/customer';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 export const CustomerDetailPage = () => {
   const { customerId } = useParams();
@@ -22,7 +22,7 @@ export const CustomerDetailPage = () => {
       const row = await getCustomerDetail(id);
       setCustomer(row);
     } catch (e) {
-      setError(toUserMessage(e, '顧客詳細の取得に失敗しました'));
+      setError(toActionableMessage(e, '顧客詳細の取得に失敗しました'));
     }
   };
 
@@ -36,7 +36,7 @@ export const CustomerDetailPage = () => {
       sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: success }));
       navigate('/customers');
     } catch (e) {
-      setError(toUserMessage(e, '操作に失敗しました'));
+      setError(toActionableMessage(e, '操作に失敗しました'));
     }
   };
 

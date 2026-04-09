@@ -4,7 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncSta
 import { ProductForm } from 'features/products/components/ProductForm';
 import { getProductDetail, updateProduct } from 'features/products/services/productsService';
 import type { ProductDetail } from 'features/products/types/product';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 export const ProductEditPage = () => {
   const { productId } = useParams();
@@ -18,7 +18,7 @@ export const ProductEditPage = () => {
     if (!productIdNum) return setError('不正な商品IDです');
     getProductDetail(productIdNum)
       .then(setProduct)
-      .catch((e) => setError(toUserMessage(e, '商品情報の取得に失敗しました')));
+      .catch((e) => setError(toActionableMessage(e, '商品情報の取得に失敗しました')));
   }, [productIdNum]);
 
   const handleSubmit = async (payload: {

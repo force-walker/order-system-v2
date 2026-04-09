@@ -4,7 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncSta
 import { OrderForm } from 'features/orders/components/OrderForm';
 import { getOrder, listCustomers, listProducts, updateOrder } from 'features/orders/services/ordersService';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 export const OrderEditPage = () => {
   const { orderId } = useParams();
@@ -55,7 +55,7 @@ export const OrderEditPage = () => {
           })),
         });
       })
-      .catch((e) => setError(toUserMessage(e, '注文編集情報の取得に失敗しました')));
+      .catch((e) => setError(toActionableMessage(e, '注文編集情報の取得に失敗しました')));
   }, [orderIdNum]);
 
   const handleSubmit = async (payload: CreateOrderRequest) => {

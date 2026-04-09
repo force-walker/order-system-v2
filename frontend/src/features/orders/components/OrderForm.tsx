@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 type Props = {
   onSubmit: (payload: CreateOrderRequest) => Promise<void>;
@@ -274,7 +274,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
       });
       setSubmitError('');
     } catch (err) {
-      setSubmitError(toUserMessage(err, '注文保存に失敗しました。時間をおいて再試行してください。'));
+      setSubmitError(toActionableMessage(err, '注文保存に失敗しました。時間をおいて再試行してください。'));
     } finally {
       setSubmitting(false);
     }
