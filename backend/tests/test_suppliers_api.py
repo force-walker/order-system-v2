@@ -189,13 +189,19 @@ def _seed_purchase_result_reference_supplier(supplier_id: int) -> None:
     db.close()
 
 
-def test_list_suppliers():
-    _seed_supplier("SUP-LIST")
+def test_list_suppliers_default_active_only_and_include_inactive():
+    sid = _seed_supplier("SUP-LIST")
     client = _client()
 
-    res = client.get("/api/v1/suppliers")
-    assert res.status_code == 200
-    assert any(x["supplier_code"] == "SUP-LIST" for x in res.json())
+    client.post(f"/api/v1/suppliers/{sid}/archive")
+
+    res_default = client.get("/api/v1/suppliers")
+    assert res_default.status_code == 200
+    assert all(x["supplier_code"] != "SUP-LIST" for x in res_default.json())
+
+    res_all = client.get("/api/v1/suppliers?include_inactive=true")
+    assert res_all.status_code == 200
+    assert any(x["supplier_code"] == "SUP-LIST" for x in res_all.json())
 
 
 def test_get_supplier_success_and_not_found():
@@ -267,50 +273,53 @@ def test_update_supplier_validation_error_is_422():
     assert bad.status_code == 422
 
 
-def test_delete_supplier_soft_delete_and_not_found():
+def test_archive_supplier_and_not_found():
+    supplier_id = _seed_supplier("SUP-ARCH")
+    client = _client()
+
+    archived = client.post(f"/api/v1/suppliers/{supplier_id}/archive")
+    assert archived.status_code == 200
+    assert archived.json()["active"] is False
+
+    unarchived = client.post(f"/api/v1/suppliers/{supplier_id}/unarchive")
+    assert unarchived.status_code == 200
+    assert unarchived.json()["active"] is True
+
+    nf = client.post("/api/v1/suppliers/999999/archive")
+    assert nf.status_code == 404
+    assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
+
+
+def test_delete_supplier_not_found_and_unreferenced_success():
     supplier_id = _seed_supplier("SUP-DEL")
     client = _client()
 
     deleted = client.delete(f"/api/v1/suppliers/{supplier_id}")
     assert deleted.status_code == 204
 
-    detail = client.get(f"/api/v1/suppliers/{supplier_id}")
-    assert detail.status_code == 200
-    assert detail.json()["active"] is False
-
-    # idempotent soft delete
-    deleted_again = client.delete(f"/api/v1/suppliers/{supplier_id}")
-    assert deleted_again.status_code == 204
-
-    nf = client.delete("/api/v1/suppliers/999999")
+    nf = client.delete(f"/api/v1/suppliers/{supplier_id}")
     assert nf.status_code == 404
     assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
 
 
-def test_delete_supplier_in_use_by_allocation_is_allowed_with_soft_delete():
+def test_delete_supplier_in_use_by_allocation_is_409():
     supplier_id = _seed_supplier("SUP-USED-ALLOC")
     _seed_allocation_reference_supplier(supplier_id)
     client = _client()
 
-    deleted = client.delete(f"/api/v1/suppliers/{supplier_id}")
-    assert deleted.status_code == 204
-
-    detail = client.get(f"/api/v1/suppliers/{supplier_id}")
-    assert detail.status_code == 200
-    assert detail.json()["active"] is False
+    blocked = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "SUPPLIER_IN_USE"
 
 
-def test_delete_supplier_in_use_by_purchase_result_is_allowed_with_soft_delete():
+def test_delete_supplier_in_use_by_purchase_result_is_409():
     supplier_id = _seed_supplier("SUP-USED-PR")
     _seed_purchase_result_reference_supplier(supplier_id)
     client = _client()
 
-    deleted = client.delete(f"/api/v1/suppliers/{supplier_id}")
-    assert deleted.status_code == 204
-
-    detail = client.get(f"/api/v1/suppliers/{supplier_id}")
-    assert detail.status_code == 200
-    assert detail.json()["active"] is False
+    blocked = client.delete(f"/api/v1/suppliers/{supplier_id}")
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "SUPPLIER_IN_USE"
 
 
 def test_list_suppliers_filters_and_paging():
