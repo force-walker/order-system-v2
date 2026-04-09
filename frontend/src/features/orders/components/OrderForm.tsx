@@ -164,11 +164,13 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
   const [errors, setErrors] = useState<FieldErrors>({ itemRows: [] });
   const [submitError, setSubmitError] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  const [openDetailByRowKey, setOpenDetailByRowKey] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setForm(toInitialForm(initialValue));
     setErrors({ itemRows: [] });
     setSubmitError('');
+    setOpenDetailByRowKey({});
   }, [initialValue]);
 
   const hasErrors = useMemo(() => hasAnyError(errors), [errors]);
@@ -324,17 +326,21 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
         </div>
 
         <div className="item-cards">
+          <div className="item-grid-row item-grid-row-primary item-row-header">
+            <div>#</div>
+            <div>商品</div>
+            <div>数量</div>
+            <div>単位</div>
+            <div>コメント</div>
+            <div>操作</div>
+          </div>
           {form.items.map((row, idx) => {
             const e = errors.itemRows?.[idx] ?? {};
             return (
-              <div key={row.clientKey} className="item-card">
-                <div className="section-row">
-                  <h4>明細 {idx + 1}</h4>
-                </div>
-
-                <div className="item-grid-row item-grid-row-primary">
+              <div key={row.clientKey} className="item-card item-card-flat">
+                <div className="item-grid-row item-grid-row-primary item-row-flat">
+                  <div className="item-index">{idx + 1}</div>
                   <label>
-                    商品 *
                     <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
                       <option value="">選択</option>
                       {products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
@@ -343,59 +349,64 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                   </label>
 
                   <label>
-                    数量 *
                     <input type="number" min={1} value={row.quantity} onChange={(ev) => handleItemChange(idx, 'quantity', ev.target.value)} />
                     {e.quantity ? <small className="field-error">{e.quantity}</small> : null}
                   </label>
 
                   <label>
-                    単位 *
                     <input value={row.unit} onChange={(ev) => handleItemChange(idx, 'unit', ev.target.value)} />
                     {e.unit ? <small className="field-error">{e.unit}</small> : null}
                   </label>
 
                   <label>
-                    コメント
                     <input value={row.comment} onChange={(ev) => handleItemChange(idx, 'comment', ev.target.value)} placeholder="代替指示など" />
                   </label>
 
-                  <div className="item-delete-cell">
-                    <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>行削除</button>
+                  <div className="item-delete-cell item-action-cell">
+                    <button
+                      type="button"
+                      className="secondary item-detail-toggle"
+                      onClick={() => setOpenDetailByRowKey((prev) => ({ ...prev, [row.clientKey]: !prev[row.clientKey] }))}
+                    >
+                      詳細
+                    </button>
+                    <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>削除</button>
                   </div>
                 </div>
 
-                <details className="item-advanced">
-                  <summary>詳細項目を表示</summary>
-                  <div className="item-grid-row item-grid-row-secondary">
-                    <label>
-                      推定重量kg
-                      <input type="number" min={0} step="0.001" value={row.estimatedWeightKg} onChange={(ev) => handleItemChange(idx, 'estimatedWeightKg', ev.target.value)} />
-                      {e.estimatedWeightKg ? <small className="field-error">{e.estimatedWeightKg}</small> : null}
-                    </label>
+                {openDetailByRowKey[row.clientKey] ? (
+                  <div className="item-advanced">
+                    <div className="item-grid-row item-grid-row-secondary">
+                      <label>
+                        推定重量kg
+                        <input type="number" min={0} step="0.001" value={row.estimatedWeightKg} onChange={(ev) => handleItemChange(idx, 'estimatedWeightKg', ev.target.value)} />
+                        {e.estimatedWeightKg ? <small className="field-error">{e.estimatedWeightKg}</small> : null}
+                      </label>
 
-                    <label>
-                      目標単価
-                      <input type="number" min={0} step="0.01" value={row.targetPrice} onChange={(ev) => handleItemChange(idx, 'targetPrice', ev.target.value)} />
-                      {e.targetPrice ? <small className="field-error">{e.targetPrice}</small> : null}
-                    </label>
+                      <label>
+                        目標単価
+                        <input type="number" min={0} step="0.01" value={row.targetPrice} onChange={(ev) => handleItemChange(idx, 'targetPrice', ev.target.value)} />
+                        {e.targetPrice ? <small className="field-error">{e.targetPrice}</small> : null}
+                      </label>
 
-                    <label>
-                      価格上限
-                      <input type="number" min={0} step="0.01" value={row.priceCeiling} onChange={(ev) => handleItemChange(idx, 'priceCeiling', ev.target.value)} />
-                      {e.priceCeiling ? <small className="field-error">{e.priceCeiling}</small> : null}
-                    </label>
+                      <label>
+                        価格上限
+                        <input type="number" min={0} step="0.01" value={row.priceCeiling} onChange={(ev) => handleItemChange(idx, 'priceCeiling', ev.target.value)} />
+                        {e.priceCeiling ? <small className="field-error">{e.priceCeiling}</small> : null}
+                      </label>
 
-                    <label>
-                      代替指示
-                      <select value={row.stockoutPolicy} onChange={(ev) => handleItemChange(idx, 'stockoutPolicy', ev.target.value as 'backorder' | 'substitute' | 'cancel' | 'split')}>
-                        <option value="substitute">substitute</option>
-                        <option value="backorder">backorder</option>
-                        <option value="cancel">cancel</option>
-                        <option value="split">split</option>
-                      </select>
-                    </label>
+                      <label>
+                        代替指示
+                        <select value={row.stockoutPolicy} onChange={(ev) => handleItemChange(idx, 'stockoutPolicy', ev.target.value as 'backorder' | 'substitute' | 'cancel' | 'split')}>
+                          <option value="substitute">substitute</option>
+                          <option value="backorder">backorder</option>
+                          <option value="cancel">cancel</option>
+                          <option value="split">split</option>
+                        </select>
+                      </label>
+                    </div>
                   </div>
-                </details>
+                ) : null}
               </div>
             );
           })}
