@@ -86,6 +86,7 @@ def test_openapi_error_contracts_for_core_apis():
 
     spec = client.get("/openapi.json").json()
     assert "ApiErrorResponse" in spec["components"]["schemas"]
+    assert "details" in spec["components"]["schemas"]["ApiErrorDetail"]["properties"]
 
 
 def test_openapi_phase2_query_filters_are_exposed():
