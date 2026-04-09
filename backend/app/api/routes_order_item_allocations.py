@@ -35,7 +35,7 @@ def list_order_item_allocation_work_items(
     supplier_id: int | None = Query(default=None, gt=0),
     product_name: str | None = Query(default=None, min_length=1, max_length=255),
     customer_name: str | None = Query(default=None, min_length=1, max_length=255),
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int | None = Query(default=None, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[OrderItemAllocationWorkItem]:
@@ -77,6 +77,8 @@ def list_order_item_allocation_work_items(
                 allocated_qty=(float(alloc.final_qty) if has_alloc else None),
             )
         )
+    if limit is None:
+        return result[offset:]
     return result[offset : offset + limit]
 
 

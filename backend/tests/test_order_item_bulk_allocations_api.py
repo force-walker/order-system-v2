@@ -162,6 +162,10 @@ def test_worklist_filters_by_product_and_customer_with_paging():
     assert by_none.status_code == 200
     assert by_none.json() == []
 
+    all_rows = client.get("/api/v1/order-item-allocations")
+    assert all_rows.status_code == 200
+    assert len(all_rows.json()) >= 2
+
     paged = client.get("/api/v1/order-item-allocations?limit=1&offset=1")
     assert paged.status_code == 200
     assert len(paged.json()) == 1
