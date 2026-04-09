@@ -34,19 +34,19 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _seed_order_item() -> tuple[int, int, int, int]:
+def _seed_order_item(product_name: str = "P", customer_name: str = "C") -> tuple[int, int, int, int]:
     db = TestingSessionLocal()
     supplier = Supplier(supplier_code=f"SUP-{datetime.now(UTC).timestamp()}", name="S", active=True)
     db.add(supplier)
     db.flush()
 
-    customer = Customer(customer_code=f"C-{datetime.now(UTC).timestamp()}", name="C", active=True)
+    customer = Customer(customer_code=f"C-{datetime.now(UTC).timestamp()}", name=customer_name, active=True)
     db.add(customer)
     db.flush()
 
     product = Product(
         sku=f"SKU-{datetime.now(UTC).timestamp()}",
-        name="P",
+        name=product_name,
         order_uom="count",
         purchase_uom="count",
         invoice_uom="count",
@@ -136,3 +136,32 @@ def test_bulk_save_partial_success_and_validation_conflict():
         json={"items": [{"order_item_id": order_item_id, "supplier_id": supplier_id, "allocated_qty": 0}]},
     )
     assert bad.status_code == 422
+
+    missing_qty = client.post(
+        "/api/v1/order-item-allocations/bulk-save",
+        json={"items": [{"order_item_id": order_item_id, "supplier_id": supplier_id}]},
+    )
+    assert missing_qty.status_code == 422
+
+
+def test_worklist_filters_by_product_and_customer_with_paging():
+    _seed_order_item(product_name="Apple", customer_name="Alpha")
+    _seed_order_item(product_name="Banana", customer_name="Beta")
+    client = _client()
+
+    by_product = client.get("/api/v1/order-item-allocations?product_name=Apple")
+    assert by_product.status_code == 200
+    assert len(by_product.json()) >= 1
+    assert all("Apple" in row["product_name"] for row in by_product.json())
+
+    by_customer = client.get("/api/v1/order-item-allocations?customer_name=Beta")
+    assert by_customer.status_code == 200
+    assert len(by_customer.json()) >= 1
+
+    by_none = client.get("/api/v1/order-item-allocations?product_name=Orange")
+    assert by_none.status_code == 200
+    assert by_none.json() == []
+
+    paged = client.get("/api/v1/order-item-allocations?limit=1&offset=1")
+    assert paged.status_code == 200
+    assert len(paged.json()) == 1
