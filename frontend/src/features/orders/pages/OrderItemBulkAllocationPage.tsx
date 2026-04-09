@@ -106,7 +106,7 @@ export const OrderItemBulkAllocationPage = () => {
     const rows = [...filteredItems];
     const getShortage = (row: OrderItemAllocationWorkItem) => {
       const manualQty = Number(editById[row.orderItemId]?.manualQty ?? row.manualQty ?? 0);
-      const shortage = row.orderedQty - (Number.isFinite(manualQty) ? manualQty : 0);
+      const shortage = Math.max(row.orderedQty - (Number.isFinite(manualQty) ? manualQty : 0), 0);
       return Number(shortage.toFixed(3));
     };
 
@@ -384,7 +384,8 @@ export const OrderItemBulkAllocationPage = () => {
                 {sortedItems.map((row) => {
                   const edit = editById[row.orderItemId];
                   const manualQtyNum = Number(edit?.manualQty ?? row.manualQty ?? 0);
-                  const shortageQty = Number((row.orderedQty - (Number.isFinite(manualQtyNum) ? manualQtyNum : 0)).toFixed(3));
+                  const allocatedQty = Number.isFinite(manualQtyNum) ? manualQtyNum : 0;
+                  const shortageQty = Number(Math.max(row.orderedQty - allocatedQty, 0).toFixed(3));
 
                   return (
                     <tr key={row.orderItemId}>
@@ -444,7 +445,9 @@ export const OrderItemBulkAllocationPage = () => {
                           }
                         />
                       </td>
-                      <td className={shortageQty > 0 ? 'field-error' : ''}>{shortageQty}</td>
+                      <td>
+                        {shortageQty > 0 ? <span className="field-error">不足 {shortageQty}</span> : <span className="subtle">-</span>}
+                      </td>
                     </tr>
                   );
                 })}
