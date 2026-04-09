@@ -4,7 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncSta
 import { SupplierForm } from 'features/suppliers/components/SupplierForm';
 import { deactivateSupplier, getSupplier, updateSupplier } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 export const SupplierEditPage = () => {
   const { supplierId } = useParams();
@@ -23,7 +23,7 @@ export const SupplierEditPage = () => {
 
     getSupplier(supplierIdNum)
       .then(setSupplier)
-      .catch((e) => setError(toUserMessage(e, '仕入先情報の取得に失敗しました')));
+      .catch((e) => setError(toActionableMessage(e, '仕入先情報の取得に失敗しました')));
   }, [supplierIdNum]);
 
   const handleSubmit = async (payload: { name: string; active: boolean }) => {
@@ -41,7 +41,7 @@ export const SupplierEditPage = () => {
       sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `仕入先を停止しました（ID: ${supplierIdNum}）` }));
       navigate('/suppliers');
     } catch (e) {
-      setError(toUserMessage(e, '仕入先の停止に失敗しました'));
+      setError(toActionableMessage(e, '仕入先の停止に失敗しました'));
     } finally {
       setDeleting(false);
     }

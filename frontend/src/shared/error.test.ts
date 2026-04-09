@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ServiceError, toUserMessage } from './error';
+import { ServiceError, toActionableMessage, toUserMessage } from './error';
 
 describe('toUserMessage', () => {
   it('returns service error message', () => {
@@ -14,5 +14,20 @@ describe('toUserMessage', () => {
 
   it('returns fallback for unknown error', () => {
     expect(toUserMessage(null, 'fallback')).toBe('fallback');
+  });
+
+  it('adds actionable guidance for 409 conflict', () => {
+    const e = new ServiceError('重複です', { status: 409, code: 'SUPPLIER_PRODUCT_ALREADY_EXISTS' });
+    expect(toActionableMessage(e, 'fallback')).toContain('最新状態を再読み込み');
+  });
+
+  it('adds actionable guidance for 422 validation', () => {
+    const e = new ServiceError('入力不備', { status: 422, code: 'VALIDATION_ERROR' });
+    expect(toActionableMessage(e, 'fallback')).toContain('入力項目');
+  });
+
+  it('adds actionable guidance for 404 not found', () => {
+    const e = new ServiceError('見つかりません', { status: 404, code: 'SUPPLIER_NOT_FOUND' });
+    expect(toActionableMessage(e, 'fallback')).toContain('一覧から選び直し');
   });
 });

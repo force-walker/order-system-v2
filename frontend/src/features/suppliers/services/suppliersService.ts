@@ -5,6 +5,9 @@ import type {
   SupplierCreateRequest,
   SupplierListParams,
   SupplierListResult,
+  SupplierProductMapping,
+  SupplierProductMappingCreateRequest,
+  SupplierProductMappingUpdateRequest,
   SupplierUpdateRequest,
 } from 'features/suppliers/types/supplier';
 
@@ -16,6 +19,19 @@ type ApiSupplier = {
   supplier_code: string;
   name: string;
   active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type ApiSupplierProductMapping = {
+  id: number;
+  supplier_id: number;
+  product_id: number;
+  priority: number;
+  is_preferred: boolean;
+  default_unit_cost: number | null;
+  lead_time_days: number | null;
+  note: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -126,6 +142,74 @@ export const unarchiveSupplier = async (supplierId: number): Promise<Supplier> =
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiSupplier;
   return toSupplier(data);
+};
+
+const toSupplierProductMapping = (row: ApiSupplierProductMapping): SupplierProductMapping => ({
+  id: row.id,
+  supplierId: row.supplier_id,
+  productId: row.product_id,
+  priority: row.priority,
+  isPreferred: row.is_preferred,
+  defaultUnitCost: row.default_unit_cost,
+  leadTimeDays: row.lead_time_days,
+  note: row.note,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+export const listSupplierProductMappings = async (supplierId: number): Promise<SupplierProductMapping[]> => {
+  const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}/products`);
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as ApiSupplierProductMapping[];
+  return data.map(toSupplierProductMapping);
+};
+
+export const createSupplierProductMapping = async (
+  supplierId: number,
+  payload: SupplierProductMappingCreateRequest,
+): Promise<SupplierProductMapping> => {
+  const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}/products`, {
+    method: 'POST',
+    body: {
+      product_id: payload.productId,
+      priority: payload.priority,
+      is_preferred: payload.isPreferred,
+      default_unit_cost: payload.defaultUnitCost,
+      lead_time_days: payload.leadTimeDays,
+      note: payload.note,
+    },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as ApiSupplierProductMapping;
+  return toSupplierProductMapping(data);
+};
+
+export const updateSupplierProductMapping = async (
+  supplierId: number,
+  productId: number,
+  payload: SupplierProductMappingUpdateRequest,
+): Promise<SupplierProductMapping> => {
+  const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}/products/${productId}`, {
+    method: 'PATCH',
+    body: {
+      priority: payload.priority,
+      is_preferred: payload.isPreferred,
+      default_unit_cost: payload.defaultUnitCost,
+      lead_time_days: payload.leadTimeDays,
+      note: payload.note,
+    },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as ApiSupplierProductMapping;
+  return toSupplierProductMapping(data);
+};
+
+export const deleteSupplierProductMapping = async (supplierId: number, productId: number): Promise<void> => {
+  const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}/products/${productId}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
 };
 
 export const deleteSupplier = async (supplierId: number): Promise<void> => {

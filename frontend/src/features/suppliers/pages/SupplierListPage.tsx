@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveSupplier, deleteSupplier, listSuppliers, unarchiveSupplier } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -32,7 +32,7 @@ export const SupplierListPage = () => {
       setItems(result.items);
       setHasNext(result.hasNext);
     } catch (e) {
-      setError(toUserMessage(e, '仕入先一覧の取得に失敗しました'));
+      setError(toActionableMessage(e, '仕入先一覧の取得に失敗しました'));
     } finally {
       setLoading(false);
     }
@@ -77,7 +77,7 @@ export const SupplierListPage = () => {
       setToast({ type: 'success', message: successMessage });
       await load();
     } catch (e) {
-      setToast({ type: 'error', message: toUserMessage(e, '操作に失敗しました') });
+      setToast({ type: 'error', message: toActionableMessage(e, '操作に失敗しました') });
     }
   };
 
