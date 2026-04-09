@@ -341,19 +341,10 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                 <div className="item-grid-row item-grid-row-primary item-row-flat">
                   <div className="item-index">{idx + 1}</div>
                   <label>
-                    <div className="item-product-inline">
-                      <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
-                        <option value="">選択</option>
-                        {products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                      </select>
-                      <button
-                        type="button"
-                        className="secondary item-detail-toggle"
-                        onClick={() => setOpenDetailByRowKey((prev) => ({ ...prev, [row.clientKey]: !prev[row.clientKey] }))}
-                      >
-                        詳細
-                      </button>
-                    </div>
+                    <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
+                      <option value="">選択</option>
+                      {products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    </select>
                     {e.productId ? <small className="field-error">{e.productId}</small> : null}
                   </label>
 
@@ -371,7 +362,14 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                     <input value={row.comment} onChange={(ev) => handleItemChange(idx, 'comment', ev.target.value)} placeholder="代替指示など" />
                   </label>
 
-                  <div className="item-delete-cell">
+                  <div className="item-delete-cell item-action-cell">
+                    <button
+                      type="button"
+                      className="secondary item-detail-toggle"
+                      onClick={() => setOpenDetailByRowKey((prev) => ({ ...prev, [row.clientKey]: !prev[row.clientKey] }))}
+                    >
+                      詳細
+                    </button>
                     <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>削除</button>
                   </div>
                 </div>

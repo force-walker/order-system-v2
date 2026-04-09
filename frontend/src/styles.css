@@ -240,15 +240,14 @@ th, td {
   margin-top: 8px;
 }
 
-.item-product-inline {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px;
-  align-items: center;
-}
-
 .item-detail-toggle {
   padding: 8px 10px;
+}
+
+.item-action-cell {
+  display: flex;
+  gap: 6px;
+  align-items: end;
 }
 
 label {
