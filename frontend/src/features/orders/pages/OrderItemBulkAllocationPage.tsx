@@ -320,11 +320,6 @@ export const OrderItemBulkAllocationPage = () => {
             <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="例: テスト商事" />
           </label>
           <button type="button" className="secondary" onClick={resetFilters}>全フィルター解除</button>
-        </div>
-
-        <p className="subtle" style={{ marginBottom: 12 }}>※ 一括選択/解除は「現在表示中の行」にのみ作用します。非表示行の選択状態は変更しません。</p>
-
-        <div className="list-controls" style={{ marginBottom: 12 }}>
           <label className="filter-label">
             選択行へ一括仕入先適用
             <select value={bulkSupplierId} onChange={(e) => setBulkSupplierId(e.target.value ? Number(e.target.value) : '')}>
@@ -332,9 +327,11 @@ export const OrderItemBulkAllocationPage = () => {
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </label>
-          <button type="button" className="secondary" onClick={applyBulkSupplier} disabled={!bulkSupplierId}>選択行に仕入先を適用（数量は受注数量を自動セット）</button>
+          <button type="button" className="secondary" onClick={applyBulkSupplier} disabled={!bulkSupplierId}>選択行に仕入先を適用</button>
           <button type="button" className="secondary" onClick={clearSelectedRows}>選択解除</button>
         </div>
+
+        <p className="subtle" style={{ marginBottom: 12 }}>※ 一括選択/解除は「現在表示中の行」にのみ作用します。非表示行の選択状態は変更しません。</p>
 
         {filteredItems.length === 0 ? (
           <EmptyState title="データがありません" description="条件に合う受注アイテムがありません。" actionLabel="再読み込み" onAction={load} />
