@@ -324,17 +324,21 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
         </div>
 
         <div className="item-cards">
+          <div className="item-grid-row item-grid-row-primary item-row-header">
+            <div>#</div>
+            <div>商品</div>
+            <div>数量</div>
+            <div>単位</div>
+            <div>コメント</div>
+            <div>操作</div>
+          </div>
           {form.items.map((row, idx) => {
             const e = errors.itemRows?.[idx] ?? {};
             return (
-              <div key={row.clientKey} className="item-card">
-                <div className="section-row">
-                  <h4>明細 {idx + 1}</h4>
-                </div>
-
-                <div className="item-grid-row item-grid-row-primary">
+              <div key={row.clientKey} className="item-card item-card-flat">
+                <div className="item-grid-row item-grid-row-primary item-row-flat">
+                  <div className="item-index">{idx + 1}</div>
                   <label>
-                    商品 *
                     <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
                       <option value="">選択</option>
                       {products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
@@ -343,24 +347,21 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                   </label>
 
                   <label>
-                    数量 *
                     <input type="number" min={1} value={row.quantity} onChange={(ev) => handleItemChange(idx, 'quantity', ev.target.value)} />
                     {e.quantity ? <small className="field-error">{e.quantity}</small> : null}
                   </label>
 
                   <label>
-                    単位 *
                     <input value={row.unit} onChange={(ev) => handleItemChange(idx, 'unit', ev.target.value)} />
                     {e.unit ? <small className="field-error">{e.unit}</small> : null}
                   </label>
 
                   <label>
-                    コメント
                     <input value={row.comment} onChange={(ev) => handleItemChange(idx, 'comment', ev.target.value)} placeholder="代替指示など" />
                   </label>
 
                   <div className="item-delete-cell">
-                    <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>行削除</button>
+                    <button type="button" className="danger" onClick={() => removeItemRow(idx)} disabled={form.items.length <= 1}>削除</button>
                   </div>
                 </div>
 
