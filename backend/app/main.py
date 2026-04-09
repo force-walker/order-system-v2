@@ -13,6 +13,7 @@ from app.api.routes_batch import router as batch_router
 from app.api.routes_customers import router as customers_router
 from app.api.routes_invoices import router as invoices_router
 from app.api.routes_metrics import router as metrics_router
+from app.api.routes_order_item_allocations import router as order_item_allocations_router
 from app.api.routes_orders import router as orders_router
 from app.api.routes_products import router as products_router
 from app.api.routes_purchase_results import router as purchase_results_router
@@ -111,6 +112,7 @@ app.include_router(products_router)
 app.include_router(customers_router)
 app.include_router(suppliers_router)
 app.include_router(supplier_product_mappings_router)
+app.include_router(order_item_allocations_router)
 app.include_router(orders_router)
 app.include_router(allocations_router)
 app.include_router(purchase_results_router)

@@ -75,10 +75,14 @@ def test_openapi_error_contracts_for_core_apis():
     assert "409" in _responses("/api/v1/invoices/{invoice_id}/unlock", "post")
     assert "422" in _responses("/api/v1/invoices/{invoice_id}/unlock", "post")
 
-    # allocations / purchase-results
+    # allocations / purchase-results / order-item-allocation-flow
     assert "422" in _responses("/api/v1/allocations/{allocation_id}/override", "patch")
     assert "422" in _responses("/api/v1/purchase-results", "post")
     assert "404" in _responses("/api/v1/purchase-results/{result_id}", "get")
+    assert "422" in _responses("/api/v1/order-item-allocations/suggestions", "post")
+    assert "404" in _responses("/api/v1/order-item-allocations/suggestions", "post")
+    assert "422" in _responses("/api/v1/order-item-allocations/bulk-save", "post")
+    assert "409" in _responses("/api/v1/order-item-allocations/bulk-save", "post")
 
     # auth
     assert "422" in _responses("/api/v1/auth/login", "post")
@@ -109,3 +113,6 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     mapping_list_params = {p["name"] for p in spec["paths"]["/api/v1/supplier-product-mappings"]["get"]["parameters"]}
     assert {"supplier_id", "product_id"}.issubset(mapping_list_params)
+
+    worklist_params = {p["name"] for p in spec["paths"]["/api/v1/order-item-allocations"]["get"]["parameters"]}
+    assert {"unallocated_only", "delivery_date", "supplier_id"}.issubset(worklist_params)
