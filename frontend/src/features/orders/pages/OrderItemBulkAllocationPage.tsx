@@ -31,7 +31,9 @@ export const OrderItemBulkAllocationPage = () => {
   const [unallocatedOnly, setUnallocatedOnly] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState('');
   const [supplierId, setSupplierId] = useState<number | ''>('');
-  const [keyword, setKeyword] = useState('');
+  const [orderNoFilter, setOrderNoFilter] = useState('');
+  const [productFilter, setProductFilter] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
   const [bulkSupplierId, setBulkSupplierId] = useState<number | ''>('');
 
   const load = async () => {
@@ -48,16 +50,20 @@ export const OrderItemBulkAllocationPage = () => {
       ]);
       setItems(rows);
       setSuppliers(supplierOptions);
-      setEditById(
+      setEditById((prev) =>
         Object.fromEntries(
-          rows.map((row) => [
-            row.orderItemId,
-            {
-              selected: false,
-              manualSupplierId: row.manualSupplierId,
-              manualQty: row.manualQty == null ? '' : String(row.manualQty),
-            },
-          ]),
+          rows.map((row) => {
+            const old = prev[row.orderItemId];
+            return [
+              row.orderItemId,
+              {
+                selected: old?.selected ?? false,
+                manualSupplierId: old?.manualSupplierId ?? row.manualSupplierId,
+                manualQty: old?.manualQty ?? (row.manualQty == null ? '' : String(row.manualQty)),
+                rowError: old?.rowError,
+              },
+            ];
+          }),
         ),
       );
     } catch (e) {
@@ -78,10 +84,19 @@ export const OrderItemBulkAllocationPage = () => {
   }, [toast]);
 
   const filteredItems = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((row) => `${row.orderNo} ${row.customerName} ${row.productName}`.toLowerCase().includes(q));
-  }, [items, keyword]);
+    const orderNo = orderNoFilter.trim().toLowerCase();
+    const product = productFilter.trim().toLowerCase();
+    const customer = customerFilter.trim().toLowerCase();
+
+    return items.filter((row) => {
+      if (orderNo && !row.orderNo.toLowerCase().includes(orderNo)) return false;
+      if (product && !row.productName.toLowerCase().includes(product)) return false;
+      if (customer && !row.customerName.toLowerCase().includes(customer)) return false;
+      return true;
+    });
+  }, [items, orderNoFilter, productFilter, customerFilter]);
+
+  const visibleIds = useMemo(() => filteredItems.map((row) => row.orderItemId), [filteredItems]);
 
   const applySuggestion = async () => {
     const targetIds = filteredItems.map((row) => row.orderItemId);
@@ -125,17 +140,50 @@ export const OrderItemBulkAllocationPage = () => {
     }
   };
 
+  const selectVisibleRows = (selected: boolean) => {
+    setEditById((prev) => {
+      const next = { ...prev };
+      for (const id of visibleIds) {
+        if (!next[id]) continue;
+        next[id] = { ...next[id], selected };
+      }
+      return next;
+    });
+  };
+
   const applyBulkSupplier = () => {
     if (!bulkSupplierId) return;
     setEditById((prev) => {
       const next = { ...prev };
-      Object.entries(next).forEach(([id, row]) => {
-        if (!row.selected) return;
-        next[Number(id)] = { ...row, manualSupplierId: Number(bulkSupplierId), rowError: undefined };
-      });
+      for (const row of filteredItems) {
+        const current = next[row.orderItemId];
+        if (!current?.selected) continue;
+        next[row.orderItemId] = {
+          ...current,
+          manualSupplierId: Number(bulkSupplierId),
+          manualQty: String(row.orderedQty),
+          rowError: undefined,
+        };
+      }
       return next;
     });
-    setToast({ type: 'success', message: '選択行に同一仕入先を適用しました。' });
+    setToast({ type: 'success', message: '選択行に仕入先を適用し、数量を受注数量で自動セットしました（ローカル反映）。' });
+  };
+
+  const clearSelectedRows = () => {
+    setEditById((prev) => {
+      const next = { ...prev };
+      for (const id of visibleIds) {
+        const current = next[id];
+        if (!current?.selected) continue;
+        next[id] = {
+          ...current,
+          selected: false,
+        };
+      }
+      return next;
+    });
+    setToast({ type: 'success', message: '表示中の選択行を解除しました。仕入先/数量の入力値は保持しています。' });
   };
 
   const saveBulk = async () => {
@@ -152,7 +200,7 @@ export const OrderItemBulkAllocationPage = () => {
       .filter((row) => Number.isFinite(row.supplierId) && row.supplierId > 0 && Number.isFinite(row.allocatedQty) && row.allocatedQty > 0);
 
     if (payload.length === 0) {
-      setToast({ type: 'error', message: '保存対象がありません。行選択と仕入先/数量を確認してください。' });
+      setToast({ type: 'error', message: '保存対象がありません。表示中の行を選択し、仕入先/数量を入力してください。' });
       return;
     }
 
@@ -195,15 +243,15 @@ export const OrderItemBulkAllocationPage = () => {
             <p className="subtle">自動提案 → 手動修正 → 一括保存</p>
           </div>
           <div className="list-controls">
-            <button type="button" className="secondary" onClick={() => void applySuggestion()}>自動提案</button>
-            <button type="button" onClick={() => void saveBulk()}>一括保存</button>
+            <button type="button" className="secondary" onClick={() => void applySuggestion()}>自動提案を実行</button>
+            <button type="button" onClick={() => void saveBulk()}>選択行を一括保存</button>
           </div>
         </div>
 
-        <div className="list-controls" style={{ marginBottom: 12 }}>
+        <div className="list-controls" style={{ marginBottom: 6 }}>
           <label className="filter-label">
             <input type="checkbox" checked={unallocatedOnly} onChange={(e) => setUnallocatedOnly(e.target.checked)} />
-            未割当のみ
+            未割当てのみ（割当未設定行のみ表示）
           </label>
           <label className="filter-label">
             納品日
@@ -216,21 +264,39 @@ export const OrderItemBulkAllocationPage = () => {
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </label>
+        </div>
+        <p className="subtle" style={{ marginBottom: 12 }}>※ 一括選択/解除は「現在表示中の行」にのみ作用します。非表示行の選択状態は変更しません。</p>
+
+        <div className="list-controls" style={{ marginBottom: 12 }}>
           <label className="filter-label">
-            検索
-            <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="注文番号 / 顧客 / 商品" />
+            注文番号フィルター
+            <input value={orderNoFilter} onChange={(e) => setOrderNoFilter(e.target.value)} placeholder="例: ORD-" />
+          </label>
+          <label className="filter-label">
+            商品名フィルター
+            <input value={productFilter} onChange={(e) => setProductFilter(e.target.value)} placeholder="例: 鶏もも" />
+          </label>
+          <label className="filter-label">
+            取引先フィルター
+            <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="例: テスト商事" />
           </label>
         </div>
 
         <div className="list-controls" style={{ marginBottom: 12 }}>
+          <button type="button" className="secondary" onClick={() => selectVisibleRows(true)}>表示中を一括選択</button>
+          <button type="button" className="secondary" onClick={() => selectVisibleRows(false)}>表示中の選択解除</button>
+        </div>
+
+        <div className="list-controls" style={{ marginBottom: 12 }}>
           <label className="filter-label">
-            一括適用（仕入先）
+            選択行へ一括仕入先適用
             <select value={bulkSupplierId} onChange={(e) => setBulkSupplierId(e.target.value ? Number(e.target.value) : '')}>
               <option value="">選択してください</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </label>
-          <button type="button" className="secondary" onClick={applyBulkSupplier} disabled={!bulkSupplierId}>選択行に適用</button>
+          <button type="button" className="secondary" onClick={applyBulkSupplier} disabled={!bulkSupplierId}>選択行に仕入先を適用（数量は受注数量を自動セット）</button>
+          <button type="button" className="secondary" onClick={clearSelectedRows}>選択解除（入力値は保持）</button>
         </div>
 
         {filteredItems.length === 0 ? (
