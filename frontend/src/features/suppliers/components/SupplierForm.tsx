@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Supplier, SupplierCreateRequest } from 'features/suppliers/types/supplier';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 type Props = {
   initialValue?: Supplier;
@@ -41,7 +41,7 @@ export const SupplierForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
     try {
       await onSubmit({ name: form.name.trim(), active: form.active });
     } catch (e) {
-      setError(toUserMessage(e, '仕入先の保存に失敗しました'));
+      setError(toActionableMessage(e, '仕入先の保存に失敗しました'));
     } finally {
       setSubmitting(false);
     }

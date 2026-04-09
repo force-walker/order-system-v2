@@ -117,8 +117,9 @@ const fetchWithAuth = async (path: string, init?: { method?: string; body?: unkn
   return res;
 };
 
-const loadCustomersApi = async (): Promise<CustomerOption[]> => {
-  const res = await fetchWithAuth('/api/v1/customers', { method: 'GET' });
+const loadCustomersApi = async (includeInactive = false): Promise<CustomerOption[]> => {
+  const query = includeInactive ? '?include_inactive=true' : '';
+  const res = await fetchWithAuth(`/api/v1/customers${query}`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiCustomerResponse[];
   return data.map((c) => {
@@ -127,8 +128,9 @@ const loadCustomersApi = async (): Promise<CustomerOption[]> => {
   });
 };
 
-const loadProductsApi = async (): Promise<ProductOption[]> => {
-  const res = await fetchWithAuth('/api/v1/products', { method: 'GET' });
+const loadProductsApi = async (includeInactive = false): Promise<ProductOption[]> => {
+  const query = includeInactive ? '?include_inactive=true' : '';
+  const res = await fetchWithAuth(`/api/v1/products${query}`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiProductResponse[];
   return data.map((p) => {
@@ -423,9 +425,9 @@ export const updateOrder = async (orderId: number, payload: CreateOrderRequest):
   return order;
 };
 
-export const listCustomers = async (): Promise<CustomerOption[]> => {
+export const listCustomers = async (includeInactive = false): Promise<CustomerOption[]> => {
   if (USE_MOCK) return [{ id: 1, label: '1: テスト商事' }, { id: 2, label: '2: デモフーズ' }];
-  return loadCustomersApi();
+  return loadCustomersApi(includeInactive);
 };
 
 export const getCustomer = async (customerId: number): Promise<CustomerOption | null> => {
@@ -497,14 +499,33 @@ export const updateCustomer = async (customerId: number, payload: CustomerUpdate
   return toCustomerDetail(row);
 };
 
-export const listProducts = async (): Promise<ProductOption[]> => {
+export const archiveCustomer = async (customerId: number): Promise<CustomerDetail> => {
+  const res = await fetchWithAuth(`/api/v1/customers/${customerId}/archive`, { method: 'POST' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const row = (await res.json()) as ApiCustomerResponse;
+  return toCustomerDetail(row);
+};
+
+export const unarchiveCustomer = async (customerId: number): Promise<CustomerDetail> => {
+  const res = await fetchWithAuth(`/api/v1/customers/${customerId}/unarchive`, { method: 'POST' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const row = (await res.json()) as ApiCustomerResponse;
+  return toCustomerDetail(row);
+};
+
+export const deleteCustomer = async (customerId: number): Promise<void> => {
+  const res = await fetchWithAuth(`/api/v1/customers/${customerId}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
+};
+
+export const listProducts = async (includeInactive = false): Promise<ProductOption[]> => {
   if (USE_MOCK) {
     return [
       { id: 1, label: '1: 鶏もも肉 (uom_kg)', name: '鶏もも肉', orderUom: 'kg', pricingBasisDefault: 'uom_kg' },
       { id: 2, label: '2: 玉ねぎ (uom_count)', name: '玉ねぎ', orderUom: 'case', pricingBasisDefault: 'uom_count' },
     ];
   }
-  return loadProductsApi();
+  return loadProductsApi(includeInactive);
 };
 
 export const getProduct = async (productId: number): Promise<ProductOption | null> => {
@@ -613,6 +634,25 @@ export const updateProduct = async (productId: number, payload: ProductUpdateReq
   if (!res.ok) throw await parseApiErrorPayload(res);
   const row = (await res.json()) as ApiProductResponse;
   return toProductDetail(row);
+};
+
+export const archiveProduct = async (productId: number): Promise<ProductDetail> => {
+  const res = await fetchWithAuth(`/api/v1/products/${productId}/archive`, { method: 'POST' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const row = (await res.json()) as ApiProductResponse;
+  return toProductDetail(row);
+};
+
+export const unarchiveProduct = async (productId: number): Promise<ProductDetail> => {
+  const res = await fetchWithAuth(`/api/v1/products/${productId}/unarchive`, { method: 'POST' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const row = (await res.json()) as ApiProductResponse;
+  return toProductDetail(row);
+};
+
+export const deleteProduct = async (productId: number): Promise<void> => {
+  const res = await fetchWithAuth(`/api/v1/products/${productId}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
 };
 
 export const listOrders = async (): Promise<OrderSummary[]> => (USE_MOCK ? listOrdersMock() : listOrdersApi());

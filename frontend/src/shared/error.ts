@@ -93,3 +93,25 @@ export const toUserMessage = (error: unknown, fallback: string): string => {
 
   return fallback;
 };
+
+export const toActionGuidance = (error: unknown): string => {
+  if (!(error instanceof ServiceError)) return '時間をおいて再試行してください。';
+
+  if (error.status === 422) {
+    return '入力項目（必須・形式・範囲）を見直して再実行してください。';
+  }
+  if (error.status === 409) {
+    return '最新状態を再読み込みして、重複や競合がないか確認してください。';
+  }
+  if (error.status === 404) {
+    return '対象データが削除・無効化されていないか確認し、一覧から選び直してください。';
+  }
+
+  return '時間をおいて再試行してください。';
+};
+
+export const toActionableMessage = (error: unknown, fallback: string): string => {
+  const message = toUserMessage(error, fallback);
+  const guidance = toActionGuidance(error);
+  return `${message} ${guidance}`.trim();
+};

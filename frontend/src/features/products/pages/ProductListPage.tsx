@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { listProducts } from 'features/products/services/productsService';
+import { archiveProduct, deleteProduct, listProducts, unarchiveProduct } from 'features/products/services/productsService';
 import type { ProductOption } from 'features/products/types/product';
 import { toUserMessage } from 'shared/error';
 
@@ -17,13 +17,22 @@ export const ProductListPage = () => {
   const [error, setError] = useState('');
   const [toast, setToast] = useState<ToastPayload | null>(null);
   const [keyword, setKeyword] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [pricingFilter, setPricingFilter] = useState<'all' | 'uom_count' | 'uom_kg'>('all');
   const [sortMode, setSortMode] = useState<'idAsc' | 'idDesc' | 'createdAsc' | 'createdDesc' | 'updatedAsc' | 'updatedDesc'>('idAsc');
 
+  const load = async () => {
+    setError('');
+    try {
+      const data = await listProducts(showArchived);
+      setProducts(data);
+    } catch (e) {
+      setError(toUserMessage(e, '商品一覧の取得に失敗しました'));
+    }
+  };
+
   useEffect(() => {
-    listProducts()
-      .then(setProducts)
-      .catch((e) => setError(toUserMessage(e, '商品一覧の取得に失敗しました')));
+    load();
 
     const raw = sessionStorage.getItem('osv2_toast');
     if (raw) {
@@ -35,13 +44,23 @@ export const ProductListPage = () => {
         sessionStorage.removeItem('osv2_toast');
       }
     }
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  const runAction = async (fn: () => Promise<unknown>, successMessage: string) => {
+    try {
+      await fn();
+      setToast({ type: 'success', message: successMessage });
+      await load();
+    } catch (e) {
+      setToast({ type: 'error', message: toUserMessage(e, '操作に失敗しました') });
+    }
+  };
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -62,7 +81,6 @@ export const ProductListPage = () => {
 
   if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (!products) return <LoadingState title="商品一覧を読み込み中" description="しばらくお待ちください" />;
-  if (products.length === 0) return <EmptyState title="データがありません" description="条件を見直すか、データ登録後に再度お試しください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
 
   return (
     <section>
@@ -71,7 +89,7 @@ export const ProductListPage = () => {
         <div className="list-header">
           <div>
             <h2>商品マスタ</h2>
-            <p className="subtle">作成・編集対応</p>
+            <p className="subtle">作成・編集・アーカイブ・削除対応</p>
           </div>
           <div className="list-controls">
             <label className="filter-label">
@@ -97,6 +115,9 @@ export const ProductListPage = () => {
                 <option value="updatedDesc">更新日時 降順</option>
               </select>
             </label>
+            <label className="filter-label">
+              <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> アーカイブを表示
+            </label>
             <Link to="/products/new" className="order-link">+ 商品を作成</Link>
           </div>
         </div>
@@ -115,7 +136,7 @@ export const ProductListPage = () => {
                   <th>課金基準</th>
                   <th>作成日時</th>
                   <th>更新日時</th>
-                  <th>詳細</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -132,6 +153,33 @@ export const ProductListPage = () => {
                       <Link to={`/products/${p.id}`} className="order-link">詳細</Link>
                       {' / '}
                       <Link to={`/products/${p.id}/edit`} className="order-link">編集</Link>
+                      {' / '}
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          const confirmed = window.confirm(`${p.name} を${p.active ? 'アーカイブ' : '復元'}しますか？`);
+                          if (!confirmed) return;
+                          void runAction(
+                            () => (p.active ? archiveProduct(p.id) : unarchiveProduct(p.id)),
+                            p.active ? '商品をアーカイブしました' : '商品を復元しました',
+                          );
+                        }}
+                      >
+                        {p.active ? 'アーカイブ' : '復元'}
+                      </button>
+                      {' / '}
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => {
+                          const confirmed = window.confirm(`${p.name} を削除しますか？（参照がある場合は削除できません）`);
+                          if (!confirmed) return;
+                          void runAction(() => deleteProduct(p.id), '商品を削除しました');
+                        }}
+                      >
+                        削除
+                      </button>
                     </td>
                   </tr>
                 ))}

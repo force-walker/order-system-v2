@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { listSuppliers } from 'features/suppliers/services/suppliersService';
+import { archiveSupplier, deleteSupplier, listSuppliers, unarchiveSupplier } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
-import { toUserMessage } from 'shared/error';
+import { toActionableMessage } from 'shared/error';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -18,29 +18,29 @@ export const SupplierListPage = () => {
   const [items, setItems] = useState<Supplier[]>([]);
   const [toast, setToast] = useState<ToastPayload | null>(null);
   const [q, setQ] = useState('');
-  const [active, setActive] = useState<'all' | 'true' | 'false'>('all');
+  const [showArchived, setShowArchived] = useState(false);
   const [limit, setLimit] = useState(20);
   const [offset, setOffset] = useState(0);
   const [hasNext, setHasNext] = useState(false);
 
-  const load = async (params: { active: 'all' | 'true' | 'false'; limit: number; offset: number }) => {
+  const load = async () => {
     setLoading(true);
     setError('');
 
     try {
-      const result = await listSuppliers(params);
+      const result = await listSuppliers({ active: 'all', includeInactive: showArchived, limit, offset });
       setItems(result.items);
       setHasNext(result.hasNext);
     } catch (e) {
-      setError(toUserMessage(e, '仕入先一覧の取得に失敗しました'));
+      setError(toActionableMessage(e, '仕入先一覧の取得に失敗しました'));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load({ active, limit, offset });
-  }, [active, limit, offset]);
+    load();
+  }, [showArchived, limit, offset]);
 
   useEffect(() => {
     const raw = sessionStorage.getItem('osv2_toast');
@@ -71,15 +71,20 @@ export const SupplierListPage = () => {
     });
   }, [items, q]);
 
-  const onPrev = () => {
-    setOffset((prev) => Math.max(0, prev - limit));
+  const runAction = async (fn: () => Promise<unknown>, successMessage: string) => {
+    try {
+      await fn();
+      setToast({ type: 'success', message: successMessage });
+      await load();
+    } catch (e) {
+      setToast({ type: 'error', message: toActionableMessage(e, '操作に失敗しました') });
+    }
   };
 
-  const onNext = () => {
-    setOffset((prev) => prev + limit);
-  };
+  const onPrev = () => setOffset((prev) => Math.max(0, prev - limit));
+  const onNext = () => setOffset((prev) => prev + limit);
 
-  if (error) return <ErrorState title="仕入先一覧の取得に失敗しました" description={error} actionLabel="再試行" onAction={() => load({ active, limit, offset })} />;
+  if (error) return <ErrorState title="仕入先一覧の取得に失敗しました" description={error} actionLabel="再試行" onAction={load} />;
   if (loading) return <LoadingState title="仕入先一覧を読み込み中" description="しばらくお待ちください" />;
 
   return (
@@ -89,7 +94,7 @@ export const SupplierListPage = () => {
         <div className="list-header">
           <div>
             <h2>仕入先一覧</h2>
-            <p className="subtle">検索(q)・activeフィルタ・ページングに対応</p>
+            <p className="subtle">検索・アーカイブ・削除・ページング対応</p>
           </div>
           <div className="list-controls">
             <Link to="/suppliers/new" className="order-link">+ 仕入先を作成</Link>
@@ -103,18 +108,15 @@ export const SupplierListPage = () => {
           </label>
 
           <label className="filter-label">
-            active
-            <select
-              value={active}
+            <input
+              type="checkbox"
+              checked={showArchived}
               onChange={(e) => {
-                setActive(e.target.value as 'all' | 'true' | 'false');
+                setShowArchived(e.target.checked);
                 setOffset(0);
               }}
-            >
-              <option value="all">all</option>
-              <option value="true">true</option>
-              <option value="false">false</option>
-            </select>
+            />
+            アーカイブを表示
           </label>
 
           <label className="filter-label">
@@ -140,7 +142,7 @@ export const SupplierListPage = () => {
             actionLabel="条件クリア"
             onAction={() => {
               setQ('');
-              setActive('all');
+              setShowArchived(false);
               setLimit(20);
               setOffset(0);
             }}
@@ -155,7 +157,7 @@ export const SupplierListPage = () => {
                   <th>name</th>
                   <th>active</th>
                   <th>updated_at</th>
-                  <th>編集</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -166,7 +168,38 @@ export const SupplierListPage = () => {
                     <td>{row.name}</td>
                     <td>{row.active ? 'true' : 'false'}</td>
                     <td>{new Date(row.updatedAt).toLocaleString('ja-JP')}</td>
-                    <td><Link to={`/suppliers/${row.id}/edit`} className="order-link">編集</Link></td>
+                    <td>
+                      <Link to={`/suppliers/${row.id}`} className="order-link">詳細</Link>
+                      {' / '}
+                      <Link to={`/suppliers/${row.id}/edit`} className="order-link">編集</Link>
+                      {' / '}
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          const confirmed = window.confirm(`${row.name} を${row.active ? 'アーカイブ' : '復元'}しますか？`);
+                          if (!confirmed) return;
+                          void runAction(
+                            () => (row.active ? archiveSupplier(row.id) : unarchiveSupplier(row.id)),
+                            row.active ? '仕入先をアーカイブしました' : '仕入先を復元しました',
+                          );
+                        }}
+                      >
+                        {row.active ? 'アーカイブ' : '復元'}
+                      </button>
+                      {' / '}
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => {
+                          const confirmed = window.confirm(`${row.name} を削除しますか？（参照がある場合は削除できません）`);
+                          if (!confirmed) return;
+                          void runAction(() => deleteSupplier(row.id), '仕入先を削除しました');
+                        }}
+                      >
+                        削除
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

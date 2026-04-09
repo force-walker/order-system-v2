@@ -1,25 +1,44 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { getProductDetail } from 'features/products/services/productsService';
+import { archiveProduct, deleteProduct, getProductDetail, unarchiveProduct } from 'features/products/services/productsService';
 import type { ProductDetail } from 'features/products/types/product';
 import { toUserMessage } from 'shared/error';
 
 export const ProductDetailPage = () => {
   const { productId } = useParams();
+  const navigate = useNavigate();
   const [product, setProduct] = useState<ProductDetail | null | undefined>(undefined);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const load = async () => {
     const id = Number(productId);
     if (!id) {
       setError('不正な商品IDです');
       return;
     }
-    getProductDetail(id)
-      .then(setProduct)
-      .catch((e) => setError(toUserMessage(e, '商品詳細の取得に失敗しました')));
+    setError('');
+    try {
+      const row = await getProductDetail(id);
+      setProduct(row);
+    } catch (e) {
+      setError(toUserMessage(e, '商品詳細の取得に失敗しました'));
+    }
+  };
+
+  useEffect(() => {
+    load();
   }, [productId]);
+
+  const runAndBack = async (fn: () => Promise<unknown>, success: string) => {
+    try {
+      await fn();
+      sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: success }));
+      navigate('/products');
+    } catch (e) {
+      setError(toUserMessage(e, '操作に失敗しました'));
+    }
+  };
 
   if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (product === undefined) return <LoadingState title="商品詳細を読み込み中" />;
@@ -43,6 +62,31 @@ export const ProductDetailPage = () => {
       <div className="detail-actions">
         <Link to="/products" className="order-link">商品一覧へ戻る</Link>
         <Link to={`/products/${product.id}/edit`} className="order-link">商品を編集</Link>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => {
+            const confirmed = window.confirm(`${product.name} を${product.active ? 'アーカイブ' : '復元'}しますか？`);
+            if (!confirmed) return;
+            void runAndBack(
+              () => (product.active ? archiveProduct(product.id) : unarchiveProduct(product.id)),
+              product.active ? '商品をアーカイブしました' : '商品を復元しました',
+            );
+          }}
+        >
+          {product.active ? 'アーカイブ' : '復元'}
+        </button>
+        <button
+          type="button"
+          className="danger"
+          onClick={() => {
+            const confirmed = window.confirm(`${product.name} を削除しますか？（参照がある場合は削除できません）`);
+            if (!confirmed) return;
+            void runAndBack(() => deleteProduct(product.id), '商品を削除しました');
+          }}
+        >
+          削除
+        </button>
       </div>
     </section>
   );
