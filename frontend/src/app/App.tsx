@@ -15,6 +15,7 @@ import { CustomerEditPage } from 'features/customers/pages/CustomerEditPage';
 import { SupplierListPage } from 'features/suppliers/pages/SupplierListPage';
 import { SupplierCreatePage } from 'features/suppliers/pages/SupplierCreatePage';
 import { SupplierEditPage } from 'features/suppliers/pages/SupplierEditPage';
+import { SupplierDetailPage } from 'features/suppliers/pages/SupplierDetailPage';
 
 export const App = () => {
   return (
@@ -35,6 +36,7 @@ export const App = () => {
         <Route path="/customers/:customerId/edit" element={<CustomerEditPage />} />
         <Route path="/suppliers" element={<SupplierListPage />} />
         <Route path="/suppliers/new" element={<SupplierCreatePage />} />
+        <Route path="/suppliers/:supplierId" element={<SupplierDetailPage />} />
         <Route path="/suppliers/:supplierId/edit" element={<SupplierEditPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/orders/new" replace />} />

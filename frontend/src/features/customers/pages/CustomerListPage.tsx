@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { listCustomers } from 'features/customers/services/customersService';
+import { archiveCustomer, deleteCustomer, listCustomers, unarchiveCustomer } from 'features/customers/services/customersService';
 import type { CustomerOption } from 'features/customers/types/customer';
 import { toUserMessage } from 'shared/error';
 
@@ -17,12 +17,21 @@ export const CustomerListPage = () => {
   const [error, setError] = useState('');
   const [toast, setToast] = useState<ToastPayload | null>(null);
   const [keyword, setKeyword] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [sortMode, setSortMode] = useState<'idAsc' | 'idDesc' | 'createdAsc' | 'createdDesc' | 'updatedAsc' | 'updatedDesc'>('idAsc');
 
+  const load = async () => {
+    setError('');
+    try {
+      const data = await listCustomers(showArchived);
+      setCustomers(data);
+    } catch (e) {
+      setError(toUserMessage(e, '顧客一覧の取得に失敗しました'));
+    }
+  };
+
   useEffect(() => {
-    listCustomers()
-      .then(setCustomers)
-      .catch((e) => setError(toUserMessage(e, '顧客一覧の取得に失敗しました')));
+    load();
 
     const raw = sessionStorage.getItem('osv2_toast');
     if (raw) {
@@ -34,13 +43,23 @@ export const CustomerListPage = () => {
         sessionStorage.removeItem('osv2_toast');
       }
     }
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  const runAction = async (fn: () => Promise<unknown>, successMessage: string) => {
+    try {
+      await fn();
+      setToast({ type: 'success', message: successMessage });
+      await load();
+    } catch (e) {
+      setToast({ type: 'error', message: toUserMessage(e, '操作に失敗しました') });
+    }
+  };
 
   const filteredCustomers = useMemo(() => {
     if (!customers) return [];
@@ -60,7 +79,6 @@ export const CustomerListPage = () => {
 
   if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (!customers) return <LoadingState title="顧客一覧を読み込み中" />;
-  if (customers.length === 0) return <EmptyState title="データがありません" description="条件を見直すか、データ登録後に再度お試しください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
 
   return (
     <section>
@@ -69,7 +87,7 @@ export const CustomerListPage = () => {
         <div className="list-header">
           <div>
             <h2>顧客マスタ</h2>
-            <p className="subtle">作成・編集対応</p>
+            <p className="subtle">作成・編集・アーカイブ・削除対応</p>
           </div>
           <div className="list-controls">
             <label className="filter-label">
@@ -87,6 +105,9 @@ export const CustomerListPage = () => {
                 <option value="updatedDesc">更新日時 降順</option>
               </select>
             </label>
+            <label className="filter-label">
+              <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> アーカイブを表示
+            </label>
             <Link to="/customers/new" className="order-link">+ 顧客を作成</Link>
           </div>
         </div>
@@ -103,7 +124,7 @@ export const CustomerListPage = () => {
                   <th>表示名</th>
                   <th>作成日時</th>
                   <th>更新日時</th>
-                  <th>詳細</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,6 +139,35 @@ export const CustomerListPage = () => {
                       <Link to={`/customers/${c.id}`} className="order-link">詳細</Link>
                       {' / '}
                       <Link to={`/customers/${c.id}/edit`} className="order-link">編集</Link>
+                      {' / '}
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          const label = c.label;
+                          const confirmed = window.confirm(`${label} を${c.active ? 'アーカイブ' : '復元'}しますか？`);
+                          if (!confirmed) return;
+                          void runAction(
+                            () => (c.active ? archiveCustomer(c.id) : unarchiveCustomer(c.id)),
+                            c.active ? '顧客をアーカイブしました' : '顧客を復元しました',
+                          );
+                        }}
+                      >
+                        {c.active ? 'アーカイブ' : '復元'}
+                      </button>
+                      {' / '}
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => {
+                          const label = c.label;
+                          const confirmed = window.confirm(`${label} を削除しますか？（参照がある場合は削除できません）`);
+                          if (!confirmed) return;
+                          void runAction(() => deleteCustomer(c.id), '顧客を削除しました');
+                        }}
+                      >
+                        削除
+                      </button>
                     </td>
                   </tr>
                 ))}

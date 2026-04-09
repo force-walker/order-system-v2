@@ -65,6 +65,7 @@ export const listSuppliers = async (params: SupplierListParams): Promise<Supplie
   if (params.q && params.q.trim()) query.set('q', params.q.trim());
   if (params.active === 'true') query.set('active', 'true');
   if (params.active === 'false') query.set('active', 'false');
+  if (params.includeInactive) query.set('include_inactive', 'true');
   query.set('limit', String(params.limit));
   query.set('offset', String(params.offset));
 
@@ -113,7 +114,23 @@ export const updateSupplier = async (supplierId: number, payload: SupplierUpdate
   return toSupplier(data);
 };
 
-export const deactivateSupplier = async (supplierId: number): Promise<void> => {
+export const archiveSupplier = async (supplierId: number): Promise<Supplier> => {
+  const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}/archive`, { method: 'POST' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const data = (await res.json()) as ApiSupplier;
+  return toSupplier(data);
+};
+
+export const unarchiveSupplier = async (supplierId: number): Promise<Supplier> => {
+  const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}/unarchive`, { method: 'POST' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const data = (await res.json()) as ApiSupplier;
+  return toSupplier(data);
+};
+
+export const deleteSupplier = async (supplierId: number): Promise<void> => {
   const res = await fetchWithAuth(`/api/v1/suppliers/${supplierId}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
 };
+
+export const deactivateSupplier = deleteSupplier;

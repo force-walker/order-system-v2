@@ -10,6 +10,7 @@ export type Supplier = {
 export type SupplierListParams = {
   q?: string;
   active?: 'all' | 'true' | 'false';
+  includeInactive?: boolean;
   limit: number;
   offset: number;
 };

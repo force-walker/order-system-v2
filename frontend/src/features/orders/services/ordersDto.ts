@@ -74,6 +74,7 @@ export const toCustomerOption = (row: ApiCustomerResponse): CustomerOption => {
     id: row.id,
     label: `${row.id}: ${row.name} (${customerCode})`,
     customerCode,
+    active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -90,6 +91,7 @@ export const toProductOption = (row: ApiProductResponse): ProductOption => ({
   id: row.id,
   label: `${row.id}: ${row.name} (${row.pricing_basis_default})`,
   sku: row.sku,
+  active: row.active,
   name: row.name,
   orderUom: row.order_uom,
   pricingBasisDefault: row.pricing_basis_default,

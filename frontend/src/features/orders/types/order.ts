@@ -64,6 +64,7 @@ export type CustomerOption = {
   id: number;
   label: string;
   customerCode?: string;
+  active?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -89,6 +90,7 @@ export type ProductOption = {
   id: number;
   label: string;
   sku?: string;
+  active?: boolean;
   name: string;
   orderUom: string;
   pricingBasisDefault: 'uom_count' | 'uom_kg';
