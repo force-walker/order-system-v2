@@ -414,6 +414,19 @@ button:disabled { opacity: 0.6; }
   color: #6b7280;
 }
 
+.cell-order-no {
+  max-width: 140px;
+}
+
+.text-ellipsis-inline {
+  display: inline-block;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
 .loading { border-left: 4px solid #2563eb; }
 .empty { border-left: 4px solid #6b7280; }
 .error { border-left: 4px solid #dc2626; }

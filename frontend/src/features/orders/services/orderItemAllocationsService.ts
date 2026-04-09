@@ -5,6 +5,7 @@ import { listSuppliers } from 'features/suppliers/services/suppliersService';
 
 export type OrderItemAllocationWorkItem = {
   orderItemId: number;
+  orderId: number | null;
   orderNo: string;
   customerName: string;
   productId: number;
@@ -137,10 +138,12 @@ export const listOrderItemAllocationWorkItems = async (params: {
   if (!res.ok) throw await parseApiErrorPayload(res);
 
   const customerByOrderNo = new Map(orders.map((o) => [o.orderNo, o.customerName]));
+  const orderIdByOrderNo = new Map(orders.map((o) => [o.orderNo, o.id]));
   const rows = (await res.json()) as ApiWorkItem[];
 
   return rows.map((row) => ({
     orderItemId: row.order_item_id,
+    orderId: orderIdByOrderNo.get(row.order_no) ?? null,
     orderNo: row.order_no,
     customerName: customerByOrderNo.get(row.order_no) ?? '-',
     productId: row.product_id,

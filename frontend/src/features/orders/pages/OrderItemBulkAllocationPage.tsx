@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   bulkSaveOrderItemAllocations,
@@ -17,7 +18,12 @@ type RowEdit = {
   rowError?: string;
 };
 
-const statusLabel = (v: string) => (v === 'allocated' ? '割当済' : '未割当');
+type SortKey = 'orderNo' | 'deliveryDate' | 'customerName' | 'productName' | 'manualSupplierId' | 'orderedQty' | 'manualQty' | 'shortageQty';
+
+type SortState = {
+  key: SortKey;
+  direction: 'asc' | 'desc';
+};
 
 export const OrderItemBulkAllocationPage = () => {
   const [loading, setLoading] = useState(true);
@@ -36,6 +42,7 @@ export const OrderItemBulkAllocationPage = () => {
   const [customerFilter, setCustomerFilter] = useState('');
   const [bulkSupplierId, setBulkSupplierId] = useState<number | ''>('');
   const [selectVisibleChecked, setSelectVisibleChecked] = useState(false);
+  const [sort, setSort] = useState<SortState>({ key: 'deliveryDate', direction: 'asc' });
 
   const load = async () => {
     setLoading(true);
@@ -95,7 +102,39 @@ export const OrderItemBulkAllocationPage = () => {
     });
   }, [items, productFilter, customerFilter]);
 
-  const visibleIds = useMemo(() => filteredItems.map((row) => row.orderItemId), [filteredItems]);
+  const sortedItems = useMemo(() => {
+    const rows = [...filteredItems];
+    const getShortage = (row: OrderItemAllocationWorkItem) => {
+      const manualQty = Number(editById[row.orderItemId]?.manualQty ?? row.manualQty ?? 0);
+      const shortage = row.orderedQty - (Number.isFinite(manualQty) ? manualQty : 0);
+      return Number(shortage.toFixed(3));
+    };
+
+    rows.sort((a, b) => {
+      const aManualQty = Number(editById[a.orderItemId]?.manualQty ?? a.manualQty ?? 0);
+      const bManualQty = Number(editById[b.orderItemId]?.manualQty ?? b.manualQty ?? 0);
+      const aManualSupplier = Number(editById[a.orderItemId]?.manualSupplierId ?? 0);
+      const bManualSupplier = Number(editById[b.orderItemId]?.manualSupplierId ?? 0);
+
+      const compareMap: Record<SortKey, number> = {
+        orderNo: a.orderNo.localeCompare(b.orderNo),
+        deliveryDate: a.deliveryDate.localeCompare(b.deliveryDate),
+        customerName: a.customerName.localeCompare(b.customerName),
+        productName: a.productName.localeCompare(b.productName),
+        manualSupplierId: aManualSupplier - bManualSupplier,
+        orderedQty: a.orderedQty - b.orderedQty,
+        manualQty: aManualQty - bManualQty,
+        shortageQty: getShortage(a) - getShortage(b),
+      };
+
+      const base = compareMap[sort.key];
+      return sort.direction === 'asc' ? base : -base;
+    });
+
+    return rows;
+  }, [filteredItems, editById, sort]);
+
+  const visibleIds = useMemo(() => sortedItems.map((row) => row.orderItemId), [sortedItems]);
 
   useEffect(() => {
     if (visibleIds.length === 0) {
@@ -106,28 +145,25 @@ export const OrderItemBulkAllocationPage = () => {
     setSelectVisibleChecked(allSelected);
   }, [visibleIds, editById]);
 
+  const onSort = (key: SortKey) => {
+    setSort((prev) => {
+      if (prev.key !== key) return { key, direction: 'asc' };
+      return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+    });
+  };
+
+  const sortLabel = (key: SortKey, label: string) => {
+    if (sort.key !== key) return label;
+    return `${label} ${sort.direction === 'asc' ? '↑' : '↓'}`;
+  };
+
   const applySuggestion = async () => {
-    const targetIds = filteredItems.map((row) => row.orderItemId);
+    const targetIds = sortedItems.map((row) => row.orderItemId);
     if (targetIds.length === 0) return;
 
     try {
       const suggestions = await suggestOrderItemAllocations(targetIds);
       const map = new Map(suggestions.map((s) => [s.orderItemId, s]));
-
-      setItems((prev) =>
-        prev.map((row) => {
-          const s = map.get(row.orderItemId);
-          if (!s) return row;
-          return {
-            ...row,
-            proposedSupplierId: s.suggestedSupplierId,
-            proposedQty: s.suggestedQty,
-            manualSupplierId: s.suggestedSupplierId,
-            manualQty: s.suggestedQty,
-          };
-        }),
-      );
-
       setEditById((prev) => {
         const next = { ...prev };
         for (const s of suggestions) {
@@ -141,8 +177,7 @@ export const OrderItemBulkAllocationPage = () => {
         }
         return next;
       });
-
-      setToast({ type: 'success', message: '自動提案を反映しました。必要に応じて手動修正してください。' });
+      setToast({ type: 'success', message: `自動提案を反映しました（${map.size}件）。` });
     } catch (e) {
       setToast({ type: 'error', message: toActionableMessage(e, '自動提案に失敗しました。') });
     }
@@ -163,7 +198,7 @@ export const OrderItemBulkAllocationPage = () => {
     if (!bulkSupplierId) return;
     setEditById((prev) => {
       const next = { ...prev };
-      for (const row of filteredItems) {
+      for (const row of sortedItems) {
         const current = next[row.orderItemId];
         if (!current?.selected) continue;
         next[row.orderItemId] = {
@@ -175,7 +210,7 @@ export const OrderItemBulkAllocationPage = () => {
       }
       return next;
     });
-    setToast({ type: 'success', message: '選択行に仕入先を適用し、数量を受注数量で自動セットしました（ローカル同期）。' });
+    setToast({ type: 'success', message: '選択行に仕入先を適用しました。' });
   };
 
   const clearSelectedRows = () => {
@@ -184,14 +219,10 @@ export const OrderItemBulkAllocationPage = () => {
       for (const id of visibleIds) {
         const current = next[id];
         if (!current?.selected) continue;
-        next[id] = {
-          ...current,
-          selected: false,
-        };
+        next[id] = { ...current, selected: false };
       }
       return next;
     });
-    setToast({ type: 'success', message: '表示中の選択行を解除しました。仕入先/数量の入力値は保持しています。' });
   };
 
   const resetFilters = () => {
@@ -203,7 +234,7 @@ export const OrderItemBulkAllocationPage = () => {
   };
 
   const saveBulk = async () => {
-    const payload = filteredItems
+    const payload = sortedItems
       .filter((row) => editById[row.orderItemId]?.selected)
       .map((row) => {
         const edit = editById[row.orderItemId];
@@ -231,14 +262,11 @@ export const OrderItemBulkAllocationPage = () => {
         return next;
       });
 
-      if (result.failed > 0) {
-        setToast({
-          type: 'error',
-          message: `一括保存は部分成功です（成功 ${result.succeeded} / 失敗 ${result.failed}）。失敗行を修正してください。`,
-        });
-      } else {
-        setToast({ type: 'success', message: `一括保存に成功しました（${result.succeeded}件）。` });
-      }
+      setToast(
+        result.failed > 0
+          ? { type: 'error', message: `一括保存は部分成功です（成功 ${result.succeeded} / 失敗 ${result.failed}）。` }
+          : { type: 'success', message: `一括保存に成功しました（${result.succeeded}件）。` },
+      );
 
       await load();
     } catch (e) {
@@ -247,27 +275,23 @@ export const OrderItemBulkAllocationPage = () => {
   };
 
   const onRowCheckboxChange = (orderItemId: number, checked: boolean, shiftKey: boolean) => {
-    const targetIndex = filteredItems.findIndex((row) => row.orderItemId === orderItemId);
+    const targetIndex = sortedItems.findIndex((row) => row.orderItemId === orderItemId);
 
     setEditById((prev) => {
       const next = { ...prev };
-
       if (shiftKey && lastSelectedId != null) {
-        const lastIndex = filteredItems.findIndex((row) => row.orderItemId === lastSelectedId);
+        const lastIndex = sortedItems.findIndex((row) => row.orderItemId === lastSelectedId);
         if (lastIndex >= 0 && targetIndex >= 0) {
           const [start, end] = lastIndex < targetIndex ? [lastIndex, targetIndex] : [targetIndex, lastIndex];
           for (let i = start; i <= end; i += 1) {
-            const id = filteredItems[i].orderItemId;
+            const id = sortedItems[i].orderItemId;
             if (!next[id]) continue;
             next[id] = { ...next[id], selected: checked };
           }
         }
-      } else {
-        if (next[orderItemId]) {
-          next[orderItemId] = { ...next[orderItemId], selected: checked };
-        }
+      } else if (next[orderItemId]) {
+        next[orderItemId] = { ...next[orderItemId], selected: checked };
       }
-
       return next;
     });
 
@@ -331,9 +355,9 @@ export const OrderItemBulkAllocationPage = () => {
           <button type="button" className="secondary" onClick={clearSelectedRows}>選択解除</button>
         </div>
 
-        <p className="subtle" style={{ marginBottom: 12 }}>※ 一括選択/解除は「現在表示中の行」にのみ作用します。非表示行の選択状態は変更しません。</p>
+        <p className="subtle" style={{ marginBottom: 12 }}>※ ヘッダークリックで昇順/降順を切替。選択操作は表示中の行のみ対象。</p>
 
-        {filteredItems.length === 0 ? (
+        {sortedItems.length === 0 ? (
           <EmptyState title="データがありません" description="条件に合う受注アイテムがありません。" actionLabel="再読み込み" onAction={load} />
         ) : (
           <div className="table-wrap">
@@ -342,30 +366,26 @@ export const OrderItemBulkAllocationPage = () => {
                 <tr>
                   <th>
                     <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectVisibleChecked}
-                        onChange={(e) => toggleSelectVisible(e.target.checked)}
-                      />
+                      <input type="checkbox" checked={selectVisibleChecked} onChange={(e) => toggleSelectVisible(e.target.checked)} />
                       選択
                     </label>
                   </th>
-                  <th>注文番号</th>
-                  <th>顧客</th>
-                  <th>商品</th>
-                  <th>受注数量</th>
-                  <th>納品日</th>
-                  <th>提案仕入先</th>
-                  <th>提案数量</th>
-                  <th>手動仕入先</th>
-                  <th>手動数量</th>
-                  <th>状態</th>
-                  <th>失敗理由</th>
+                  <th onClick={() => onSort('orderNo')} style={{ cursor: 'pointer' }}>{sortLabel('orderNo', '注文番号')}</th>
+                  <th onClick={() => onSort('deliveryDate')} style={{ cursor: 'pointer' }}>{sortLabel('deliveryDate', '納品日')}</th>
+                  <th onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
+                  <th onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
+                  <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>{sortLabel('manualSupplierId', '手動仕入先')}</th>
+                  <th onClick={() => onSort('orderedQty')} style={{ cursor: 'pointer' }}>{sortLabel('orderedQty', '受注数量')}</th>
+                  <th onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '手動数量')}</th>
+                  <th onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>{sortLabel('shortageQty', '割当不足数量')}</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredItems.map((row) => {
+                {sortedItems.map((row) => {
                   const edit = editById[row.orderItemId];
+                  const manualQtyNum = Number(edit?.manualQty ?? row.manualQty ?? 0);
+                  const shortageQty = Number((row.orderedQty - (Number.isFinite(manualQtyNum) ? manualQtyNum : 0)).toFixed(3));
+
                   return (
                     <tr key={row.orderItemId}>
                       <td>
@@ -379,13 +399,18 @@ export const OrderItemBulkAllocationPage = () => {
                           readOnly
                         />
                       </td>
-                      <td>{row.orderNo}</td>
-                      <td>{row.customerName}</td>
-                      <td>{row.productName}</td>
-                      <td>{row.orderedQty}</td>
+                      <td className="cell-order-no" title={row.orderNo}>
+                        {row.orderId ? (
+                          <Link to={`/orders/${row.orderId}/edit`} className="order-link text-ellipsis-inline" title={row.orderNo}>
+                            {row.orderNo}
+                          </Link>
+                        ) : (
+                          <span className="text-ellipsis-inline" title={row.orderNo}>{row.orderNo}</span>
+                        )}
+                      </td>
                       <td>{row.deliveryDate}</td>
-                      <td>{row.proposedSupplierId ?? '-'}</td>
-                      <td>{row.proposedQty ?? '-'}</td>
+                      <td style={{ minWidth: 200 }}>{row.customerName}</td>
+                      <td style={{ minWidth: 260 }}>{row.productName}</td>
                       <td>
                         <select
                           value={edit?.manualSupplierId ?? ''}
@@ -404,6 +429,7 @@ export const OrderItemBulkAllocationPage = () => {
                           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                         </select>
                       </td>
+                      <td>{row.orderedQty}</td>
                       <td>
                         <input
                           type="number"
@@ -418,8 +444,7 @@ export const OrderItemBulkAllocationPage = () => {
                           }
                         />
                       </td>
-                      <td>{statusLabel(row.allocationStatus)}</td>
-                      <td className="field-error">{edit?.rowError ?? '-'}</td>
+                      <td className={shortageQty > 0 ? 'field-error' : ''}>{shortageQty}</td>
                     </tr>
                   );
                 })}
