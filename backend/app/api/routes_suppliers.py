@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import AuditAction, write_audit_log
 from app.core.codegen import generate_next_code
 from app.db.session import get_db
-from app.models.entities import Product, Supplier, SupplierProduct
+from app.models.entities import Product, PurchaseResult, Supplier, SupplierAllocation, SupplierProduct
 from app.schemas.common import ApiErrorResponse
 from app.schemas.supplier import SupplierCreateRequest, SupplierResponse, SupplierUpdateRequest
 from app.schemas.supplier_product import SupplierProductCreateRequest, SupplierProductResponse, SupplierProductUpdateRequest
@@ -20,6 +20,7 @@ SUPPLIER_COMMON_ERROR_RESPONSES = {
 @router.get("", response_model=list[SupplierResponse])
 def list_suppliers(
     q: str | None = Query(default=None, min_length=1, max_length=255),
+    include_inactive: bool = Query(default=False),
     active: bool | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -29,8 +30,11 @@ def list_suppliers(
     if q is not None:
         pattern = f"%{q}%"
         query = query.filter(or_(Supplier.supplier_code.ilike(pattern), Supplier.name.ilike(pattern)))
+
     if active is not None:
         query = query.filter(Supplier.active == active)
+    elif not include_inactive:
+        query = query.filter(Supplier.active.is_(True))
 
     rows = query.order_by(Supplier.id.asc()).offset(offset).limit(limit).all()
     return [SupplierResponse.model_validate(row) for row in rows]
@@ -94,12 +98,49 @@ def update_supplier(supplier_id: int, payload: SupplierUpdateRequest, db: Sessio
     return SupplierResponse.model_validate(row)
 
 
+@router.post(
+    "/{supplier_id}/archive",
+    response_model=SupplierResponse,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def archive_supplier(supplier_id: int, db: Session = Depends(get_db)) -> SupplierResponse:
+    row = db.query(Supplier).filter(Supplier.id == supplier_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "supplier not found"})
+
+    row.active = False
+    db.flush()
+    write_audit_log(db, entity_type="supplier", entity_id=supplier_id, action=AuditAction.UPDATE, after={"active": row.active})
+    db.commit()
+    db.refresh(row)
+    return SupplierResponse.model_validate(row)
+
+
+@router.post(
+    "/{supplier_id}/unarchive",
+    response_model=SupplierResponse,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def unarchive_supplier(supplier_id: int, db: Session = Depends(get_db)) -> SupplierResponse:
+    row = db.query(Supplier).filter(Supplier.id == supplier_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "supplier not found"})
+
+    row.active = True
+    db.flush()
+    write_audit_log(db, entity_type="supplier", entity_id=supplier_id, action=AuditAction.UPDATE, after={"active": row.active})
+    db.commit()
+    db.refresh(row)
+    return SupplierResponse.model_validate(row)
+
+
 @router.delete(
     "/{supplier_id}",
     status_code=204,
     responses={
         **SUPPLIER_COMMON_ERROR_RESPONSES,
         404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
 )
 def delete_supplier(supplier_id: int, db: Session = Depends(get_db)) -> Response:
@@ -107,8 +148,19 @@ def delete_supplier(supplier_id: int, db: Session = Depends(get_db)) -> Response
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "SUPPLIER_NOT_FOUND", "message": "supplier not found"})
 
-    # Soft-delete policy: keep master row for historical references.
-    row.active = False
+    has_allocation_ref = (
+        db.query(SupplierAllocation.id)
+        .filter(or_(SupplierAllocation.suggested_supplier_id == supplier_id, SupplierAllocation.final_supplier_id == supplier_id))
+        .first()
+        is not None
+    )
+    has_purchase_ref = db.query(PurchaseResult.id).filter(PurchaseResult.supplier_id == supplier_id).first() is not None
+    has_mapping_ref = db.query(SupplierProduct.id).filter(SupplierProduct.supplier_id == supplier_id).first() is not None
+
+    if has_allocation_ref or has_purchase_ref or has_mapping_ref:
+        raise HTTPException(status_code=409, detail={"code": "SUPPLIER_IN_USE", "message": "supplier is referenced and cannot be deleted"})
+
+    db.delete(row)
     db.flush()
     write_audit_log(db, entity_type="supplier", entity_id=supplier_id, action=AuditAction.CANCEL)
     db.commit()
