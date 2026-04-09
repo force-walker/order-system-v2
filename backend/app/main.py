@@ -15,6 +15,7 @@ from app.api.routes_metrics import router as metrics_router
 from app.api.routes_orders import router as orders_router
 from app.api.routes_products import router as products_router
 from app.api.routes_purchase_results import router as purchase_results_router
+from app.api.routes_supplier_product_mappings import router as supplier_product_mappings_router
 from app.api.routes_suppliers import router as suppliers_router
 from app.core.exception_mapping import map_integrity_error
 from app.core.metrics import api_request_duration_ms, api_request_errors_total, api_requests_total, inflight_requests
@@ -85,6 +86,7 @@ app.include_router(audit_router)
 app.include_router(products_router)
 app.include_router(customers_router)
 app.include_router(suppliers_router)
+app.include_router(supplier_product_mappings_router)
 app.include_router(orders_router)
 app.include_router(allocations_router)
 app.include_router(purchase_results_router)

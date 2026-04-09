@@ -49,6 +49,14 @@ def test_openapi_error_contracts_for_core_apis():
     assert "422" in _responses("/api/v1/suppliers/{supplier_id}/products/{product_id}", "patch")
     assert "404" in _responses("/api/v1/suppliers/{supplier_id}/products/{product_id}", "delete")
 
+    # supplier-product-mappings (flat)
+    assert "404" in _responses("/api/v1/supplier-product-mappings", "post")
+    assert "409" in _responses("/api/v1/supplier-product-mappings", "post")
+    assert "422" in _responses("/api/v1/supplier-product-mappings", "post")
+    assert "404" in _responses("/api/v1/supplier-product-mappings/{mapping_id}", "patch")
+    assert "422" in _responses("/api/v1/supplier-product-mappings/{mapping_id}", "patch")
+    assert "404" in _responses("/api/v1/supplier-product-mappings/{mapping_id}", "delete")
+
     # orders
     assert "409" in _responses("/api/v1/orders", "post")
     assert "422" in _responses("/api/v1/orders", "post")
@@ -97,3 +105,6 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     customer_list_params = {p["name"] for p in spec["paths"]["/api/v1/customers"]["get"]["parameters"]}
     assert {"include_inactive"}.issubset(customer_list_params)
+
+    mapping_list_params = {p["name"] for p in spec["paths"]["/api/v1/supplier-product-mappings"]["get"]["parameters"]}
+    assert {"supplier_id", "product_id"}.issubset(mapping_list_params)

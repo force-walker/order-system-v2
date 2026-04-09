@@ -12,6 +12,16 @@ class SupplierProductCreateRequest(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
+class SupplierProductMappingCreateRequest(BaseModel):
+    supplier_id: int = Field(gt=0)
+    product_id: int = Field(gt=0)
+    priority: int = Field(default=100, ge=1, le=9999)
+    is_preferred: bool = False
+    default_unit_cost: float | None = Field(default=None, ge=0)
+    lead_time_days: int | None = Field(default=None, ge=0)
+    note: str | None = Field(default=None, max_length=1000)
+
+
 class SupplierProductUpdateRequest(BaseModel):
     priority: int | None = Field(default=None, ge=1, le=9999)
     is_preferred: bool | None = None
