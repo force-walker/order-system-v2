@@ -1,12 +1,15 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 const branchName = import.meta.env.VITE_APP_BRANCH ?? 'local';
 const commitSha = import.meta.env.VITE_APP_COMMIT_SHA ?? 'dev';
 const buildTime = import.meta.env.VITE_APP_BUILD_TIME ?? 'local-build';
 
 export const AppLayout = () => {
+  const location = useLocation();
+  const isBulkAllocationPage = location.pathname === '/orders/item-allocations';
+
   return (
-    <div className="page">
+    <div className={`page ${isBulkAllocationPage ? 'page-wide' : ''}`}>
       <header className="header">
         <div>
           <h1>Order System v2 (Mockup)</h1>
