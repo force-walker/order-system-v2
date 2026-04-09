@@ -361,7 +361,7 @@ export const OrderItemBulkAllocationPage = () => {
           <EmptyState title="データがありません" description="条件に合う受注アイテムがありません。" actionLabel="再読み込み" onAction={load} />
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="bulk-allocation-table">
               <thead>
                 <tr>
                   <th>
@@ -370,10 +370,10 @@ export const OrderItemBulkAllocationPage = () => {
                       選択
                     </label>
                   </th>
-                  <th onClick={() => onSort('orderNo')} style={{ cursor: 'pointer' }}>{sortLabel('orderNo', '注文番号')}</th>
-                  <th onClick={() => onSort('deliveryDate')} style={{ cursor: 'pointer' }}>{sortLabel('deliveryDate', '納品日')}</th>
-                  <th onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
-                  <th onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
+                  <th className="col-order-no" onClick={() => onSort('orderNo')} style={{ cursor: 'pointer' }}>{sortLabel('orderNo', '注文番号')}</th>
+                  <th className="col-delivery-date" onClick={() => onSort('deliveryDate')} style={{ cursor: 'pointer' }}>{sortLabel('deliveryDate', '納品日')}</th>
+                  <th className="col-customer" onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
+                  <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>{sortLabel('manualSupplierId', '手動仕入先')}</th>
                   <th onClick={() => onSort('orderedQty')} style={{ cursor: 'pointer' }}>{sortLabel('orderedQty', '受注数量')}</th>
                   <th onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '手動数量')}</th>
@@ -409,9 +409,9 @@ export const OrderItemBulkAllocationPage = () => {
                           <span className="text-ellipsis-inline" title={row.orderNo}>{row.orderNo}</span>
                         )}
                       </td>
-                      <td>{row.deliveryDate}</td>
-                      <td style={{ minWidth: 200 }}>{row.customerName}</td>
-                      <td style={{ minWidth: 260 }}>{row.productName}</td>
+                      <td className="col-delivery-date">{row.deliveryDate}</td>
+                      <td className="col-customer">{row.customerName}</td>
+                      <td className="col-product">{row.productName}</td>
                       <td>
                         <select
                           value={edit?.manualSupplierId ?? ''}

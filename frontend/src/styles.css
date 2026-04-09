@@ -9,7 +9,7 @@
 body { margin: 0; }
 
 .page {
-  max-width: 1320px;
+  max-width: 1520px;
   margin: 0 auto;
   padding: 20px;
 }
@@ -414,13 +414,32 @@ button:disabled { opacity: 0.6; }
   color: #6b7280;
 }
 
-.cell-order-no {
-  max-width: 140px;
+.bulk-allocation-table {
+  min-width: 1500px;
+}
+
+.bulk-allocation-table .col-order-no,
+.bulk-allocation-table .cell-order-no {
+  width: 170px;
+  max-width: 170px;
+}
+
+.bulk-allocation-table .col-delivery-date {
+  width: 140px;
+  min-width: 140px;
+}
+
+.bulk-allocation-table .col-customer {
+  min-width: 260px;
+}
+
+.bulk-allocation-table .col-product {
+  min-width: 320px;
 }
 
 .text-ellipsis-inline {
   display: inline-block;
-  max-width: 120px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
