@@ -441,17 +441,21 @@ button:disabled { opacity: 0.6; }
   min-width: 320px;
 }
 
-.bulk-allocation-table .col-allocated-qty,
+.bulk-allocation-table .col-allocated-qty {
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
+  white-space: normal;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 .bulk-allocation-table .col-shortage-qty {
   width: 56px;
   min-width: 56px;
   max-width: 56px;
   white-space: normal;
   box-sizing: border-box;
-}
-
-.bulk-allocation-table .col-allocated-qty,
-.bulk-allocation-table .col-shortage-qty {
   overflow: hidden;
 }
 
@@ -483,6 +487,12 @@ button:disabled { opacity: 0.6; }
 
 .bulk-allocation-table tbody tr.row-unallocated {
   background: #fff7ed;
+}
+
+.bulk-allocation-table td:nth-child(6) select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .bulk-allocation-table .manual-supplier-marked {
