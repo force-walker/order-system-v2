@@ -391,8 +391,8 @@ export const OrderItemBulkAllocationPage = () => {
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>{sortLabel('manualSupplierId', '手動仕入先')}</th>
                   <th onClick={() => onSort('orderedQty')} style={{ cursor: 'pointer' }}>{sortLabel('orderedQty', '受注数量')}</th>
-                  <th className="col-qty" onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '割当数')}</th>
-                  <th className="col-qty" onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>{sortLabel('shortageQty', '不足数')}</th>
+                  <th className="col-allocated-qty" onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '割当数')}</th>
+                  <th className="col-shortage-qty" onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>{sortLabel('shortageQty', '不足数')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -449,7 +449,7 @@ export const OrderItemBulkAllocationPage = () => {
                         </select>
                       </td>
                       <td>{row.orderedQty}</td>
-                      <td className="col-qty">
+                      <td className="col-allocated-qty">
                         <input
                           type="number"
                           min={0}
@@ -463,7 +463,7 @@ export const OrderItemBulkAllocationPage = () => {
                           }
                         />
                       </td>
-                      <td className="col-qty">
+                      <td className="col-shortage-qty">
                         {shortageQty > 0 ? <span className="field-error">{shortageQty}</span> : <span className="subtle">-</span>}
                         {edit?.rowError ? <div className="field-error">{edit.rowError}</div> : null}
                       </td>

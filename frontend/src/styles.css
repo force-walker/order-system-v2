@@ -441,11 +441,16 @@ button:disabled { opacity: 0.6; }
   min-width: 320px;
 }
 
-.bulk-allocation-table .col-qty {
-  width: 28px;
-  min-width: 28px;
-  max-width: 28px;
+.bulk-allocation-table .col-allocated-qty,
+.bulk-allocation-table .col-shortage-qty {
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
   white-space: normal;
+}
+
+.bulk-allocation-table .col-shortage-qty {
+  border-left: 1px solid #e5e7eb;
 }
 
 .bulk-allocation-table tbody tr.row-allocated {
