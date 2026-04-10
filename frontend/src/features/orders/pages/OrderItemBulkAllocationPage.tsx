@@ -41,6 +41,7 @@ export const OrderItemBulkAllocationPage = () => {
   const [productFilter, setProductFilter] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
   const [bulkSupplierId, setBulkSupplierId] = useState<number | ''>('');
+  const [bulkSupplierQuery, setBulkSupplierQuery] = useState('');
   const [selectVisibleChecked, setSelectVisibleChecked] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: 'deliveryDate', direction: 'asc' });
 
@@ -136,6 +137,15 @@ export const OrderItemBulkAllocationPage = () => {
 
   const visibleIds = useMemo(() => sortedItems.map((row) => row.orderItemId), [sortedItems]);
 
+  const tomorrowDateStr = useMemo(() => {
+    const now = new Date();
+    now.setDate(now.getDate() + 1);
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
+
   useEffect(() => {
     if (visibleIds.length === 0) {
       setSelectVisibleChecked(false);
@@ -195,7 +205,8 @@ export const OrderItemBulkAllocationPage = () => {
   };
 
   const applyBulkSupplier = () => {
-    if (!bulkSupplierId) return;
+    const selectedSupplierId = bulkSupplierId === '' ? null : Number(bulkSupplierId);
+
     setEditById((prev) => {
       const next = { ...prev };
       for (const row of sortedItems) {
@@ -203,27 +214,16 @@ export const OrderItemBulkAllocationPage = () => {
         if (!current?.selected) continue;
         next[row.orderItemId] = {
           ...current,
-          manualSupplierId: Number(bulkSupplierId),
-          manualQty: String(row.orderedQty),
+          manualSupplierId: selectedSupplierId,
+          manualQty: selectedSupplierId == null ? '' : String(row.orderedQty),
           rowError: undefined,
         };
       }
       return next;
     });
-    setToast({ type: 'success', message: '選択行に仕入先を適用しました。' });
+    setToast({ type: 'success', message: selectedSupplierId == null ? '未選択（未割当へ戻す）を一括適用しました。' : '一括割当を反映しました。' });
   };
 
-  const clearSelectedRows = () => {
-    setEditById((prev) => {
-      const next = { ...prev };
-      for (const id of visibleIds) {
-        const current = next[id];
-        if (!current?.selected) continue;
-        next[id] = { ...current, selected: false };
-      }
-      return next;
-    });
-  };
 
   const resetFilters = () => {
     setUnallocatedOnly(false);
@@ -234,20 +234,20 @@ export const OrderItemBulkAllocationPage = () => {
   };
 
   const saveBulk = async () => {
-    const payload = sortedItems
-      .filter((row) => editById[row.orderItemId]?.selected)
-      .map((row) => {
-        const edit = editById[row.orderItemId];
-        return {
-          orderItemId: row.orderItemId,
-          supplierId: Number(edit.manualSupplierId),
-          allocatedQty: Number(edit.manualQty),
-        };
-      })
-      .filter((row) => Number.isFinite(row.supplierId) && row.supplierId > 0 && Number.isFinite(row.allocatedQty) && row.allocatedQty > 0);
+    const selectedRows = sortedItems.filter((row) => editById[row.orderItemId]?.selected);
+    const payload = selectedRows.map((row) => {
+      const edit = editById[row.orderItemId];
+      const supplierId = edit.manualSupplierId == null ? null : Number(edit.manualSupplierId);
+      const allocatedQty = supplierId == null ? null : Number(edit.manualQty);
+      return {
+        orderItemId: row.orderItemId,
+        supplierId,
+        allocatedQty: Number.isFinite(allocatedQty as number) ? allocatedQty : null,
+      };
+    });
 
     if (payload.length === 0) {
-      setToast({ type: 'error', message: '保存対象がありません。表示中の行を選択し、仕入先/数量を入力してください。' });
+      setToast({ type: 'error', message: '保存対象がありません。表示中の行を選択してください。' });
       return;
     }
 
@@ -330,7 +330,7 @@ export const OrderItemBulkAllocationPage = () => {
           </label>
           <label className="filter-label">
             <input type="checkbox" checked={unallocatedOnly} onChange={(e) => setUnallocatedOnly(e.target.checked)} />
-            未割当てのみ（割当未設定行のみ表示）
+            未割当てのみ表示
           </label>
         </div>
 
@@ -343,16 +343,31 @@ export const OrderItemBulkAllocationPage = () => {
             取引先フィルター
             <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="例: テスト商事" />
           </label>
-          <button type="button" className="secondary" onClick={resetFilters}>全フィルター解除</button>
+          <button type="button" className="secondary" onClick={resetFilters}>フィルター解除</button>
+          <div className="filter-gap" />
           <label className="filter-label">
-            選択行へ一括仕入先適用
-            <select value={bulkSupplierId} onChange={(e) => setBulkSupplierId(e.target.value ? Number(e.target.value) : '')}>
-              <option value="">選択してください</option>
-              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
+            選択行へ一括仕入先適用（未選択=未割当へ戻す）
+            <input
+              list="supplier-bulk-options"
+              value={bulkSupplierQuery}
+              placeholder="仕入先を検索 / 未選択"
+              onChange={(e) => {
+                const q = e.target.value;
+                setBulkSupplierQuery(q);
+                if (q === '未選択') {
+                  setBulkSupplierId('');
+                  return;
+                }
+                const matched = suppliers.find((s) => s.label === q || q.startsWith(`${s.id}:`));
+                setBulkSupplierId(matched ? matched.id : '');
+              }}
+            />
+            <datalist id="supplier-bulk-options">
+              <option value="未選択" />
+              {suppliers.map((s) => <option key={s.id} value={s.label} />)}
+            </datalist>
           </label>
-          <button type="button" className="secondary" onClick={applyBulkSupplier} disabled={!bulkSupplierId}>選択行に仕入先を適用</button>
-          <button type="button" className="secondary" onClick={clearSelectedRows}>選択解除</button>
+          <button type="button" className="secondary" onClick={applyBulkSupplier}>一括割当</button>
         </div>
 
         <p className="subtle" style={{ marginBottom: 12 }}>※ ヘッダークリックで昇順/降順を切替。選択操作は表示中の行のみ対象。</p>
@@ -376,8 +391,8 @@ export const OrderItemBulkAllocationPage = () => {
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>{sortLabel('manualSupplierId', '手動仕入先')}</th>
                   <th onClick={() => onSort('orderedQty')} style={{ cursor: 'pointer' }}>{sortLabel('orderedQty', '受注数量')}</th>
-                  <th onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '手動数量')}</th>
-                  <th onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>{sortLabel('shortageQty', '割当不足数量')}</th>
+                  <th className="col-allocated-qty" onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '割当数')}</th>
+                  <th className="col-shortage-qty" onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>{sortLabel('shortageQty', '不足数')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -387,8 +402,11 @@ export const OrderItemBulkAllocationPage = () => {
                   const allocatedQty = Number.isFinite(manualQtyNum) ? manualQtyNum : 0;
                   const shortageQty = Number(Math.max(row.orderedQty - allocatedQty, 0).toFixed(3));
 
+                  const hasManualSupplier = (edit?.manualSupplierId ?? row.manualSupplierId) != null;
+                  const isNonTomorrow = row.deliveryDate !== tomorrowDateStr;
+
                   return (
-                    <tr key={row.orderItemId}>
+                    <tr key={row.orderItemId} className={hasManualSupplier ? 'row-allocated' : 'row-unallocated'}>
                       <td>
                         <input
                           type="checkbox"
@@ -409,10 +427,10 @@ export const OrderItemBulkAllocationPage = () => {
                           <span className="text-ellipsis-inline" title={row.orderNo}>{row.orderNo}</span>
                         )}
                       </td>
-                      <td className="col-delivery-date">{row.deliveryDate}</td>
+                      <td className={`col-delivery-date ${isNonTomorrow ? 'delivery-warning' : ''}`}>{row.deliveryDate}</td>
                       <td className="col-customer">{row.customerName}</td>
                       <td className="col-product">{row.productName}</td>
-                      <td>
+                      <td className={hasManualSupplier ? 'manual-supplier-marked' : ''}>
                         <select
                           value={edit?.manualSupplierId ?? ''}
                           onChange={(e) =>
@@ -431,11 +449,11 @@ export const OrderItemBulkAllocationPage = () => {
                         </select>
                       </td>
                       <td>{row.orderedQty}</td>
-                      <td>
+                      <td className="col-allocated-qty">
                         <input
                           type="number"
                           min={0}
-                          step="0.001"
+                          step="1"
                           value={edit?.manualQty ?? ''}
                           onChange={(e) =>
                             setEditById((prev) => ({
@@ -445,8 +463,9 @@ export const OrderItemBulkAllocationPage = () => {
                           }
                         />
                       </td>
-                      <td>
-                        {shortageQty > 0 ? <span className="field-error">不足 {shortageQty}</span> : <span className="subtle">-</span>}
+                      <td className="col-shortage-qty">
+                        {shortageQty > 0 ? <span className="field-error">{shortageQty}</span> : <span className="subtle">-</span>}
+                        {edit?.rowError ? <div className="field-error">{edit.rowError}</div> : null}
                       </td>
                     </tr>
                   );

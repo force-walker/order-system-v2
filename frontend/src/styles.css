@@ -441,6 +441,73 @@ button:disabled { opacity: 0.6; }
   min-width: 320px;
 }
 
+.bulk-allocation-table .col-allocated-qty {
+  width: 112px;
+  min-width: 112px;
+  max-width: 112px;
+  white-space: normal;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.bulk-allocation-table .col-shortage-qty {
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  white-space: normal;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.bulk-allocation-table .col-allocated-qty input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 6px 4px;
+}
+
+.bulk-allocation-table .col-shortage-qty > span,
+.bulk-allocation-table .col-shortage-qty > div {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bulk-allocation-table .col-shortage-qty {
+  border-left: 1px solid #e5e7eb;
+}
+
+.bulk-allocation-table tbody tr.row-allocated {
+  background: #f0fdf4;
+}
+
+.bulk-allocation-table tbody tr.row-unallocated {
+  background: #fff7ed;
+}
+
+.bulk-allocation-table td:nth-child(6) select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.bulk-allocation-table .manual-supplier-marked {
+  background: #dcfce7;
+}
+
+.bulk-allocation-table .delivery-warning {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.filter-gap {
+  width: 24px;
+}
+
 .text-ellipsis-inline {
   display: inline-block;
   max-width: 150px;
