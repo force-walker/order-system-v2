@@ -20,7 +20,7 @@ function Get-ComposeCommand {
         return @('docker-compose')
     }
 
-    throw 'docker / docker compose が見つかりません。Docker Desktop を確認してください。'
+    throw 'docker / docker compose not found. Please check Docker Desktop.'
 }
 
 function Invoke-Compose {
@@ -36,22 +36,22 @@ function Invoke-Compose {
         & $compose[0] $compose[1] @Args
     }
     if ($LASTEXITCODE -ne 0) {
-        throw "docker compose コマンドが失敗しました: $($Args -join ' ')"
+        throw "docker compose command failed: $($Args -join ' ')"
     }
 }
 
 Write-Host "==> move to project root: $Root"
 if (-not (Test-Path $Root)) {
-    throw "プロジェクトルートが見つかりません: $Root"
+    throw "Project root not found: $Root"
 }
 Set-Location $Root
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue) -and -not (Get-Command docker-compose -ErrorAction SilentlyContinue)) {
-    throw 'docker / docker compose が見つかりません。'
+    throw 'docker / docker compose not found.'
 }
 
 if (-not (Get-Command powershell -ErrorAction SilentlyContinue)) {
-    throw 'powershell が見つかりません。'
+    throw 'powershell not found.'
 }
 
 Write-Host '==> start containers (db/redis)'
@@ -67,7 +67,7 @@ try {
 
 Write-Host '==> verify external python venv'
 if (-not (Test-Path $PythonBin)) {
-    throw "python が見つかりません: $PythonBin"
+    throw "python not found: $PythonBin"
 }
 
 Write-Host '==> start backend (host uvicorn)'
@@ -84,14 +84,14 @@ Start-Process powershell -ArgumentList '-NoExit', '-Command', $backendCmd | Out-
 
 Write-Host '==> ensure frontend dependencies (npm ci when node_modules absent)'
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    throw 'npm が見つかりません。Node.js をインストールしてください。'
+    throw 'npm not found. Please install Node.js.'
 }
 if (-not (Test-Path (Join-Path $Frontend 'node_modules'))) {
     Push-Location $Frontend
     npm ci
     if ($LASTEXITCODE -ne 0) {
         Pop-Location
-        throw 'npm ci に失敗しました。'
+        throw 'npm ci failed.'
     }
     Pop-Location
 }

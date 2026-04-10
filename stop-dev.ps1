@@ -21,7 +21,7 @@ function Get-ComposeCommand {
         return @('docker-compose')
     }
 
-    throw 'docker / docker compose が見つかりません。'
+    throw 'docker / docker compose not found.'
 }
 
 function Invoke-Compose {
@@ -37,12 +37,12 @@ function Invoke-Compose {
         & $compose[0] $compose[1] @Args
     }
     if ($LASTEXITCODE -ne 0) {
-        throw "docker compose コマンドが失敗しました: $($Args -join ' ')"
+        throw "docker compose command failed: $($Args -join ' ')"
     }
 }
 
 if (-not (Test-Path $Root)) {
-    throw "プロジェクトルートが見つかりません: $Root"
+    throw "Project root not found: $Root"
 }
 Set-Location $Root
 
@@ -50,7 +50,7 @@ Write-Host '==> stop docker compose services'
 Invoke-Compose -Args @('down')
 
 Write-Host '==> note'
-Write-Host 'backend/frontend の PowerShell ウィンドウが残っていれば Ctrl+C で停止してください'
+Write-Host 'If backend/frontend PowerShell windows are still open, stop them with Ctrl+C'
 
 if ($CleanNodeModules) {
     Write-Host '==> remove frontend/node_modules'
