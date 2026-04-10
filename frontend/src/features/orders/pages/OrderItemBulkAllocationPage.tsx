@@ -221,20 +221,9 @@ export const OrderItemBulkAllocationPage = () => {
       }
       return next;
     });
-    setToast({ type: 'success', message: selectedSupplierId == null ? '選択行の仕入先指定を解除しました。' : '選択行に仕入先を適用しました。' });
+    setToast({ type: 'success', message: selectedSupplierId == null ? '未選択（未割当へ戻す）を一括適用しました。' : '一括割当を反映しました。' });
   };
 
-  const clearSelectedRows = () => {
-    setEditById((prev) => {
-      const next = { ...prev };
-      for (const id of visibleIds) {
-        const current = next[id];
-        if (!current?.selected) continue;
-        next[id] = { ...current, selected: false };
-      }
-      return next;
-    });
-  };
 
   const resetFilters = () => {
     setUnallocatedOnly(false);
@@ -245,20 +234,20 @@ export const OrderItemBulkAllocationPage = () => {
   };
 
   const saveBulk = async () => {
-    const payload = sortedItems
-      .filter((row) => editById[row.orderItemId]?.selected)
-      .map((row) => {
-        const edit = editById[row.orderItemId];
-        return {
-          orderItemId: row.orderItemId,
-          supplierId: Number(edit.manualSupplierId),
-          allocatedQty: Number(edit.manualQty),
-        };
-      })
-      .filter((row) => Number.isFinite(row.supplierId) && row.supplierId > 0 && Number.isFinite(row.allocatedQty) && row.allocatedQty > 0);
+    const selectedRows = sortedItems.filter((row) => editById[row.orderItemId]?.selected);
+    const payload = selectedRows.map((row) => {
+      const edit = editById[row.orderItemId];
+      const supplierId = edit.manualSupplierId == null ? null : Number(edit.manualSupplierId);
+      const allocatedQty = supplierId == null ? null : Number(edit.manualQty);
+      return {
+        orderItemId: row.orderItemId,
+        supplierId,
+        allocatedQty: Number.isFinite(allocatedQty as number) ? allocatedQty : null,
+      };
+    });
 
     if (payload.length === 0) {
-      setToast({ type: 'error', message: '保存対象がありません。表示中の行を選択し、仕入先/数量を入力してください。' });
+      setToast({ type: 'error', message: '保存対象がありません。表示中の行を選択してください。' });
       return;
     }
 
@@ -357,11 +346,11 @@ export const OrderItemBulkAllocationPage = () => {
           <button type="button" className="secondary" onClick={resetFilters}>フィルター解除</button>
           <div className="filter-gap" />
           <label className="filter-label">
-            選択行へ一括仕入先適用
+            選択行へ一括仕入先適用（未選択=未割当へ戻す）
             <input
               list="supplier-bulk-options"
               value={bulkSupplierQuery}
-              placeholder="仕入先を検索"
+              placeholder="仕入先を検索 / 未選択"
               onChange={(e) => {
                 const q = e.target.value;
                 setBulkSupplierQuery(q);
@@ -378,8 +367,7 @@ export const OrderItemBulkAllocationPage = () => {
               {suppliers.map((s) => <option key={s.id} value={s.label} />)}
             </datalist>
           </label>
-          <button type="button" className="secondary" onClick={applyBulkSupplier}>選択行に仕入先を適用</button>
-          <button type="button" className="secondary" onClick={clearSelectedRows}>選択解除</button>
+          <button type="button" className="secondary" onClick={applyBulkSupplier}>一括割当</button>
         </div>
 
         <p className="subtle" style={{ marginBottom: 12 }}>※ ヘッダークリックで昇順/降順を切替。選択操作は表示中の行のみ対象。</p>
@@ -403,8 +391,8 @@ export const OrderItemBulkAllocationPage = () => {
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>{sortLabel('manualSupplierId', '手動仕入先')}</th>
                   <th onClick={() => onSort('orderedQty')} style={{ cursor: 'pointer' }}>{sortLabel('orderedQty', '受注数量')}</th>
-                  <th className="col-manual-qty" onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '手動数')}</th>
-                  <th className="col-shortage" onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>{sortLabel('shortageQty', '不足数')}</th>
+                  <th className="col-qty" onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '割当数')}</th>
+                  <th className="col-qty" onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>{sortLabel('shortageQty', '不足数')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -415,11 +403,10 @@ export const OrderItemBulkAllocationPage = () => {
                   const shortageQty = Number(Math.max(row.orderedQty - allocatedQty, 0).toFixed(3));
 
                   const hasManualSupplier = (edit?.manualSupplierId ?? row.manualSupplierId) != null;
-                  const isUnallocated = !hasManualSupplier;
                   const isNonTomorrow = row.deliveryDate !== tomorrowDateStr;
 
                   return (
-                    <tr key={row.orderItemId} className={isUnallocated ? 'row-unallocated' : 'row-allocated'}>
+                    <tr key={row.orderItemId} className={hasManualSupplier ? 'row-allocated' : 'row-unallocated'}>
                       <td>
                         <input
                           type="checkbox"
@@ -462,7 +449,7 @@ export const OrderItemBulkAllocationPage = () => {
                         </select>
                       </td>
                       <td>{row.orderedQty}</td>
-                      <td className="col-manual-qty">
+                      <td className="col-qty">
                         <input
                           type="number"
                           min={0}
@@ -476,8 +463,9 @@ export const OrderItemBulkAllocationPage = () => {
                           }
                         />
                       </td>
-                      <td className="col-shortage">
-                        {shortageQty > 0 ? <span className="field-error">不足 {shortageQty}</span> : <span className="subtle">-</span>}
+                      <td className="col-qty">
+                        {shortageQty > 0 ? <span className="field-error">{shortageQty}</span> : <span className="subtle">-</span>}
+                        {edit?.rowError ? <div className="field-error">{edit.rowError}</div> : null}
                       </td>
                     </tr>
                   );

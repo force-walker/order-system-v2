@@ -28,8 +28,8 @@ export type AllocationSuggestion = {
 
 export type BulkSaveAllocationItem = {
   orderItemId: number;
-  supplierId: number;
-  allocatedQty: number;
+  supplierId: number | null;
+  allocatedQty: number | null;
 };
 
 export type BulkSaveAllocationError = {
