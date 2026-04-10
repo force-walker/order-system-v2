@@ -441,6 +441,39 @@ button:disabled { opacity: 0.6; }
   min-width: 320px;
 }
 
+.bulk-allocation-table .col-manual-qty {
+  width: 88px;
+  max-width: 88px;
+  white-space: normal;
+}
+
+.bulk-allocation-table .col-shortage {
+  width: 96px;
+  max-width: 96px;
+  white-space: normal;
+}
+
+.bulk-allocation-table tbody tr.row-allocated {
+  background: #f0fdf4;
+}
+
+.bulk-allocation-table tbody tr.row-unallocated {
+  background: #fff7ed;
+}
+
+.bulk-allocation-table .manual-supplier-marked {
+  background: #dcfce7;
+}
+
+.bulk-allocation-table .delivery-warning {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.filter-gap {
+  width: 24px;
+}
+
 .text-ellipsis-inline {
   display: inline-block;
   max-width: 150px;
