@@ -28,8 +28,8 @@ class AllocationSuggestRequest(BaseModel):
 
 class BulkAllocationSaveItem(BaseModel):
     order_item_id: int = Field(gt=0)
-    supplier_id: int = Field(gt=0)
-    allocated_qty: float = Field(gt=0)
+    supplier_id: int | None = Field(default=None, gt=0)
+    allocated_qty: float | None = Field(default=None, gt=0)
 
 
 class BulkAllocationSaveRequest(BaseModel):
