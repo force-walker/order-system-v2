@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
@@ -98,6 +99,12 @@ def test_worklist_suggest_and_bulk_save_flow():
     worklist = client.get("/api/v1/order-item-allocations?unallocated_only=true")
     assert worklist.status_code == 200
     assert any(x["order_item_id"] == order_item_id for x in worklist.json())
+
+    row = [x for x in worklist.json() if x["order_item_id"] == order_item_id][0]
+    assert "allocated_supplier_id" in row
+    assert "allocated_qty" in row
+    assert "delivery_date" in row
+    assert re.match(r"^\d{4}-\d{2}-\d{2}$", row["delivery_date"]) is not None
 
     suggest = client.post("/api/v1/order-item-allocations/suggestions", json={"order_item_ids": [order_item_id]})
     assert suggest.status_code == 200
