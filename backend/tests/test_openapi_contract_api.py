@@ -118,5 +118,11 @@ def test_openapi_phase2_query_filters_are_exposed():
     worklist_params = {p["name"] for p in spec["paths"]["/api/v1/order-item-allocations"]["get"]["parameters"]}
     assert {"unallocated_only", "delivery_date", "supplier_id", "product_name", "customer_name", "limit", "offset"}.issubset(worklist_params)
 
+    bulk_item_schema = spec["components"]["schemas"]["BulkAllocationSaveItem"]
+    required_fields = set(bulk_item_schema.get("required", []))
+    assert "order_item_id" in required_fields
+    assert "supplier_id" not in required_fields
+    assert "allocated_qty" not in required_fields
+
     work_item_schema = spec["components"]["schemas"]["OrderItemAllocationWorkItem"]["properties"]
     assert {"allocated_supplier_id", "allocated_qty", "delivery_date"}.issubset(work_item_schema)

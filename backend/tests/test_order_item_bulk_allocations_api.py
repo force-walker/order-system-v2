@@ -148,7 +148,42 @@ def test_bulk_save_partial_success_and_validation_conflict():
         "/api/v1/order-item-allocations/bulk-save",
         json={"items": [{"order_item_id": order_item_id, "supplier_id": supplier_id}]},
     )
-    assert missing_qty.status_code == 422
+    assert missing_qty.status_code == 200
+    assert missing_qty.json()["failed"] == 1
+    assert missing_qty.json()["errors"][0]["code"] == "ALLOCATED_QTY_REQUIRED"
+
+
+def test_bulk_save_can_unassign_supplier_with_null_values():
+    order_item_id, supplier_id, _, _ = _seed_order_item()
+    client = _client()
+
+    assigned = client.post(
+        "/api/v1/order-item-allocations/bulk-save",
+        json={"items": [{"order_item_id": order_item_id, "supplier_id": supplier_id, "allocated_qty": 3}]},
+    )
+    assert assigned.status_code == 200
+    assert assigned.json()["succeeded"] == 1
+
+    unassigned = client.post(
+        "/api/v1/order-item-allocations/bulk-save",
+        json={"items": [{"order_item_id": order_item_id, "supplier_id": None, "allocated_qty": None}]},
+    )
+    assert unassigned.status_code == 200
+    assert unassigned.json()["succeeded"] == 1
+
+    worklist = client.get("/api/v1/order-item-allocations")
+    assert worklist.status_code == 200
+    row = [x for x in worklist.json() if x["order_item_id"] == order_item_id][0]
+    assert row["allocated_supplier_id"] is None
+    assert row["allocated_qty"] is None
+
+    bad_unassign = client.post(
+        "/api/v1/order-item-allocations/bulk-save",
+        json={"items": [{"order_item_id": order_item_id, "supplier_id": None, "allocated_qty": 1}]},
+    )
+    assert bad_unassign.status_code == 200
+    assert bad_unassign.json()["failed"] == 1
+    assert bad_unassign.json()["errors"][0]["code"] == "UNASSIGN_WITH_QTY_NOT_ALLOWED"
 
 
 def test_worklist_filters_by_product_and_customer_with_paging():

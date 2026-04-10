@@ -134,9 +134,46 @@ def bulk_save_allocations(payload: BulkAllocationSaveRequest, db: Session = Depe
             errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ORDER_ITEM_NOT_FOUND", message="order_item not found"))
             continue
 
+        split_children = db.query(SupplierAllocation.id).filter(SupplierAllocation.order_item_id == row.order_item_id, SupplierAllocation.is_split_child.is_(True)).all()
+        if split_children:
+            errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ALLOCATION_SPLIT_CONFLICT", message="split allocations exist; bulk-save not allowed"))
+            continue
+
+        alloc = _current_allocation(db, row.order_item_id)
+
+        # unselect supplier = clear allocation
+        if row.supplier_id is None:
+            if row.allocated_qty is not None:
+                errors.append(
+                    BulkAllocationSaveError(
+                        order_item_id=row.order_item_id,
+                        code="UNASSIGN_WITH_QTY_NOT_ALLOWED",
+                        message="allocated_qty must be null when supplier_id is null",
+                    )
+                )
+                continue
+
+            if alloc is None:
+                succeeded += 1
+                continue
+
+            alloc.final_supplier_id = None
+            alloc.final_qty = None
+            alloc.final_uom = None
+            alloc.is_manual_override = True
+            alloc.override_reason_code = payload.override_reason_code
+            db.flush()
+            write_audit_log(db, entity_type="supplier_allocation", entity_id=alloc.id, action=AuditAction.OVERRIDE, reason_code=payload.override_reason_code)
+            succeeded += 1
+            continue
+
         supplier = db.query(Supplier).filter(Supplier.id == row.supplier_id).first()
         if supplier is None:
             errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="SUPPLIER_NOT_FOUND", message="supplier not found"))
+            continue
+
+        if row.allocated_qty is None:
+            errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ALLOCATED_QTY_REQUIRED", message="allocated_qty is required when supplier_id is set"))
             continue
 
         if row.allocated_qty > float(item.ordered_qty):
@@ -149,12 +186,6 @@ def bulk_save_allocations(payload: BulkAllocationSaveRequest, db: Session = Depe
             )
             continue
 
-        split_children = db.query(SupplierAllocation.id).filter(SupplierAllocation.order_item_id == row.order_item_id, SupplierAllocation.is_split_child.is_(True)).all()
-        if split_children:
-            errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ALLOCATION_SPLIT_CONFLICT", message="split allocations exist; bulk-save not allowed"))
-            continue
-
-        alloc = _current_allocation(db, row.order_item_id)
         if alloc is None:
             alloc = SupplierAllocation(order_item_id=row.order_item_id)
             db.add(alloc)
