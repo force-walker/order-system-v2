@@ -447,6 +447,30 @@ button:disabled { opacity: 0.6; }
   min-width: 56px;
   max-width: 56px;
   white-space: normal;
+  box-sizing: border-box;
+}
+
+.bulk-allocation-table .col-allocated-qty,
+.bulk-allocation-table .col-shortage-qty {
+  overflow: hidden;
+}
+
+.bulk-allocation-table .col-allocated-qty input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 6px 4px;
+}
+
+.bulk-allocation-table .col-shortage-qty > span,
+.bulk-allocation-table .col-shortage-qty > div {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bulk-allocation-table .col-shortage-qty {
