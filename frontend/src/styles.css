@@ -442,9 +442,9 @@ button:disabled { opacity: 0.6; }
 }
 
 .bulk-allocation-table .col-qty {
-  width: 94px;
-  min-width: 94px;
-  max-width: 94px;
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
   white-space: normal;
 }
 
