@@ -5,6 +5,7 @@ import { listSuppliers } from 'features/suppliers/services/suppliersService';
 
 export type OrderItemAllocationWorkItem = {
   orderItemId: number;
+  allocationId: number | null;
   orderId: number | null;
   orderNo: string;
   customerName: string;
@@ -55,6 +56,7 @@ type ApiTokenResponse = { access_token: string; refresh_token: string };
 
 type ApiWorkItem = {
   order_item_id: number;
+  allocation_id: number | null;
   order_no: string;
   product_id: number;
   product_name: string;
@@ -143,6 +145,7 @@ export const listOrderItemAllocationWorkItems = async (params: {
 
   return rows.map((row) => ({
     orderItemId: row.order_item_id,
+    allocationId: row.allocation_id,
     orderId: orderIdByOrderNo.get(row.order_no) ?? null,
     orderNo: row.order_no,
     customerName: customerByOrderNo.get(row.order_no) ?? '-',
