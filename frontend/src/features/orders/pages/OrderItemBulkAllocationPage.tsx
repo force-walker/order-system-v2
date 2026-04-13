@@ -270,7 +270,11 @@ export const OrderItemBulkAllocationPage = () => {
 
       await load();
     } catch (e) {
-      setToast({ type: 'error', message: toActionableMessage(e, '一括保存に失敗しました。') });
+      const base = toActionableMessage(e, '一括保存に失敗しました。');
+      const extra = base.includes('422') || base.includes('validation')
+        ? '未選択（割当解除）の保存に未対応のAPIの可能性があります。backendの一括解除対応を確認してください。'
+        : '';
+      setToast({ type: 'error', message: `${base}${extra ? ` ${extra}` : ''}`.trim() });
     }
   };
 
@@ -390,7 +394,7 @@ export const OrderItemBulkAllocationPage = () => {
                   <th className="col-customer" onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>{sortLabel('manualSupplierId', '手動仕入先')}</th>
-                  <th onClick={() => onSort('orderedQty')} style={{ cursor: 'pointer' }}>{sortLabel('orderedQty', '受注数量')}</th>
+                  <th className="col-ordered-qty" onClick={() => onSort('orderedQty')} style={{ cursor: 'pointer' }}>{sortLabel('orderedQty', '受注数量')}</th>
                   <th className="col-allocated-qty" onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '割当数')}</th>
                   <th className="col-shortage-qty" onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>{sortLabel('shortageQty', '不足数')}</th>
                 </tr>
@@ -444,11 +448,11 @@ export const OrderItemBulkAllocationPage = () => {
                             }))
                           }
                         >
-                          <option value="">選択</option>
+                          <option value="">未選択（未割当）</option>
                           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                         </select>
                       </td>
-                      <td>{row.orderedQty}</td>
+                      <td className="col-ordered-qty">{row.orderedQty}</td>
                       <td className="col-allocated-qty">
                         <input
                           type="number"
