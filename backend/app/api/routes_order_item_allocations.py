@@ -67,6 +67,7 @@ def list_order_item_allocation_work_items(
         result.append(
             OrderItemAllocationWorkItem(
                 order_item_id=item.id,
+                allocation_id=(alloc.id if alloc is not None else None),
                 order_no=order.order_no,
                 product_id=product.id,
                 product_name=product.name,

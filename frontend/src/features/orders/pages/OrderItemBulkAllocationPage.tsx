@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   bulkSaveOrderItemAllocations,
@@ -26,6 +26,7 @@ type SortState = {
 };
 
 export const OrderItemBulkAllocationPage = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -278,6 +279,16 @@ export const OrderItemBulkAllocationPage = () => {
     }
   };
 
+  const moveToPurchaseResult = () => {
+    const selectedAllocationIds = sortedItems
+      .filter((row) => editById[row.orderItemId]?.selected)
+      .map((row) => row.allocationId)
+      .filter((v): v is number => typeof v === 'number');
+
+    sessionStorage.setItem('osv2_purchase_target_allocations', JSON.stringify(selectedAllocationIds));
+    navigate('/purchases');
+  };
+
   const onRowCheckboxChange = (orderItemId: number, checked: boolean, shiftKey: boolean) => {
     const targetIndex = sortedItems.findIndex((row) => row.orderItemId === orderItemId);
 
@@ -317,6 +328,7 @@ export const OrderItemBulkAllocationPage = () => {
           <div className="list-controls">
             <button type="button" className="secondary" onClick={() => void applySuggestion()}>自動提案を実行</button>
             <button type="button" onClick={() => void saveBulk()}>選択行を一括保存</button>
+            <button type="button" className="secondary" onClick={moveToPurchaseResult}>保存済み行を納品確認へ進める</button>
           </div>
         </div>
 

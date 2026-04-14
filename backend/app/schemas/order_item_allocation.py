@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class OrderItemAllocationWorkItem(BaseModel):
     order_item_id: int
+    allocation_id: int | None = None
     order_no: str
     product_id: int
     product_name: str

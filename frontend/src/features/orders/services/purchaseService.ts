@@ -101,29 +101,40 @@ export const listPurchaseResults = async (filter: PurchaseResultFilter = {}): Pr
   };
 };
 
-export const createPurchaseResult = async (payload: PurchaseResultCreateRequest): Promise<PurchaseResultItem> => {
-  const reqBody = {
-    allocation_id: payload.allocationId,
-    supplier_id: payload.supplierId ?? null,
-    purchased_qty: payload.purchasedQty,
-    purchased_uom: payload.purchasedUom,
-    actual_weight_kg: payload.actualWeightKg ?? null,
-    unit_cost: payload.unitCost ?? null,
-    final_unit_cost: payload.finalUnitCost ?? null,
-    shortage_qty: payload.shortageQty ?? null,
-    shortage_policy: payload.shortagePolicy ?? null,
-    result_status: payload.resultStatus,
-    invoiceable_flag: payload.invoiceableFlag,
-    recorded_by: payload.recordedBy ?? null,
-    note: payload.note ?? null,
-  };
+const toRequestBody = (payload: PurchaseResultCreateRequest) => ({
+  allocation_id: payload.allocationId,
+  supplier_id: payload.supplierId ?? null,
+  purchased_qty: payload.purchasedQty,
+  purchased_uom: payload.purchasedUom,
+  actual_weight_kg: payload.actualWeightKg ?? null,
+  unit_cost: payload.unitCost ?? null,
+  final_unit_cost: payload.finalUnitCost ?? null,
+  shortage_qty: payload.shortageQty ?? null,
+  shortage_policy: payload.shortagePolicy ?? null,
+  result_status: payload.resultStatus,
+  invoiceable_flag: payload.invoiceableFlag,
+  recorded_by: payload.recordedBy ?? null,
+  note: payload.note ?? null,
+});
 
+export const createPurchaseResult = async (payload: PurchaseResultCreateRequest): Promise<PurchaseResultItem> => {
   const res = await fetchWithAuth('/api/v1/purchase-results', {
     method: 'POST',
-    body: reqBody,
+    body: toRequestBody(payload),
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 
   const data = (await res.json()) as ApiPurchaseResultResponse;
   return toItem(data);
+};
+
+export const bulkUpsertPurchaseResults = async (items: PurchaseResultCreateRequest[]): Promise<number> => {
+  const res = await fetchWithAuth('/api/v1/purchase-results/bulk-upsert', {
+    method: 'POST',
+    body: { items: items.map(toRequestBody) },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as { upserted_count: number };
+  return data.upserted_count;
 };

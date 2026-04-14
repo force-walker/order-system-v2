@@ -1,238 +1,215 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { createPurchaseResult, listPurchaseResults } from 'features/orders/services/purchaseService';
-import type { PurchaseResultCreateRequest, PurchaseResultFilter, PurchaseResultItem, PurchaseResultStatus } from 'features/orders/types/order';
-import { toUserMessage } from 'shared/error';
+import { listOrderItemAllocationWorkItems, type OrderItemAllocationWorkItem } from 'features/orders/services/orderItemAllocationsService';
+import { bulkUpsertPurchaseResults } from 'features/orders/services/purchaseService';
+import { getProductDetail } from 'features/products/services/productsService';
+import { toActionableMessage } from 'shared/error';
 
-const STATUS_OPTIONS: Array<{ value: PurchaseResultStatus; label: string }> = [
-  { value: 'not_filled', label: '未充足' },
-  { value: 'filled', label: '充足' },
-  { value: 'partially_filled', label: '一部充足' },
-  { value: 'substituted', label: '代替' },
-];
-
-type CreateForm = {
-  allocationId: string;
-  supplierId: string;
-  purchasedQty: string;
-  purchasedUom: string;
-  resultStatus: PurchaseResultStatus;
-  note: string;
+type RowEdit = {
+  selected: boolean;
+  receivedQty: string;
+  invoiceQty: string;
+  rowError?: string;
 };
 
-const initialForm: CreateForm = {
-  allocationId: '',
-  supplierId: '',
-  purchasedQty: '',
-  purchasedUom: 'kg',
-  resultStatus: 'filled',
-  note: '',
+type UnitPair = {
+  orderUom: string;
+  invoiceUom: string;
 };
 
 export const PurchasePage = () => {
   const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<PurchaseResultItem[] | null>(null);
   const [error, setError] = useState('');
-  const [formError, setFormError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState<CreateForm>(initialForm);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [rows, setRows] = useState<OrderItemAllocationWorkItem[]>([]);
+  const [unitsByProductId, setUnitsByProductId] = useState<Record<number, UnitPair>>({});
+  const [editByItemId, setEditByItemId] = useState<Record<number, RowEdit>>({});
+  const [saving, setSaving] = useState(false);
 
-  const [searchAllocationId, setSearchAllocationId] = useState('');
-  const [searchSupplierId, setSearchSupplierId] = useState('');
-  const [searchKeyword, setSearchKeyword] = useState('');
-
-  const load = async (filter: PurchaseResultFilter = {}) => {
+  const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const result = await listPurchaseResults(filter);
-      setRows(result.items);
+      const all = await listOrderItemAllocationWorkItems({ unallocatedOnly: false });
+      const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
+
+      const raw = sessionStorage.getItem('osv2_purchase_target_allocations');
+      const targetAllocationIds: number[] = raw ? (JSON.parse(raw) as number[]) : [];
+      const filtered = targetAllocationIds.length > 0
+        ? allocated.filter((r) => {
+            const aid = r.allocationId;
+            return typeof aid === 'number' && targetAllocationIds.includes(aid);
+          })
+        : allocated;
+
+      setRows(filtered);
+
+      const productIds = [...new Set(filtered.map((r) => r.productId))];
+      const unitEntries = await Promise.all(
+        productIds.map(async (productId) => {
+          try {
+            const p = await getProductDetail(productId);
+            if (!p) throw new Error('product not found');
+            return [productId, { orderUom: p.orderUom, invoiceUom: p.invoiceUom }] as const;
+          } catch {
+            return [productId, { orderUom: 'count', invoiceUom: 'count' }] as const;
+          }
+        }),
+      );
+      setUnitsByProductId(Object.fromEntries(unitEntries));
+
+      setEditByItemId((prev) =>
+        Object.fromEntries(
+          filtered.map((r) => [
+            r.orderItemId,
+            {
+              selected: prev[r.orderItemId]?.selected ?? false,
+              receivedQty: prev[r.orderItemId]?.receivedQty ?? String(r.manualQty ?? r.orderedQty),
+              invoiceQty: prev[r.orderItemId]?.invoiceQty ?? String(r.manualQty ?? r.orderedQty),
+              rowError: undefined,
+            },
+          ]),
+        ),
+      );
     } catch (e) {
-      setError(toUserMessage(e, '発注結果の取得に失敗しました'));
+      setError(toActionableMessage(e, '納品確認対象の取得に失敗しました。'));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
-  const filteredRows = useMemo(() => {
-    if (!rows) return [];
-    const keyword = searchKeyword.trim().toLowerCase();
-    if (!keyword) return rows;
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
-    return rows.filter((row) => {
-      const target = `${row.id} ${row.allocationId} ${row.resultStatus} ${row.note ?? ''}`.toLowerCase();
-      return target.includes(keyword);
-    });
-  }, [rows, searchKeyword]);
+  const selectedCount = useMemo(() => rows.filter((r) => editByItemId[r.orderItemId]?.selected).length, [rows, editByItemId]);
 
-  const onSearch = async (e: FormEvent) => {
-    e.preventDefault();
-    const filter: PurchaseResultFilter = {
-      allocationId: searchAllocationId ? Number(searchAllocationId) : undefined,
-      supplierId: searchSupplierId ? Number(searchSupplierId) : undefined,
-      limit: 100,
-      offset: 0,
-    };
-    await load(filter);
-  };
-
-  const validateForm = (): string => {
-    if (!form.allocationId || Number(form.allocationId) <= 0) return 'allocation_id は 1 以上で入力してください';
-    if (!form.purchasedQty || Number(form.purchasedQty) <= 0) return '購入数量は 0 より大きい値で入力してください';
-    if (!form.purchasedUom.trim()) return '購入単位は必須です';
-    return '';
-  };
-
-  const onCreate = async (e: FormEvent) => {
-    e.preventDefault();
-    const err = validateForm();
-    if (err) {
-      setFormError(err);
+  const saveBulk = async () => {
+    const selectedRows = rows.filter((r) => editByItemId[r.orderItemId]?.selected);
+    if (selectedRows.length === 0) {
+      setToast({ type: 'error', message: '保存対象がありません。行を選択してください。' });
       return;
     }
 
-    setFormError('');
-    setSubmitting(true);
-
-    try {
-      const payload: PurchaseResultCreateRequest = {
-        allocationId: Number(form.allocationId),
-        supplierId: form.supplierId ? Number(form.supplierId) : undefined,
-        purchasedQty: Number(form.purchasedQty),
-        purchasedUom: form.purchasedUom.trim(),
-        resultStatus: form.resultStatus,
-        invoiceableFlag: true,
-        note: form.note.trim() || undefined,
+    const payload = selectedRows.map((r) => {
+      const edit = editByItemId[r.orderItemId];
+      const units = unitsByProductId[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
+      const received = Number(edit.receivedQty);
+      const invoiced = Number(edit.invoiceQty);
+      const shortage = Math.max(r.orderedQty - received, 0);
+      return {
+        orderItemId: r.orderItemId,
+        row: {
+          allocationId: Number(r.allocationId),
+          supplierId: r.manualSupplierId ?? undefined,
+          purchasedQty: received,
+          purchasedUom: units.orderUom,
+          shortageQty: shortage > 0 ? shortage : undefined,
+          resultStatus: shortage > 0 ? ('partially_filled' as const) : ('filled' as const),
+          invoiceableFlag: true,
+          note: `invoice_qty=${invoiced} ${units.invoiceUom}`,
+        },
       };
+    });
 
-      await createPurchaseResult(payload);
-      setForm(initialForm);
+    const invalid = payload.filter((p) => !Number.isFinite(p.row.purchasedQty) || p.row.purchasedQty < 0 || Number.isNaN(Number((editByItemId[p.orderItemId]?.invoiceQty ?? ''))));
+    if (invalid.length > 0) {
+      setToast({ type: 'error', message: '受取数量/請求数量の数値入力を確認してください。' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const upserted = await bulkUpsertPurchaseResults(payload.map((p) => p.row));
+      setToast({ type: 'success', message: `納品確認を保存しました（${upserted}件）。` });
       await load();
     } catch (e) {
-      setFormError(toUserMessage(e, '発注結果の作成に失敗しました'));
+      setToast({ type: 'error', message: toActionableMessage(e, '納品確認の保存に失敗しました。') });
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   };
 
-  if (error) return <ErrorState title="発注結果の取得に失敗しました" description={error} actionLabel="再試行" onAction={() => load()} />;
-  if (loading || !rows) return <LoadingState title="発注結果を読み込み中" description="しばらくお待ちください" />;
+  if (error) return <ErrorState title="納品確認対象の取得に失敗しました" description={error} actionLabel="再試行" onAction={load} />;
+  if (loading) return <LoadingState title="納品確認ページを読み込み中" description="しばらくお待ちください。" />;
 
   return (
     <section>
-      <div className="card" style={{ marginBottom: 12 }}>
-        <h2>発注作成 / 確認</h2>
-        <p className="subtle">発注結果（purchase-results）の登録と確認を行います。</p>
-
-        <form onSubmit={onCreate} className="form-grid two-col" style={{ marginTop: 12 }}>
-          <label>
-            allocation_id *
-            <input type="number" min={1} value={form.allocationId} onChange={(e) => setForm((p) => ({ ...p, allocationId: e.target.value }))} />
-          </label>
-
-          <label>
-            supplier_id
-            <input type="number" min={1} value={form.supplierId} onChange={(e) => setForm((p) => ({ ...p, supplierId: e.target.value }))} />
-          </label>
-
-          <label>
-            購入数量 *
-            <input type="number" min={0.001} step="0.001" value={form.purchasedQty} onChange={(e) => setForm((p) => ({ ...p, purchasedQty: e.target.value }))} />
-          </label>
-
-          <label>
-            購入単位 *
-            <input value={form.purchasedUom} onChange={(e) => setForm((p) => ({ ...p, purchasedUom: e.target.value }))} />
-          </label>
-
-          <label>
-            結果ステータス
-            <select value={form.resultStatus} onChange={(e) => setForm((p) => ({ ...p, resultStatus: e.target.value as PurchaseResultStatus }))}>
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            備考
-            <input value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} />
-          </label>
-
-          <div className="form-actions" style={{ gridColumn: '1 / -1' }}>
-            <button type="submit" disabled={submitting}>{submitting ? '登録中...' : '発注結果を登録'}</button>
-          </div>
-          {formError ? <p className="form-error" style={{ gridColumn: '1 / -1' }}>{formError}</p> : null}
-        </form>
-      </div>
-
+      {toast ? <div className={`toast toast-overlay ${toast.type}`}>{toast.message}</div> : null}
       <div className="card">
         <div className="list-header">
           <div>
-            <h2>purchase-results 一覧</h2>
-            <p className="subtle">API検索 + 画面キーワード絞り込み</p>
+            <h2>納品確認（Purchase Result）</h2>
+            <p className="subtle">一括割当で保存済みの行を、そのまま一覧で確認・登録できます。</p>
+          </div>
+          <div className="list-controls">
+            <button type="button" onClick={() => void saveBulk()} disabled={saving}>{saving ? '保存中...' : `選択行を保存 (${selectedCount})`}</button>
           </div>
         </div>
 
-        <form onSubmit={onSearch} className="list-controls" style={{ marginBottom: 12 }}>
-          <label className="filter-label">
-            allocation_id
-            <input type="number" min={1} value={searchAllocationId} onChange={(e) => setSearchAllocationId(e.target.value)} placeholder="例: 10" />
-          </label>
-
-          <label className="filter-label">
-            supplier_id
-            <input type="number" min={1} value={searchSupplierId} onChange={(e) => setSearchSupplierId(e.target.value)} placeholder="例: 3" />
-          </label>
-
-          <label className="filter-label">
-            キーワード
-            <input value={searchKeyword} onChange={(e) => setSearchKeyword(e.target.value)} placeholder="id / status / note" />
-          </label>
-
-          <button type="submit">検索</button>
-          <button type="button" className="secondary" onClick={() => { setSearchAllocationId(''); setSearchSupplierId(''); setSearchKeyword(''); load(); }}>条件クリア</button>
-        </form>
-
-        {filteredRows.length === 0 ? (
-          <EmptyState
-            title="データがありません"
-            description="条件に合う発注結果がありません。検索条件を見直してください。"
-            actionLabel="再読み込み"
-            onAction={() => load()}
-          />
+        {rows.length === 0 ? (
+          <EmptyState title="対象データがありません" description="一括割当で保存済み行が見つかりません。" actionLabel="再読み込み" onAction={load} />
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>allocation_id</th>
-                  <th>supplier_id</th>
-                  <th>数量</th>
-                  <th>単位</th>
-                  <th>ステータス</th>
-                  <th>recorded_at</th>
-                  <th>備考</th>
+                  <th>選択</th>
+                  <th>注文番号</th>
+                  <th>顧客</th>
+                  <th>商品</th>
+                  <th>受注数量 + 受注単位</th>
+                  <th>受取数量 + 受注単位</th>
+                  <th>請求数量 + 請求単位</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.id}</td>
-                    <td>{row.allocationId}</td>
-                    <td>{row.supplierId ?? '-'}</td>
-                    <td>{row.purchasedQty}</td>
-                    <td>{row.purchasedUom}</td>
-                    <td>{row.resultStatus}</td>
-                    <td>{new Date(row.recordedAt).toLocaleString('ja-JP')}</td>
-                    <td>{row.note ?? '-'}</td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const units = unitsByProductId[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
+                  const edit = editByItemId[r.orderItemId];
+                  return (
+                    <tr key={r.orderItemId}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(edit?.selected)}
+                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], selected: e.target.checked } }))}
+                        />
+                      </td>
+                      <td>
+                        {r.orderId ? <Link to={`/orders/${r.orderId}/edit`} className="order-link">{r.orderNo}</Link> : r.orderNo}
+                      </td>
+                      <td>{r.customerName}</td>
+                      <td>{r.productName}</td>
+                      <td>{r.orderedQty} {units.orderUom}</td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          step="1"
+                          value={edit?.receivedQty ?? ''}
+                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], receivedQty: e.target.value, rowError: undefined } }))}
+                        /> {units.orderUom}
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          step="1"
+                          value={edit?.invoiceQty ?? ''}
+                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], invoiceQty: e.target.value, rowError: undefined } }))}
+                        /> {units.invoiceUom}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
