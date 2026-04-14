@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { listOrders } from 'features/orders/services/ordersService';
+import { bulkCancelOrders, listOrders } from 'features/orders/services/ordersService';
 import type { OrderStatus, OrderSummary } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 
@@ -20,6 +20,8 @@ type ToastPayload = {
   message: string;
 };
 
+type RowSelect = Record<number, boolean>;
+
 export const OrderListPage = () => {
   const [orders, setOrders] = useState<OrderSummary[] | null>(null);
   const [error, setError] = useState<string>('');
@@ -27,14 +29,24 @@ export const OrderListPage = () => {
   const [keyword, setKeyword] = useState('');
   const [sortMode, setSortMode] = useState<'newest' | 'deliveryAsc' | 'deliveryDesc'>('newest');
   const [toast, setToast] = useState<ToastPayload | null>(null);
+  const [staleOnly, setStaleOnly] = useState(false);
+  const [selectedByOrderId, setSelectedByOrderId] = useState<RowSelect>({});
+  const [lastSelectedOrderId, setLastSelectedOrderId] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = async () => {
+    try {
+      const data = await listOrders(staleOnly);
+      const sorted = [...data].sort((a, b) => b.id - a.id);
+      setOrders(sorted);
+      setSelectedByOrderId((prev) => Object.fromEntries(sorted.map((o) => [o.id, prev[o.id] ?? false])));
+    } catch (e) {
+      setError(toActionableMessage(e, '一覧取得に失敗しました'));
+    }
+  };
 
   useEffect(() => {
-    listOrders()
-      .then((data) => {
-        const sorted = [...data].sort((a, b) => b.id - a.id);
-        setOrders(sorted);
-      })
-      .catch((e) => setError(toActionableMessage(e, '一覧取得に失敗しました')));
+    void load();
 
     const raw = sessionStorage.getItem('osv2_toast');
     if (raw) {
@@ -46,11 +58,11 @@ export const OrderListPage = () => {
         sessionStorage.removeItem('osv2_toast');
       }
     }
-  }, []);
+  }, [staleOnly]);
 
   useEffect(() => {
     if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 3500);
+    const t = window.setTimeout(() => setToast(null), 4500);
     return () => window.clearTimeout(t);
   }, [toast]);
 
@@ -80,6 +92,66 @@ export const OrderListPage = () => {
     return sorted;
   }, [orders, statusFilter, keyword, sortMode]);
 
+  const visibleIds = useMemo(() => filteredOrders.map((o) => o.id), [filteredOrders]);
+
+  const headerChecked = useMemo(
+    () => visibleIds.length > 0 && visibleIds.every((id) => selectedByOrderId[id]),
+    [visibleIds, selectedByOrderId],
+  );
+
+  const toggleVisible = (checked: boolean) => {
+    setSelectedByOrderId((prev) => {
+      const next = { ...prev };
+      for (const id of visibleIds) next[id] = checked;
+      return next;
+    });
+  };
+
+  const onRowSelect = (orderId: number, checked: boolean, shiftKey: boolean) => {
+    const idx = filteredOrders.findIndex((o) => o.id === orderId);
+    setSelectedByOrderId((prev) => {
+      const next = { ...prev };
+      if (shiftKey && lastSelectedOrderId != null) {
+        const prevIdx = filteredOrders.findIndex((o) => o.id === lastSelectedOrderId);
+        if (prevIdx >= 0 && idx >= 0) {
+          const [start, end] = prevIdx < idx ? [prevIdx, idx] : [idx, prevIdx];
+          for (let i = start; i <= end; i += 1) next[filteredOrders[i].id] = checked;
+        }
+      } else {
+        next[orderId] = checked;
+      }
+      return next;
+    });
+    setLastSelectedOrderId(orderId);
+  };
+
+  const executeBulkCancel = async () => {
+    const targetIds = visibleIds.filter((id) => selectedByOrderId[id]);
+    if (targetIds.length === 0) {
+      setToast({ type: 'error', message: '対象が選択されていません。' });
+      return;
+    }
+
+    const confirmed = window.confirm(`選択した ${targetIds.length} 件を一括Cancelします。よろしいですか？`);
+    if (!confirmed) return;
+
+    setSubmitting(true);
+    try {
+      const result = await bulkCancelOrders(targetIds, 'stale_delivery');
+      const reasonText = result.errors.slice(0, 3).map((e) => `#${e.orderId}: ${e.code}`).join(', ');
+      setToast(
+        result.failed > 0
+          ? { type: 'error', message: `部分成功（成功 ${result.succeeded} / 失敗 ${result.failed}）。${reasonText}` }
+          : { type: 'success', message: `${result.succeeded}件をCancelしました。` },
+      );
+      await load();
+    } catch (e) {
+      setToast({ type: 'error', message: toActionableMessage(e, '一括Cancelに失敗しました。') });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (error) {
     return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   }
@@ -102,6 +174,13 @@ export const OrderListPage = () => {
           <p className="subtle">新しい注文順で表示しています。</p>
         </div>
         <div className="list-controls">
+          <button type="button" className="danger" onClick={() => void executeBulkCancel()} disabled={submitting}>
+            {submitting ? 'Cancel実行中...' : '選択注文を一括Cancel'}
+          </button>
+        </div>
+      </div>
+
+      <div className="list-controls" style={{ marginBottom: 12 }}>
           <label className="filter-label">
             検索
             <input
@@ -133,16 +212,23 @@ export const OrderListPage = () => {
               <option value="deliveryDesc">納品日（顧客納品日） 降順</option>
             </select>
           </label>
+
+          <label className="filter-label">
+            <input type="checkbox" checked={staleOnly} onChange={(e) => setStaleOnly(e.target.checked)} />
+            最新納品日より古い注文のみ表示
+          </label>
         </div>
-      </div>
 
       {filteredOrders.length === 0 ? (
-        <EmptyState title="データがありません" description="条件に合うデータがありません。検索・フィルタ条件を見直してください。" actionLabel="条件をリセット" onAction={() => { setKeyword(''); setStatusFilter('all'); setSortMode('newest'); }} />
+        <EmptyState title="データがありません" description="条件に合うデータがありません。検索・フィルタ条件を見直してください。" actionLabel="条件をリセット" onAction={() => { setKeyword(''); setStatusFilter('all'); setSortMode('newest'); setStaleOnly(false); }} />
       ) : (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
+                <th>
+                  <input type="checkbox" checked={headerChecked} onChange={(e) => toggleVisible(e.target.checked)} />
+                </th>
                 <th>ID</th>
                 <th>注文番号</th>
                 <th>顧客</th>
@@ -157,6 +243,14 @@ export const OrderListPage = () => {
                 const firstItem = order.items[0];
                 return (
                   <tr key={order.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedByOrderId[order.id])}
+                        onClick={(e) => onRowSelect(order.id, !Boolean(selectedByOrderId[order.id]), e.shiftKey)}
+                        readOnly
+                      />
+                    </td>
                     <td>{order.id}</td>
                     <td>
                       <Link to={`/orders/${order.id}/edit`} className="order-link">{order.orderNo}</Link>
