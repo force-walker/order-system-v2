@@ -182,9 +182,10 @@ const mapApiOrderItem = (item: ApiOrderItemResponse) => {
   };
 };
 
-const listOrdersApi = async (): Promise<OrderSummary[]> => {
+const listOrdersApi = async (staleDeliveryOnly = false): Promise<OrderSummary[]> => {
   await Promise.all([loadCustomersApi(), loadProductsApi()]);
-  const res = await fetchWithAuth('/api/v1/orders', { method: 'GET' });
+  const query = staleDeliveryOnly ? '?stale_delivery_only=true' : '';
+  const res = await fetchWithAuth(`/api/v1/orders${query}`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiOrderResponse[];
 
@@ -344,9 +345,20 @@ const deleteOrderItemApi = async (orderId: number, itemId: number) => {
   if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
 };
 
-const listOrdersMock = async (): Promise<OrderSummary[]> => {
+const listOrdersMock = async (staleDeliveryOnly = false): Promise<OrderSummary[]> => {
   await sleep(250);
-  return readOrders().map(toListItem);
+  const rows = readOrders().map(toListItem);
+  if (!staleDeliveryOnly) return rows;
+
+  const now = new Date();
+  const cutoff = new Date(now);
+  if (now.getHours() >= 16) cutoff.setDate(cutoff.getDate() + 1);
+  const y = cutoff.getFullYear();
+  const m = String(cutoff.getMonth() + 1).padStart(2, '0');
+  const d = String(cutoff.getDate()).padStart(2, '0');
+  const cutoffStr = `${y}-${m}-${d}`;
+
+  return rows.filter((o) => o.deliveryDate < cutoffStr && ['new', 'confirmed', 'allocated'].includes(o.status));
 };
 
 const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail> => {
@@ -668,7 +680,8 @@ export const deleteProduct = async (productId: number): Promise<void> => {
   if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
 };
 
-export const listOrders = async (): Promise<OrderSummary[]> => (USE_MOCK ? listOrdersMock() : listOrdersApi());
+export const listOrders = async (staleDeliveryOnly = false): Promise<OrderSummary[]> =>
+  (USE_MOCK ? listOrdersMock(staleDeliveryOnly) : listOrdersApi(staleDeliveryOnly));
 
 export const getOrder = async (orderId: number): Promise<OrderDetail | null> => {
   if (USE_MOCK) {
@@ -697,6 +710,56 @@ export const getOrderItem = async (orderId: number, itemId: number) => {
   const item = order.items.find((i) => i.id === itemId);
   if (!item) return null;
   return { order, item };
+};
+
+export type OrderBulkCancelResult = {
+  total: number;
+  succeeded: number;
+  failed: number;
+  errors: Array<{ orderId: number; code: string; message: string }>;
+};
+
+export const bulkCancelOrders = async (orderIds: number[], reasonCode = 'stale_delivery'): Promise<OrderBulkCancelResult> => {
+  if (USE_MOCK) {
+    const rows = readOrders();
+    let succeeded = 0;
+    const errors: Array<{ orderId: number; code: string; message: string }> = [];
+    for (const id of orderIds) {
+      const o = rows.find((x) => x.id === id);
+      if (!o) {
+        errors.push({ orderId: id, code: 'ORDER_NOT_FOUND', message: 'order not found' });
+        continue;
+      }
+      if (['shipped', 'invoiced', 'cancelled'].includes(o.status)) {
+        errors.push({ orderId: id, code: 'ORDER_CANCEL_CONFLICT', message: `cannot cancel from status=${o.status}` });
+        continue;
+      }
+      o.status = 'cancelled';
+      succeeded += 1;
+    }
+    writeOrders([...rows]);
+    return { total: orderIds.length, succeeded, failed: orderIds.length - succeeded, errors };
+  }
+
+  const res = await fetchWithAuth('/api/v1/orders/bulk-cancel', {
+    method: 'POST',
+    body: { order_ids: orderIds, cancel_reason_code: reasonCode, note: null },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as {
+    total: number;
+    succeeded: number;
+    failed: number;
+    errors: Array<{ order_id: number; code: string; message: string }>;
+  };
+
+  return {
+    total: data.total,
+    succeeded: data.succeeded,
+    failed: data.failed,
+    errors: (data.errors ?? []).map((e) => ({ orderId: e.order_id, code: e.code, message: e.message })),
+  };
 };
 
 export const createOrder = async (payload: CreateOrderRequest): Promise<OrderDetail> => (USE_MOCK ? createOrderMock(payload) : createOrderApi(payload));
