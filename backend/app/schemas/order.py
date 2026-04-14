@@ -1,3 +1,4 @@
+import enum
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field
@@ -30,9 +31,18 @@ class OrderBulkTransitionResponse(BaseModel):
     updated_order_status: OrderStatus
 
 
+class OrderCancelReasonCode(str, enum.Enum):
+    stale_delivery = "stale_delivery"
+    customer_request = "customer_request"
+    duplicate_order = "duplicate_order"
+    pricing_issue = "pricing_issue"
+    inventory_shortage = "inventory_shortage"
+    other = "other"
+
+
 class OrderBulkCancelRequest(BaseModel):
     order_ids: list[int] = Field(min_length=1, max_length=500)
-    cancel_reason_code: str = Field(min_length=1, max_length=64)
+    cancel_reason_code: OrderCancelReasonCode
     note: str | None = Field(default=None, max_length=1000)
 
 
