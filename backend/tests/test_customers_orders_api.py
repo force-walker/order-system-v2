@@ -466,8 +466,10 @@ def _seed_order_with_status_and_delivery(status: OrderStatus, delivery: date) ->
 
 
 def test_stale_cutoff_boundary_hk_tz():
+    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 0, 0, tzinfo=HK_TZ)) == date(2026, 4, 14)
     assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 15, 59, tzinfo=HK_TZ)) == date(2026, 4, 14)
     assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 16, 0, tzinfo=HK_TZ)) == date(2026, 4, 15)
+    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 23, 59, tzinfo=HK_TZ)) == date(2026, 4, 15)
 
 
 def test_list_orders_stale_filter():
@@ -475,11 +477,23 @@ def test_list_orders_stale_filter():
 
     today = date.today()
     old_id = _seed_order_with_status_and_delivery(OrderStatus.confirmed, today.replace(day=max(1, today.day - 1)))
-    _seed_order_with_status_and_delivery(OrderStatus.confirmed, today)
+    today_id = _seed_order_with_status_and_delivery(OrderStatus.confirmed, today)
+    shipped_old_id = _seed_order_with_status_and_delivery(OrderStatus.shipped, today.replace(day=max(1, today.day - 1)))
 
     stale = client.get("/api/v1/orders?stale_delivery_only=true")
     assert stale.status_code == 200
-    assert any(row["id"] == old_id for row in stale.json())
+    stale_ids = {row["id"] for row in stale.json()}
+
+    assert old_id in stale_ids
+
+    # cutoff depends on current HK time (16:00 boundary)
+    cutoff = _stale_cutoff_delivery_date(datetime.now(HK_TZ))
+    if today < cutoff:
+        assert today_id in stale_ids
+    else:
+        assert today_id not in stale_ids
+
+    assert shipped_old_id not in stale_ids
 
 
 def test_bulk_cancel_orders_success_and_partial_failure():
