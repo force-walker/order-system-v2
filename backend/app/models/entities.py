@@ -103,6 +103,7 @@ class Order(Base):
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
     order_datetime: Mapped[datetime] = mapped_column(DateTime, index=True)
     delivery_date: Mapped[date] = mapped_column(Date, index=True)
+    shipped_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus, name="orderstatus"), default=OrderStatus.new, index=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str] = mapped_column(String(64), default="system_api", index=True)

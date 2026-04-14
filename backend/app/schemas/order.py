@@ -7,13 +7,15 @@ from app.models.entities import LineStatus, OrderStatus, PricingBasis, StockoutP
 
 class OrderCreateRequest(BaseModel):
     customer_id: int = Field(gt=0)
-    delivery_date: date
+    delivery_date: date | None = None
+    shipped_date: date | None = None
     note: str | None = Field(default=None, max_length=1000)
 
 
 class OrderUpdateRequest(BaseModel):
     customer_id: int | None = Field(default=None, gt=0)
     delivery_date: date | None = None
+    shipped_date: date | None = None
     note: str | None = Field(default=None, max_length=1000)
 
 
@@ -34,6 +36,7 @@ class OrderResponse(BaseModel):
     customer_id: int
     order_datetime: datetime
     delivery_date: date
+    shipped_date: date | None
     status: OrderStatus
     note: str | None
     created_by: str

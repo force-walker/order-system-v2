@@ -1,6 +1,8 @@
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
+from app.api.routes_orders import HK_TZ, _default_delivery_date_by_hk_time
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -157,6 +159,7 @@ def test_create_order_success_and_list():
     payload = {
         "customer_id": cid,
         "delivery_date": str(date.today()),
+        "shipped_date": str(date.today()),
         "note": "first order",
     }
     client = _client()
@@ -165,6 +168,7 @@ def test_create_order_success_and_list():
     assert create_res.json()["order_no"].startswith("ORD-")
     assert create_res.json()["created_by"] == "system_api"
     assert create_res.json()["updated_by"] == "system_api"
+    assert create_res.json()["shipped_date"] == str(date.today())
 
     list_res = client.get("/api/v1/orders")
     assert list_res.status_code == 200
@@ -174,6 +178,36 @@ def test_create_order_success_and_list():
     detail_res = client.get(f"/api/v1/orders/{order_id}")
     assert detail_res.status_code == 200
     assert detail_res.json()["id"] == order_id
+
+
+def test_default_delivery_date_boundary_rule_hk_tz():
+    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 15, 59, tzinfo=HK_TZ)) == date(2026, 4, 14)
+    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 16, 0, tzinfo=HK_TZ)) == date(2026, 4, 15)
+    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 23, 59, tzinfo=HK_TZ)) == date(2026, 4, 15)
+    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 0, 0, tzinfo=HK_TZ)) == date(2026, 4, 14)
+
+
+def test_create_order_uses_default_delivery_date_when_omitted():
+    cid = _seed_customer("CUST-ORDER-DEFAULT-DATE")
+    client = _client()
+
+    created = client.post("/api/v1/orders", json={"customer_id": cid, "note": "default delivery"})
+    assert created.status_code == 201
+    # for test determinism we only assert non-nullness
+    assert created.json()["delivery_date"] is not None
+
+
+def test_create_order_allows_shipped_date_different_from_delivery_date():
+    cid = _seed_customer("CUST-SHIP-DIFF")
+    client = _client()
+
+    created = client.post(
+        "/api/v1/orders",
+        json={"customer_id": cid, "delivery_date": "2026-04-15", "shipped_date": "2026-04-14"},
+    )
+    assert created.status_code == 201
+    assert created.json()["delivery_date"] == "2026-04-15"
+    assert created.json()["shipped_date"] == "2026-04-14"
 
 
 def test_create_order_customer_not_found():
@@ -216,11 +250,12 @@ def test_update_order_header_success_and_not_found():
 
     ok = client.patch(
         f"/api/v1/orders/{oid}",
-        json={"customer_id": cid2, "delivery_date": str(date.today()), "note": "after"},
+        json={"customer_id": cid2, "delivery_date": str(date.today()), "shipped_date": str(date.today()), "note": "after"},
     )
     assert ok.status_code == 200
     assert ok.json()["customer_id"] == cid2
     assert ok.json()["note"] == "after"
+    assert ok.json()["shipped_date"] == str(date.today())
 
     nf = client.patch("/api/v1/orders/999999", json={"note": "x"})
     assert nf.status_code == 404

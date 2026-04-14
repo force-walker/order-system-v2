@@ -1,5 +1,6 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -22,6 +23,20 @@ from app.schemas.order import (
 )
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
+
+HK_TZ = ZoneInfo("Asia/Hong_Kong")
+
+
+def _now_hk() -> datetime:
+    return datetime.now(HK_TZ)
+
+
+def _default_delivery_date_by_hk_time(now_hk: datetime) -> datetime.date:
+    # 00:00-15:59 => same day, 16:00-23:59 => next day
+    if now_hk.hour >= 16:
+        return (now_hk + timedelta(days=1)).date()
+    return now_hk.date()
+
 
 ORDER_COMMON_ERROR_RESPONSES = {
     422: {"model": ApiErrorResponse, "description": "Validation Error"},
@@ -67,6 +82,9 @@ def update_order(order_id: int, payload: OrderUpdateRequest, db: Session = Depen
 
     if payload.delivery_date is not None:
         row.delivery_date = payload.delivery_date
+
+    if payload.shipped_date is not None or "shipped_date" in payload.model_fields_set:
+        row.shipped_date = payload.shipped_date
 
     if payload.note is not None or "note" in payload.model_fields_set:
         row.note = payload.note
@@ -169,11 +187,13 @@ def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> 
         if db.query(Order).filter(Order.order_no == generated_order_no).first() is not None:
             continue
 
+        now_hk = _now_hk()
         row = Order(
             order_no=generated_order_no,
             customer_id=payload.customer_id,
             order_datetime=datetime.now(UTC),
-            delivery_date=payload.delivery_date,
+            delivery_date=(payload.delivery_date or _default_delivery_date_by_hk_time(now_hk)),
+            shipped_date=payload.shipped_date,
             status=OrderStatus.new,
             note=payload.note,
             created_by="system_api",
