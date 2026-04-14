@@ -485,7 +485,14 @@ def test_list_orders_stale_filter():
     stale_ids = {row["id"] for row in stale.json()}
 
     assert old_id in stale_ids
-    assert today_id not in stale_ids
+
+    # cutoff depends on current HK time (16:00 boundary)
+    cutoff = _stale_cutoff_delivery_date(datetime.now(HK_TZ))
+    if today < cutoff:
+        assert today_id in stale_ids
+    else:
+        assert today_id not in stale_ids
+
     assert shipped_old_id not in stale_ids
 
 
