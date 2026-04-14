@@ -31,6 +31,7 @@ type FormState = {
   customerId: string;
   customerName: string;
   deliveryDate: string;
+  shippedDate: string;
   note: string;
   items: ItemForm[];
 };
@@ -39,6 +40,7 @@ type FieldErrors = {
   customerId?: string;
   customerName?: string;
   deliveryDate?: string;
+  shippedDate?: string;
   note?: string;
   items?: string;
   itemRows?: Array<Partial<Record<keyof ItemForm, string>>>;
@@ -47,10 +49,18 @@ type FieldErrors = {
 let rowSeq = 0;
 const nextRowKey = () => `row-${Date.now()}-${rowSeq++}`;
 
-const getTomorrowDate = () => {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+const toYmd = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+export const getInitialDeliveryDateByRule = (base = new Date()) => {
+  const d = new Date(base);
+  const hour = d.getHours();
+  if (hour >= 16) d.setDate(d.getDate() + 1);
+  return toYmd(d);
 };
 
 const newItem = (): ItemForm => ({
@@ -75,7 +85,8 @@ const toInitialForm = (initialValue?: CreateOrderRequest): FormState => {
     return {
       customerId: '',
       customerName: '',
-      deliveryDate: getTomorrowDate(),
+      deliveryDate: getInitialDeliveryDateByRule(),
+      shippedDate: getInitialDeliveryDateByRule(),
       note: '',
       items: [newItem()],
     };
@@ -85,6 +96,7 @@ const toInitialForm = (initialValue?: CreateOrderRequest): FormState => {
     customerId: String(initialValue.customerId),
     customerName: initialValue.customerName,
     deliveryDate: initialValue.deliveryDate,
+    shippedDate: initialValue.shippedDate ?? initialValue.deliveryDate,
     note: initialValue.note ?? '',
     items:
       initialValue.items.length > 0
@@ -112,7 +124,8 @@ const validate = (form: FormState): FieldErrors => {
 
   if (!form.customerId || Number(form.customerId) <= 0) errors.customerId = '顧客IDは必須です';
   if (!trim(form.customerName)) errors.customerName = '顧客名は必須です';
-  if (!form.deliveryDate) errors.deliveryDate = '納品日は必須です';
+  if (!form.deliveryDate) errors.deliveryDate = '納品日（顧客納品日）は必須です';
+  if (!form.shippedDate) errors.shippedDate = '出荷日は必須です';
   if (form.note.length > 1000) errors.note = '備考は1000文字以内で入力してください';
   if (form.items.length === 0) errors.items = '明細は最低1行必要です';
 
@@ -155,7 +168,7 @@ const validate = (form: FormState): FieldErrors => {
 };
 
 const hasAnyError = (errors: FieldErrors) => {
-  if (errors.customerId || errors.customerName || errors.deliveryDate || errors.note || errors.items) return true;
+  if (errors.customerId || errors.customerName || errors.deliveryDate || errors.shippedDate || errors.note || errors.items) return true;
   return (errors.itemRows ?? []).some((row) => row != null && Object.keys(row).length > 0);
 };
 
@@ -258,6 +271,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
         customerId: Number(form.customerId),
         customerName: trim(form.customerName),
         deliveryDate: form.deliveryDate,
+        shippedDate: form.shippedDate,
         note: form.note ? trim(form.note) : undefined,
         items: form.items.map((row) => ({
           id: row.id,
@@ -295,6 +309,11 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
         <h3>注文ヘッダー</h3>
         <div className="form-grid two-col">
           <label>
+            受注日（システム日時）
+            <input value={new Date().toLocaleString('ja-JP')} readOnly />
+          </label>
+
+          <label>
             顧客選択 *
             <select value={form.customerId} onChange={(e) => handleCustomerSelect(e.target.value)}>
               <option value="">選択してください</option>
@@ -312,9 +331,17 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
           </label>
 
           <label>
-            納品日 *
+            納品日（顧客納品日） *
             <input type="date" value={form.deliveryDate} onChange={(e) => handleHeaderChange('deliveryDate', e.target.value)} />
+            <small className="subtle">初期値ルール: 16:00〜23:59 は翌日 / 00:00〜15:59 は当日</small>
             {errors.deliveryDate ? <small className="field-error">{errors.deliveryDate}</small> : null}
+          </label>
+
+          <label>
+            出荷日（仕入商品の出荷日） *
+            <input type="date" value={form.shippedDate} onChange={(e) => handleHeaderChange('shippedDate', e.target.value)} />
+            <small className="subtle">在庫しないケースでは納品日と同日扱い</small>
+            {errors.shippedDate ? <small className="field-error">{errors.shippedDate}</small> : null}
           </label>
         </div>
       </section>

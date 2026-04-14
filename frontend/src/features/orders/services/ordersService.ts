@@ -85,7 +85,9 @@ const toListItem = (o: OrderDetail): OrderSummary => ({
   customerId: o.customerId,
   orderNo: o.orderNo,
   customerName: o.customerName,
+  orderDatetime: o.createdAt,
   deliveryDate: o.deliveryDate,
+  shippedDate: o.shippedDate,
   status: o.status,
   items: o.items,
 });
@@ -143,12 +145,15 @@ const mapApiOrderToDetail = (order: ApiOrderResponse): OrderDetail => {
   const cached = apiOrderCache.get(order.id);
   const mappedByCustomerId = customerNameCache.get(order.customer_id);
   const mappedByOrderCache = cached?.customerId === order.customer_id ? cached?.customerName : undefined;
+  const dynamic = order as unknown as { shipped_date?: string | null };
   return {
     id: order.id,
     customerId: order.customer_id,
     orderNo: order.order_no,
     customerName: mappedByCustomerId ?? mappedByOrderCache ?? `顧客#${order.customer_id}`,
+    orderDatetime: order.order_datetime,
     deliveryDate: order.delivery_date,
+    shippedDate: dynamic.shipped_date ?? undefined,
     status: order.status,
     note: order.note ?? undefined,
     createdAt: order.created_at,
@@ -213,6 +218,7 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
   const orderBody: ApiOrderCreateRequest = toApiOrderCreateHeader(
     payload.customerId,
     payload.deliveryDate,
+    payload.shippedDate,
     payload.note,
     payload.orderNo,
   );
@@ -271,7 +277,12 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
 const updateOrderHeaderApi = async (orderId: number, payload: CreateOrderRequest) => {
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}`, {
     method: 'PATCH',
-    body: { customer_id: payload.customerId, delivery_date: payload.deliveryDate, note: payload.note ?? null },
+    body: {
+      customer_id: payload.customerId,
+      delivery_date: payload.deliveryDate,
+      shipped_date: payload.shippedDate ?? null,
+      note: payload.note ?? null,
+    },
   });
 
   if (!res.ok) throw await parseApiErrorPayload(res);
@@ -348,6 +359,7 @@ const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail
     orderNo: payload.orderNo ?? `ORD-MOCK-${String(nextId).padStart(5, '0')}`,
     customerName: payload.customerName,
     deliveryDate: payload.deliveryDate,
+    shippedDate: payload.shippedDate,
     status: 'new',
     note: payload.note,
     createdAt: new Date().toISOString(),
@@ -378,6 +390,7 @@ export const updateOrder = async (orderId: number, payload: CreateOrderRequest):
     target.customerId = payload.customerId;
     target.customerName = payload.customerName;
     target.deliveryDate = payload.deliveryDate;
+    target.shippedDate = payload.shippedDate;
     target.note = payload.note;
     target.items = payload.items.map((i, idx) => ({
       id: i.id ?? idx + 1,

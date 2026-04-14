@@ -54,6 +54,7 @@ export const toApiProductUpdate = (payload: ProductUpdateRequest): ApiProductUpd
 export const toApiOrderCreateHeader = (
   customerId: number,
   deliveryDate: string,
+  shippedDate?: string,
   note?: string,
   orderNo?: string,
 ): ApiOrderCreateRequest => ({
@@ -61,7 +62,8 @@ export const toApiOrderCreateHeader = (
   customer_id: customerId,
   delivery_date: deliveryDate,
   note: note ?? null,
-});
+  ...(shippedDate ? ({ shipped_date: shippedDate } as unknown as Record<string, unknown>) : {}),
+} as unknown as ApiOrderCreateRequest);
 
 const resolveCustomerCode = (row: ApiCustomerResponse): string => {
   const dynamic = row as unknown as { code?: string; customer_code?: string };
