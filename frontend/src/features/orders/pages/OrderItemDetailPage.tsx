@@ -87,8 +87,16 @@ export const OrderItemDetailPage = () => {
                 <dd>{detail.order.customerName}</dd>
               </div>
               <div>
-                <dt>納品日</dt>
+                <dt>受注日（システム日時）</dt>
+                <dd>{detail.order.orderDatetime ? new Date(detail.order.orderDatetime).toLocaleString('ja-JP') : '-'}</dd>
+              </div>
+              <div>
+                <dt>納品日（顧客納品日）</dt>
                 <dd>{detail.order.deliveryDate}</dd>
+              </div>
+              <div>
+                <dt>出荷日（仕入商品の出荷日）</dt>
+                <dd>{detail.order.shippedDate ?? '-'}</dd>
               </div>
               <div>
                 <dt>アイテム数</dt>

@@ -28,7 +28,9 @@ export type OrderSummary = {
   customerId?: number;
   orderNo: string;
   customerName: string;
+  orderDatetime?: string;
   deliveryDate: string;
+  shippedDate?: string;
   status: OrderStatus;
   items: OrderItem[];
 };
@@ -43,6 +45,7 @@ export type CreateOrderRequest = {
   customerId: number;
   customerName: string;
   deliveryDate: string;
+  shippedDate?: string;
   note?: string;
   items: Array<{
     id?: number;

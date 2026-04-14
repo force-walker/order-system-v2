@@ -129,8 +129,8 @@ export const OrderListPage = () => {
             並び順
             <select value={sortMode} onChange={(e) => setSortMode(e.target.value as 'newest' | 'deliveryAsc' | 'deliveryDesc')}>
               <option value="newest">新しい注文順</option>
-              <option value="deliveryAsc">納品日 昇順</option>
-              <option value="deliveryDesc">納品日 降順</option>
+              <option value="deliveryAsc">納品日（顧客納品日） 昇順</option>
+              <option value="deliveryDesc">納品日（顧客納品日） 降順</option>
             </select>
           </label>
         </div>
@@ -146,7 +146,7 @@ export const OrderListPage = () => {
                 <th>ID</th>
                 <th>注文番号</th>
                 <th>顧客</th>
-                <th>納品日</th>
+                <th>納品日（顧客納品日）</th>
                 <th>状態</th>
                 <th>アイテム数</th>
                 <th>詳細</th>
