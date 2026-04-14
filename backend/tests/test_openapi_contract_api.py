@@ -126,3 +126,12 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     work_item_schema = spec["components"]["schemas"]["OrderItemAllocationWorkItem"]["properties"]
     assert {"allocated_supplier_id", "allocated_qty", "delivery_date"}.issubset(work_item_schema)
+
+    order_create_props = spec["components"]["schemas"]["OrderCreateRequest"]["properties"]
+    assert "delivery_date" in order_create_props
+    assert "shipped_date" in order_create_props
+    order_create_required = set(spec["components"]["schemas"]["OrderCreateRequest"].get("required", []))
+    assert "delivery_date" not in order_create_required
+
+    order_response_props = spec["components"]["schemas"]["OrderResponse"]["properties"]
+    assert "shipped_date" in order_response_props
