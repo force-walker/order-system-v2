@@ -223,6 +223,17 @@ def bulk_cancel_orders(payload: OrderBulkCancelRequest, db: Session = Depends(ge
 
     db.commit()
     failed = len(payload.order_ids) - succeeded
+
+    if succeeded == 0 and failed > 0:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ORDER_BULK_CANCEL_CONFLICT",
+                "message": "all target orders failed to cancel",
+                "details": errors,
+            },
+        )
+
     return OrderBulkCancelResponse(total=len(payload.order_ids), succeeded=succeeded, failed=failed, errors=errors)
 
 
