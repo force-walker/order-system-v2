@@ -140,3 +140,7 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     order_response_props = spec["components"]["schemas"]["OrderResponse"]["properties"]
     assert "shipped_date" in order_response_props
+
+    cancel_reason_schema = spec["components"]["schemas"].get("OrderCancelReasonCode")
+    assert cancel_reason_schema is not None
+    assert "stale_delivery" in cancel_reason_schema.get("enum", [])

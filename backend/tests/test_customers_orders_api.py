@@ -506,7 +506,7 @@ def test_bulk_cancel_orders_success_and_partial_failure():
         "/api/v1/orders/bulk-cancel",
         json={
             "order_ids": [ok_order, ng_order, 999999],
-            "cancel_reason_code": "stale_cleanup",
+            "cancel_reason_code": "stale_delivery",
             "note": "bulk cancel",
         },
     )
@@ -532,10 +532,25 @@ def test_bulk_cancel_orders_all_failed_returns_409():
         "/api/v1/orders/bulk-cancel",
         json={
             "order_ids": [ng_order, 999999],
-            "cancel_reason_code": "stale_cleanup",
+            "cancel_reason_code": "stale_delivery",
             "note": "bulk cancel",
         },
     )
     assert res.status_code == 409
     assert res.json()["detail"]["code"] == "ORDER_BULK_CANCEL_CONFLICT"
     assert isinstance(res.json()["detail"]["details"], list)
+
+
+def test_bulk_cancel_orders_invalid_reason_code_is_422():
+    client = _client()
+    d = date.today()
+    ok_order = _seed_order_with_status_and_delivery(OrderStatus.confirmed, d)
+
+    res = client.post(
+        "/api/v1/orders/bulk-cancel",
+        json={
+            "order_ids": [ok_order],
+            "cancel_reason_code": "stale_cleanup",
+        },
+    )
+    assert res.status_code == 422
