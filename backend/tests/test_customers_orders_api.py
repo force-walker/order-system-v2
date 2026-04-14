@@ -507,3 +507,21 @@ def test_bulk_cancel_orders_success_and_partial_failure():
     detail = client.get(f"/api/v1/orders/{ok_order}")
     assert detail.status_code == 200
     assert detail.json()["status"] == "cancelled"
+
+
+def test_bulk_cancel_orders_all_failed_returns_409():
+    client = _client()
+    d = date.today()
+    ng_order = _seed_order_with_status_and_delivery(OrderStatus.shipped, d)
+
+    res = client.post(
+        "/api/v1/orders/bulk-cancel",
+        json={
+            "order_ids": [ng_order, 999999],
+            "cancel_reason_code": "stale_cleanup",
+            "note": "bulk cancel",
+        },
+    )
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "ORDER_BULK_CANCEL_CONFLICT"
+    assert isinstance(res.json()["detail"]["details"], list)
