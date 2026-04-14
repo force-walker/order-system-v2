@@ -63,6 +63,8 @@ def test_openapi_error_contracts_for_core_apis():
     assert "422" in _responses("/api/v1/orders", "post")
     assert "409" in _responses("/api/v1/orders/{order_id}/bulk-transition", "post")
     assert "422" in _responses("/api/v1/orders/{order_id}/bulk-transition", "post")
+    assert "409" in _responses("/api/v1/orders/bulk-cancel", "post")
+    assert "422" in _responses("/api/v1/orders/bulk-cancel", "post")
 
     # invoices
     assert "409" in _responses("/api/v1/invoices", "post")
@@ -111,6 +113,9 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     customer_list_params = {p["name"] for p in spec["paths"]["/api/v1/customers"]["get"]["parameters"]}
     assert {"include_inactive"}.issubset(customer_list_params)
+
+    order_list_params = {p["name"] for p in spec["paths"]["/api/v1/orders"]["get"].get("parameters", [])}
+    assert {"stale_delivery_only"}.issubset(order_list_params)
 
     mapping_list_params = {p["name"] for p in spec["paths"]["/api/v1/supplier-product-mappings"]["get"]["parameters"]}
     assert {"supplier_id", "product_id"}.issubset(mapping_list_params)

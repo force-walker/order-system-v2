@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
@@ -10,6 +10,8 @@ from app.db.session import get_db
 from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product
 from app.schemas.common import ApiErrorResponse
 from app.schemas.order import (
+    OrderBulkCancelRequest,
+    OrderBulkCancelResponse,
     OrderBulkTransitionRequest,
     OrderBulkTransitionResponse,
     OrderCreateRequest,
@@ -43,9 +45,21 @@ ORDER_COMMON_ERROR_RESPONSES = {
 }
 
 
+def _stale_cutoff_delivery_date(now_hk: datetime) -> datetime.date:
+    return _default_delivery_date_by_hk_time(now_hk)
+
+
 @router.get("", response_model=list[OrderResponse])
-def list_orders(db: Session = Depends(get_db)) -> list[OrderResponse]:
-    rows = db.query(Order).order_by(Order.id.desc()).all()
+def list_orders(
+    stale_delivery_only: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> list[OrderResponse]:
+    query = db.query(Order)
+    if stale_delivery_only:
+        cutoff = _stale_cutoff_delivery_date(_now_hk())
+        query = query.filter(Order.delivery_date < cutoff, Order.status.in_([OrderStatus.new, OrderStatus.confirmed, OrderStatus.allocated]))
+
+    rows = query.order_by(Order.id.desc()).all()
     return [OrderResponse.model_validate(r) for r in rows]
 
 
@@ -164,6 +178,52 @@ def bulk_transition_order(order_id: int, payload: OrderBulkTransitionRequest, db
     db.commit()
 
     return OrderBulkTransitionResponse(order_id=order.id, updated_lines=len(all_lines), updated_order_status=order.status)
+
+
+@router.post(
+    "/bulk-cancel",
+    response_model=OrderBulkCancelResponse,
+    responses={
+        **ORDER_COMMON_ERROR_RESPONSES,
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def bulk_cancel_orders(payload: OrderBulkCancelRequest, db: Session = Depends(get_db)) -> OrderBulkCancelResponse:
+    cancellable_statuses = {OrderStatus.new, OrderStatus.confirmed, OrderStatus.allocated}
+    terminal_statuses = {OrderStatus.shipped, OrderStatus.invoiced, OrderStatus.cancelled}
+
+    succeeded = 0
+    errors = []
+
+    for order_id in payload.order_ids:
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if order is None:
+            errors.append({"order_id": order_id, "code": "ORDER_NOT_FOUND", "message": "order not found"})
+            continue
+
+        if order.status in terminal_statuses:
+            errors.append({"order_id": order_id, "code": "ORDER_CANCEL_CONFLICT", "message": f"cannot cancel from status={order.status.value}"})
+            continue
+
+        if order.status not in cancellable_statuses:
+            errors.append({"order_id": order_id, "code": "ORDER_CANCEL_CONFLICT", "message": f"cannot cancel from status={order.status.value}"})
+            continue
+
+        lines = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+        for line in lines:
+            line.line_status = LineStatus.cancelled
+
+        order.status = OrderStatus.cancelled
+        if payload.note:
+            order.note = payload.note
+        order.updated_by = "system_api"
+        db.flush()
+        write_audit_log(db, entity_type="order", entity_id=order.id, action=AuditAction.CANCEL, reason_code=payload.cancel_reason_code)
+        succeeded += 1
+
+    db.commit()
+    failed = len(payload.order_ids) - succeeded
+    return OrderBulkCancelResponse(total=len(payload.order_ids), succeeded=succeeded, failed=failed, errors=errors)
 
 
 @router.post(

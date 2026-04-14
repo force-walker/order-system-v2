@@ -1,7 +1,7 @@
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
-from app.api.routes_orders import HK_TZ, _default_delivery_date_by_hk_time
+from app.api.routes_orders import HK_TZ, _default_delivery_date_by_hk_time, _stale_cutoff_delivery_date
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -432,3 +432,78 @@ def test_order_validation_required_and_enum_are_422():
         json={"from_status": "invalid_status", "to_status": "allocated"},
     )
     assert invalid_enum.status_code == 422
+
+
+def _seed_order_with_status_and_delivery(status: OrderStatus, delivery: date) -> int:
+    db = TestingSessionLocal()
+    suffix = uuid4().hex[:8]
+
+    customer = Customer(
+        customer_code=f"CUST-CANCEL-{suffix}",
+        name="Cancel Customer",
+        active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db.add(customer)
+    db.flush()
+
+    order = Order(
+        order_no=f"ORD-CANCEL-{suffix}",
+        customer_id=customer.id,
+        order_datetime=datetime.now(UTC),
+        delivery_date=delivery,
+        status=status,
+        note=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db.add(order)
+    db.commit()
+    oid = order.id
+    db.close()
+    return oid
+
+
+def test_stale_cutoff_boundary_hk_tz():
+    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 15, 59, tzinfo=HK_TZ)) == date(2026, 4, 14)
+    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 16, 0, tzinfo=HK_TZ)) == date(2026, 4, 15)
+
+
+def test_list_orders_stale_filter():
+    client = _client()
+
+    today = date.today()
+    old_id = _seed_order_with_status_and_delivery(OrderStatus.confirmed, today.replace(day=max(1, today.day - 1)))
+    _seed_order_with_status_and_delivery(OrderStatus.confirmed, today)
+
+    stale = client.get("/api/v1/orders?stale_delivery_only=true")
+    assert stale.status_code == 200
+    assert any(row["id"] == old_id for row in stale.json())
+
+
+def test_bulk_cancel_orders_success_and_partial_failure():
+    client = _client()
+    d = date.today()
+    ok_order = _seed_order_with_status_and_delivery(OrderStatus.confirmed, d)
+    ng_order = _seed_order_with_status_and_delivery(OrderStatus.shipped, d)
+
+    res = client.post(
+        "/api/v1/orders/bulk-cancel",
+        json={
+            "order_ids": [ok_order, ng_order, 999999],
+            "cancel_reason_code": "stale_cleanup",
+            "note": "bulk cancel",
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["total"] == 3
+    assert res.json()["succeeded"] == 1
+    assert res.json()["failed"] == 2
+    codes = {e["code"] for e in res.json()["errors"]}
+    assert "ORDER_CANCEL_CONFLICT" in codes
+    assert "ORDER_NOT_FOUND" in codes
+
+    detail = client.get(f"/api/v1/orders/{ok_order}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "cancelled"
