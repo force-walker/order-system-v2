@@ -30,6 +30,25 @@ class OrderBulkTransitionResponse(BaseModel):
     updated_order_status: OrderStatus
 
 
+class OrderBulkCancelRequest(BaseModel):
+    order_ids: list[int] = Field(min_length=1, max_length=500)
+    cancel_reason_code: str = Field(min_length=1, max_length=64)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class OrderBulkCancelError(BaseModel):
+    order_id: int
+    code: str
+    message: str
+
+
+class OrderBulkCancelResponse(BaseModel):
+    total: int
+    succeeded: int
+    failed: int
+    errors: list[OrderBulkCancelError] = Field(default_factory=list)
+
+
 class OrderResponse(BaseModel):
     id: int
     order_no: str
