@@ -221,6 +221,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
     const input = raw.trim();
     if (!input) {
       handleHeaderChange('customerId', '');
+      handleHeaderChange('customerName', '');
       return;
     }
 
@@ -232,13 +233,19 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
 
     const idHead = input.split(':')[0]?.trim() ?? '';
     if (/^\d+$/.test(idHead)) {
-      handleCustomerSelect(idHead);
-      return;
+      const byId = customers.find((c) => String(c.id) === idHead);
+      if (byId) {
+        handleCustomerSelect(String(byId.id));
+        return;
+      }
     }
 
-    const byName = customers.find((c) => c.label.toLowerCase().includes(input.toLowerCase()));
-    if (byName) {
-      handleCustomerSelect(String(byName.id));
+    const byNameExact = customers.find((c) => {
+      const name = c.label.split(':')[1]?.split('(')[0]?.trim() ?? '';
+      return name.toLowerCase() === input.toLowerCase();
+    });
+    if (byNameExact) {
+      handleCustomerSelect(String(byNameExact.id));
       return;
     }
 
@@ -353,9 +360,15 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
               placeholder="顧客名 / IDで検索"
             />
             <datalist id="customer-options">
-              {customers.map((c) => (
-                <option key={c.id} value={c.label} />
-              ))}
+              {customers.map((c) => {
+                const name = c.label.split(':')[1]?.split('(')[0]?.trim() ?? c.label;
+                return (
+                  <>
+                    <option key={`${c.id}-label`} value={c.label} />
+                    <option key={`${c.id}-name`} value={name} />
+                  </>
+                );
+              })}
             </datalist>
             {errors.customerId ? <small className="field-error">{errors.customerId}</small> : null}
           </label>
