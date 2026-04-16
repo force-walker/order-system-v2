@@ -288,21 +288,6 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
       return;
     }
 
-    const byLabel = products.find((p) => p.label === input);
-    if (byLabel) {
-      handleProductSelect(index, String(byLabel.id));
-      return;
-    }
-
-    const idHead = input.split(':')[0]?.trim() ?? '';
-    if (/^\d+$/.test(idHead)) {
-      const byId = products.find((p) => String(p.id) === idHead);
-      if (byId) {
-        handleProductSelect(index, String(byId.id));
-        return;
-      }
-    }
-
     handleItemChange(index, 'productId', '');
   };
 
@@ -451,10 +436,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
           </div>
           <datalist id="product-options">
             {products.map((p) => (
-              <>
-                <option key={`${p.id}-label`} value={p.label} />
-                <option key={`${p.id}-name`} value={p.name} />
-              </>
+              <option key={`${p.id}-name`} value={p.name} />
             ))}
           </datalist>
           {form.items.map((row, idx) => {
@@ -478,7 +460,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                         handleItemChange(idx, 'productName', ev.target.value);
                         handleProductSearch(idx, ev.target.value);
                       }}
-                      placeholder="商品名 / IDで検索"
+                      placeholder="商品名で検索"
                     />
                     {e.productId ? <small className="field-error">{e.productId}</small> : null}
                   </label>
