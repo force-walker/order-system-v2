@@ -353,6 +353,13 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
             <input
               list="customer-options"
               value={form.customerName}
+              onKeyDown={(e) => {
+                if (e.key === 'Backspace' && form.customerId) {
+                  e.preventDefault();
+                  handleHeaderChange('customerId', '');
+                  handleHeaderChange('customerName', '');
+                }
+              }}
               onChange={(e) => {
                 handleHeaderChange('customerName', e.target.value);
                 handleCustomerSearch(e.target.value);
