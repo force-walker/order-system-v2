@@ -217,6 +217,41 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
     }
   };
 
+  const handleCustomerSearch = (raw: string) => {
+    const input = raw.trim();
+    if (!input) {
+      handleHeaderChange('customerId', '');
+      handleHeaderChange('customerName', '');
+      return;
+    }
+
+    const byLabel = customers.find((c) => c.label === input);
+    if (byLabel) {
+      handleCustomerSelect(String(byLabel.id));
+      return;
+    }
+
+    const idHead = input.split(':')[0]?.trim() ?? '';
+    if (/^\d+$/.test(idHead)) {
+      const byId = customers.find((c) => String(c.id) === idHead);
+      if (byId) {
+        handleCustomerSelect(String(byId.id));
+        return;
+      }
+    }
+
+    const byNameExact = customers.find((c) => {
+      const name = c.label.split(':')[1]?.split('(')[0]?.trim() ?? '';
+      return name.toLowerCase() === input.toLowerCase();
+    });
+    if (byNameExact) {
+      handleCustomerSelect(String(byNameExact.id));
+      return;
+    }
+
+    handleHeaderChange('customerId', '');
+  };
+
   const handleItemChange = (index: number, key: keyof ItemForm, value: string) => {
     setForm((prev) => {
       const next = [...prev.items];
@@ -237,6 +272,23 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
       handleItemChange(index, 'unit', safeUnit);
       handleItemChange(index, 'pricingBasis', safePricing);
     }
+  };
+
+  const handleProductSearch = (index: number, raw: string) => {
+    const input = raw.trim();
+    if (!input) {
+      handleItemChange(index, 'productId', '');
+      handleItemChange(index, 'productName', '');
+      return;
+    }
+
+    const byNameExact = products.find((p) => p.name.toLowerCase() === input.toLowerCase());
+    if (byNameExact) {
+      handleProductSelect(index, String(byNameExact.id));
+      return;
+    }
+
+    handleItemChange(index, 'productId', '');
   };
 
   const addItemRow = () => setForm((prev) => ({ ...prev, items: [...prev.items, newItem()] }));
@@ -315,12 +367,33 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
 
           <label>
             顧客選択 *
-            <select value={form.customerId} onChange={(e) => handleCustomerSelect(e.target.value)}>
-              <option value="">選択してください</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>{c.label}</option>
-              ))}
-            </select>
+            <input
+              list="customer-options"
+              value={form.customerName}
+              onKeyDown={(e) => {
+                if (e.key === 'Backspace' && form.customerId) {
+                  e.preventDefault();
+                  handleHeaderChange('customerId', '');
+                  handleHeaderChange('customerName', '');
+                }
+              }}
+              onChange={(e) => {
+                handleHeaderChange('customerName', e.target.value);
+                handleCustomerSearch(e.target.value);
+              }}
+              placeholder="顧客名 / IDで検索"
+            />
+            <datalist id="customer-options">
+              {customers.map((c) => {
+                const name = c.label.split(':')[1]?.split('(')[0]?.trim() ?? c.label;
+                return (
+                  <>
+                    <option key={`${c.id}-label`} value={c.label} />
+                    <option key={`${c.id}-name`} value={name} />
+                  </>
+                );
+              })}
+            </datalist>
             {errors.customerId ? <small className="field-error">{errors.customerId}</small> : null}
           </label>
 
@@ -361,6 +434,11 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
             <div>コメント</div>
             <div>操作</div>
           </div>
+          <datalist id="product-options">
+            {products.map((p) => (
+              <option key={`${p.id}-name`} value={p.name} />
+            ))}
+          </datalist>
           {form.items.map((row, idx) => {
             const e = errors.itemRows?.[idx] ?? {};
             return (
@@ -368,10 +446,22 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                 <div className="item-grid-row item-grid-row-primary item-row-flat">
                   <div className="item-index">{idx + 1}</div>
                   <label>
-                    <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
-                      <option value="">選択</option>
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    </select>
+                    <input
+                      list="product-options"
+                      value={row.productName}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && row.productId) {
+                          e.preventDefault();
+                          handleItemChange(idx, 'productId', '');
+                          handleItemChange(idx, 'productName', '');
+                        }
+                      }}
+                      onChange={(ev) => {
+                        handleItemChange(idx, 'productName', ev.target.value);
+                        handleProductSearch(idx, ev.target.value);
+                      }}
+                      placeholder="商品名で検索"
+                    />
                     {e.productId ? <small className="field-error">{e.productId}</small> : null}
                   </label>
 
