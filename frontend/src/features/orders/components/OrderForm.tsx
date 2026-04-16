@@ -274,6 +274,38 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
     }
   };
 
+  const handleProductSearch = (index: number, raw: string) => {
+    const input = raw.trim();
+    if (!input) {
+      handleItemChange(index, 'productId', '');
+      handleItemChange(index, 'productName', '');
+      return;
+    }
+
+    const byNameExact = products.find((p) => p.name.toLowerCase() === input.toLowerCase());
+    if (byNameExact) {
+      handleProductSelect(index, String(byNameExact.id));
+      return;
+    }
+
+    const byLabel = products.find((p) => p.label === input);
+    if (byLabel) {
+      handleProductSelect(index, String(byLabel.id));
+      return;
+    }
+
+    const idHead = input.split(':')[0]?.trim() ?? '';
+    if (/^\d+$/.test(idHead)) {
+      const byId = products.find((p) => String(p.id) === idHead);
+      if (byId) {
+        handleProductSelect(index, String(byId.id));
+        return;
+      }
+    }
+
+    handleItemChange(index, 'productId', '');
+  };
+
   const addItemRow = () => setForm((prev) => ({ ...prev, items: [...prev.items, newItem()] }));
 
   const removeItemRow = (index: number) => {
@@ -417,6 +449,14 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
             <div>コメント</div>
             <div>操作</div>
           </div>
+          <datalist id="product-options">
+            {products.map((p) => (
+              <>
+                <option key={`${p.id}-label`} value={p.label} />
+                <option key={`${p.id}-name`} value={p.name} />
+              </>
+            ))}
+          </datalist>
           {form.items.map((row, idx) => {
             const e = errors.itemRows?.[idx] ?? {};
             return (
@@ -424,10 +464,22 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                 <div className="item-grid-row item-grid-row-primary item-row-flat">
                   <div className="item-index">{idx + 1}</div>
                   <label>
-                    <select value={row.productId} onChange={(ev) => handleProductSelect(idx, ev.target.value)}>
-                      <option value="">選択</option>
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    </select>
+                    <input
+                      list="product-options"
+                      value={row.productName}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && row.productId) {
+                          e.preventDefault();
+                          handleItemChange(idx, 'productId', '');
+                          handleItemChange(idx, 'productName', '');
+                        }
+                      }}
+                      onChange={(ev) => {
+                        handleItemChange(idx, 'productName', ev.target.value);
+                        handleProductSearch(idx, ev.target.value);
+                      }}
+                      placeholder="商品名 / IDで検索"
+                    />
                     {e.productId ? <small className="field-error">{e.productId}</small> : null}
                   </label>
 
