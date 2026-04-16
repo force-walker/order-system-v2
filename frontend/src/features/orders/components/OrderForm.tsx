@@ -217,6 +217,34 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
     }
   };
 
+  const handleCustomerSearch = (raw: string) => {
+    const input = raw.trim();
+    if (!input) {
+      handleHeaderChange('customerId', '');
+      return;
+    }
+
+    const byLabel = customers.find((c) => c.label === input);
+    if (byLabel) {
+      handleCustomerSelect(String(byLabel.id));
+      return;
+    }
+
+    const idHead = input.split(':')[0]?.trim() ?? '';
+    if (/^\d+$/.test(idHead)) {
+      handleCustomerSelect(idHead);
+      return;
+    }
+
+    const byName = customers.find((c) => c.label.toLowerCase().includes(input.toLowerCase()));
+    if (byName) {
+      handleCustomerSelect(String(byName.id));
+      return;
+    }
+
+    handleHeaderChange('customerId', '');
+  };
+
   const handleItemChange = (index: number, key: keyof ItemForm, value: string) => {
     setForm((prev) => {
       const next = [...prev.items];
@@ -315,12 +343,20 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
 
           <label>
             顧客選択 *
-            <select value={form.customerId} onChange={(e) => handleCustomerSelect(e.target.value)}>
-              <option value="">選択してください</option>
+            <input
+              list="customer-options"
+              value={form.customerName}
+              onChange={(e) => {
+                handleHeaderChange('customerName', e.target.value);
+                handleCustomerSearch(e.target.value);
+              }}
+              placeholder="顧客名 / IDで検索"
+            />
+            <datalist id="customer-options">
               {customers.map((c) => (
-                <option key={c.id} value={c.id}>{c.label}</option>
+                <option key={c.id} value={c.label} />
               ))}
-            </select>
+            </datalist>
             {errors.customerId ? <small className="field-error">{errors.customerId}</small> : null}
           </label>
 
