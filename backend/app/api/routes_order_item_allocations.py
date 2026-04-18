@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Customer, Order, OrderItem, Product, Supplier, SupplierAllocation, SupplierProduct
+from app.models.entities import Customer, LineStatus, Order, OrderItem, Product, Supplier, SupplierAllocation, SupplierProduct
 from app.schemas.common import ApiErrorResponse
 from app.schemas.order_item_allocation import (
     AllocationSuggestRequest,
@@ -187,6 +187,11 @@ def bulk_save_allocations(payload: BulkAllocationSaveRequest, db: Session = Depe
             )
             continue
 
+        order = db.query(Order).filter(Order.id == item.order_id).first()
+        if order is None:
+            errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ORDER_NOT_FOUND", message="order not found"))
+            continue
+
         if alloc is None:
             alloc = SupplierAllocation(order_item_id=row.order_item_id)
             db.add(alloc)
@@ -197,8 +202,13 @@ def bulk_save_allocations(payload: BulkAllocationSaveRequest, db: Session = Depe
         alloc.is_manual_override = True
         alloc.override_reason_code = payload.override_reason_code
 
+        # reflect assignment to order-item level workflow
+        item.shipped_date = order.delivery_date
+        item.line_status = LineStatus.allocated
+
         db.flush()
         write_audit_log(db, entity_type="supplier_allocation", entity_id=alloc.id, action=AuditAction.OVERRIDE, reason_code=payload.override_reason_code)
+        write_audit_log(db, entity_type="order_item", entity_id=item.id, action=AuditAction.UPDATE, reason_code="bulk_allocate_apply")
         succeeded += 1
 
     db.commit()
