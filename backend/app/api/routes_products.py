@@ -15,6 +15,8 @@ from app.schemas.product import (
     ProductBulkUpdateRequest,
     ProductBulkUpsertRequest,
     ProductCreateRequest,
+    ProductImportRequest,
+    ProductImportResult,
     ProductResponse,
     ProductUpdateRequest,
 )
@@ -90,6 +92,8 @@ def create_product(payload: ProductCreateRequest, db: Session = Depends(get_db))
     row = Product(
         sku=sku,
         name=payload.name,
+        legacy_code=payload.legacy_code,
+        legacy_unit_code=payload.legacy_unit_code,
         order_uom=payload.order_uom,
         purchase_uom=payload.purchase_uom,
         invoice_uom=payload.invoice_uom,
@@ -189,6 +193,8 @@ def bulk_create_products(payload: ProductBulkCreateRequest, db: Session = Depend
         row = Product(
             sku=item.sku,
             name=item.name,
+            legacy_code=item.legacy_code,
+            legacy_unit_code=item.legacy_unit_code,
             order_uom=item.order_uom,
             purchase_uom=item.purchase_uom,
             invoice_uom=item.invoice_uom,
@@ -240,6 +246,8 @@ def bulk_upsert_products(payload: ProductBulkUpsertRequest, db: Session = Depend
             row = Product(
                 sku=item.sku,
                 name=item.name,
+                legacy_code=item.legacy_code,
+                legacy_unit_code=item.legacy_unit_code,
                 order_uom=item.order_uom,
                 purchase_uom=item.purchase_uom,
                 invoice_uom=item.invoice_uom,
@@ -255,6 +263,8 @@ def bulk_upsert_products(payload: ProductBulkUpsertRequest, db: Session = Depend
             continue
 
         row.name = item.name
+        row.legacy_code = item.legacy_code
+        row.legacy_unit_code = item.legacy_unit_code
         row.order_uom = item.order_uom
         row.purchase_uom = item.purchase_uom
         row.invoice_uom = item.invoice_uom
@@ -267,6 +277,89 @@ def bulk_upsert_products(payload: ProductBulkUpsertRequest, db: Session = Depend
 
     db.commit()
     return _bulk_response(total=len(payload.items), success=success, errors=errors)
+
+
+@router.post("/import-upsert", response_model=ProductImportResult)
+def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(get_db)) -> ProductImportResult:
+    created = 0
+    updated = 0
+    skipped = 0
+    errors: list[BulkOperationError] = []
+
+    for idx, item in enumerate(payload.items):
+        row = None
+        item_ref = item.legacy_code or item.name
+
+        if item.legacy_code:
+            matches = db.query(Product).filter(Product.legacy_code == item.legacy_code).all()
+            if len(matches) > 1:
+                errors.append(BulkOperationError(index=idx, itemRef=item_ref, code="LEGACY_CODE_CONFLICT", message="multiple products have same legacy_code"))
+                continue
+            if len(matches) == 1:
+                row = matches[0]
+
+        if row is None:
+            name_matches = db.query(Product).filter(Product.name == item.name).all()
+            if len(name_matches) > 1:
+                errors.append(BulkOperationError(index=idx, itemRef=item_ref, code="NAME_AMBIGUOUS", message="multiple products match by name"))
+                continue
+            if len(name_matches) == 1:
+                row = name_matches[0]
+
+        if row is None:
+            sku = generate_next_code(db, Product, "sku", prefix="SKU-")
+            row = Product(
+                sku=sku,
+                name=item.name,
+                legacy_code=item.legacy_code,
+                legacy_unit_code=item.legacy_unit_code,
+                order_uom=item.order_uom,
+                purchase_uom=item.purchase_uom,
+                invoice_uom=item.invoice_uom,
+                is_catch_weight=item.is_catch_weight,
+                weight_capture_required=item.weight_capture_required,
+                pricing_basis_default=item.pricing_basis_default,
+                active=item.active,
+            )
+            db.add(row)
+            db.flush()
+            write_audit_log(db, entity_type="product", entity_id=row.id, action=AuditAction.CREATE)
+            created += 1
+            continue
+
+        unchanged = (
+            row.name == item.name
+            and row.legacy_code == item.legacy_code
+            and row.legacy_unit_code == item.legacy_unit_code
+            and row.order_uom == item.order_uom
+            and row.purchase_uom == item.purchase_uom
+            and row.invoice_uom == item.invoice_uom
+            and row.is_catch_weight == item.is_catch_weight
+            and row.weight_capture_required == item.weight_capture_required
+            and row.pricing_basis_default == item.pricing_basis_default
+            and row.active == item.active
+        )
+        if unchanged:
+            skipped += 1
+            continue
+
+        row.name = item.name
+        row.legacy_code = item.legacy_code
+        row.legacy_unit_code = item.legacy_unit_code
+        row.order_uom = item.order_uom
+        row.purchase_uom = item.purchase_uom
+        row.invoice_uom = item.invoice_uom
+        row.is_catch_weight = item.is_catch_weight
+        row.weight_capture_required = item.weight_capture_required
+        row.pricing_basis_default = item.pricing_basis_default
+        row.active = item.active
+        db.flush()
+        write_audit_log(db, entity_type="product", entity_id=row.id, action=AuditAction.UPDATE)
+        updated += 1
+
+    db.commit()
+    failed = len(errors)
+    return ProductImportResult(total=len(payload.items), created=created, updated=updated, skipped=skipped, failed=failed, errors=errors)
 
 
 @router.delete("/bulk/delete", response_model=ProductBulkOperationResponse)

@@ -83,6 +83,8 @@ class Product(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sku: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    legacy_code: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    legacy_unit_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(255))
     order_uom: Mapped[str] = mapped_column(String(32))
     purchase_uom: Mapped[str] = mapped_column(String(32))
