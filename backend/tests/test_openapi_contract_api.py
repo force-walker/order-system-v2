@@ -87,6 +87,9 @@ def test_openapi_error_contracts_for_core_apis():
     assert "422" in _responses("/api/v1/order-item-allocations/bulk-save", "post")
     assert "409" in _responses("/api/v1/order-item-allocations/bulk-save", "post")
 
+    # reports
+    assert "422" in _responses("/api/v1/reports/shipping", "get")
+
     # auth
     assert "422" in _responses("/api/v1/auth/login", "post")
     assert "401" in _responses("/api/v1/auth/me", "get")
@@ -122,6 +125,9 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     worklist_params = {p["name"] for p in spec["paths"]["/api/v1/order-item-allocations"]["get"]["parameters"]}
     assert {"unallocated_only", "delivery_date", "supplier_id", "product_name", "customer_name", "limit", "offset"}.issubset(worklist_params)
+
+    shipping_report_params = {p["name"] for p in spec["paths"]["/api/v1/reports/shipping"]["get"]["parameters"]}
+    assert {"shipped_date", "mode"}.issubset(shipping_report_params)
 
     bulk_item_schema = spec["components"]["schemas"]["BulkAllocationSaveItem"]
     required_fields = set(bulk_item_schema.get("required", []))
