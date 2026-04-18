@@ -87,6 +87,8 @@ def test_create_product_auto_code_and_manual_code_rejected():
     client = _client()
     payload = {
         "name": "Created Product",
+        "legacy_code": "L-001",
+        "legacy_unit_code": "U-01",
         "order_uom": "count",
         "purchase_uom": "count",
         "invoice_uom": "count",
@@ -97,6 +99,8 @@ def test_create_product_auto_code_and_manual_code_rejected():
     created = client.post("/api/v1/products", json=payload)
     assert created.status_code == 201
     assert created.json()["sku"].startswith("SKU-")
+    assert created.json()["legacy_code"] == "L-001"
+    assert created.json()["legacy_unit_code"] == "U-01"
 
     manual = client.post("/api/v1/products", json={**payload, "sku": "SKU-MANUAL"})
     assert manual.status_code == 422
@@ -124,9 +128,14 @@ def test_update_product_success_and_not_found():
     pid = _seed_product("SKU-UPD")
     client = _client()
 
-    ok = client.patch(f"/api/v1/products/{pid}", json={"name": "Updated Name", "active": False})
+    ok = client.patch(
+        f"/api/v1/products/{pid}",
+        json={"name": "Updated Name", "legacy_code": "L-UPD", "legacy_unit_code": "U-UPD", "active": False},
+    )
     assert ok.status_code == 200
     assert ok.json()["name"] == "Updated Name"
+    assert ok.json()["legacy_code"] == "L-UPD"
+    assert ok.json()["legacy_unit_code"] == "U-UPD"
     assert ok.json()["active"] is False
 
     nf = client.patch("/api/v1/products/999999", json={"name": "x"})
@@ -217,3 +226,68 @@ def test_delete_product_in_use_is_409_and_no_ref_is_204():
     free_pid = _seed_product("SKU-FREE")
     deleted = client.delete(f"/api/v1/products/{free_pid}")
     assert deleted.status_code == 204
+
+
+def test_import_upsert_products_create_update_skip():
+    client = _client()
+
+    first = client.post(
+        "/api/v1/products/import-upsert",
+        json={
+            "items": [
+                {
+                    "legacy_code": "LEG-100",
+                    "legacy_unit_code": "U-100",
+                    "name": "Imported Product",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                    "pricing_basis_default": "uom_count",
+                }
+            ]
+        },
+    )
+    assert first.status_code == 200
+    assert first.json()["total"] == 1
+    assert first.json()["created"] == 1
+    assert first.json()["updated"] == 0
+    assert first.json()["skipped"] == 0
+
+    second = client.post(
+        "/api/v1/products/import-upsert",
+        json={
+            "items": [
+                {
+                    "legacy_code": "LEG-100",
+                    "legacy_unit_code": "U-200",
+                    "name": "Imported Product Updated",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                    "pricing_basis_default": "uom_count",
+                }
+            ]
+        },
+    )
+    assert second.status_code == 200
+    assert second.json()["created"] == 0
+    assert second.json()["updated"] == 1
+
+    third = client.post(
+        "/api/v1/products/import-upsert",
+        json={
+            "items": [
+                {
+                    "legacy_code": "LEG-100",
+                    "legacy_unit_code": "U-200",
+                    "name": "Imported Product Updated",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                    "pricing_basis_default": "uom_count",
+                }
+            ]
+        },
+    )
+    assert third.status_code == 200
+    assert third.json()["skipped"] == 1

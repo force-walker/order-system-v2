@@ -15,6 +15,7 @@ def test_openapi_error_contracts_for_core_apis():
     # products
     assert "409" in _responses("/api/v1/products", "post")
     assert "422" in _responses("/api/v1/products", "post")
+    assert "422" in _responses("/api/v1/products/import-upsert", "post")
     assert "404" in _responses("/api/v1/products/{product_id}/archive", "post")
     assert "404" in _responses("/api/v1/products/{product_id}/unarchive", "post")
     assert "404" in _responses("/api/v1/products/{product_id}", "delete")
@@ -146,6 +147,10 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     order_response_props = spec["components"]["schemas"]["OrderResponse"]["properties"]
     assert "shipped_date" in order_response_props
+
+    product_response_props = spec["components"]["schemas"]["ProductResponse"]["properties"]
+    assert "legacy_code" in product_response_props
+    assert "legacy_unit_code" in product_response_props
 
     cancel_reason_schema = spec["components"]["schemas"].get("OrderCancelReasonCode")
     assert cancel_reason_schema is not None

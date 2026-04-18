@@ -7,6 +7,8 @@ from app.models.entities import PricingBasis
 
 class ProductCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
+    legacy_unit_code: str | None = Field(default=None, min_length=1, max_length=64)
     order_uom: str = Field(min_length=1, max_length=32)
     purchase_uom: str = Field(min_length=1, max_length=32)
     invoice_uom: str = Field(min_length=1, max_length=32)
@@ -19,6 +21,8 @@ class ProductCreateRequest(BaseModel):
 
 class ProductUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
+    legacy_unit_code: str | None = Field(default=None, min_length=1, max_length=64)
     order_uom: str | None = Field(default=None, min_length=1, max_length=32)
     purchase_uom: str | None = Field(default=None, min_length=1, max_length=32)
     invoice_uom: str | None = Field(default=None, min_length=1, max_length=32)
@@ -30,6 +34,8 @@ class ProductUpdateRequest(BaseModel):
 class ProductResponse(BaseModel):
     id: int
     sku: str
+    legacy_code: str | None
+    legacy_unit_code: str | None
     name: str
     order_uom: str
     purchase_uom: str
@@ -47,6 +53,8 @@ class ProductResponse(BaseModel):
 class ProductBulkCreateItem(BaseModel):
     sku: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
+    legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
+    legacy_unit_code: str | None = Field(default=None, min_length=1, max_length=64)
     order_uom: str = Field(min_length=1, max_length=32)
     purchase_uom: str = Field(min_length=1, max_length=32)
     invoice_uom: str = Field(min_length=1, max_length=32)
@@ -62,6 +70,8 @@ class ProductBulkCreateRequest(BaseModel):
 class ProductBulkUpdateItem(BaseModel):
     id: int = Field(gt=0)
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
+    legacy_unit_code: str | None = Field(default=None, min_length=1, max_length=64)
     order_uom: str | None = Field(default=None, min_length=1, max_length=32)
     purchase_uom: str | None = Field(default=None, min_length=1, max_length=32)
     invoice_uom: str | None = Field(default=None, min_length=1, max_length=32)
@@ -97,4 +107,30 @@ class BulkOperationSummary(BaseModel):
 
 class ProductBulkOperationResponse(BaseModel):
     summary: BulkOperationSummary
+    errors: list[BulkOperationError] = Field(default_factory=list)
+
+
+class ProductImportItem(BaseModel):
+    legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
+    legacy_unit_code: str | None = Field(default=None, min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    order_uom: str = Field(min_length=1, max_length=32)
+    purchase_uom: str = Field(min_length=1, max_length=32)
+    invoice_uom: str = Field(min_length=1, max_length=32)
+    is_catch_weight: bool = False
+    weight_capture_required: bool = False
+    pricing_basis_default: PricingBasis = PricingBasis.uom_count
+    active: bool = True
+
+
+class ProductImportRequest(BaseModel):
+    items: list[ProductImportItem] = Field(min_length=1, max_length=2000)
+
+
+class ProductImportResult(BaseModel):
+    total: int
+    created: int
+    updated: int
+    skipped: int
+    failed: int
     errors: list[BulkOperationError] = Field(default_factory=list)
