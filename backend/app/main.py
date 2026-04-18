@@ -17,6 +17,7 @@ from app.api.routes_order_item_allocations import router as order_item_allocatio
 from app.api.routes_orders import router as orders_router
 from app.api.routes_products import router as products_router
 from app.api.routes_purchase_results import router as purchase_results_router
+from app.api.routes_reports import router as reports_router
 from app.api.routes_supplier_product_mappings import router as supplier_product_mappings_router
 from app.api.routes_suppliers import router as suppliers_router
 from app.core.exception_mapping import map_integrity_error
@@ -117,4 +118,5 @@ app.include_router(orders_router)
 app.include_router(allocations_router)
 app.include_router(purchase_results_router)
 app.include_router(invoices_router)
+app.include_router(reports_router)
 app.include_router(batch_router)
