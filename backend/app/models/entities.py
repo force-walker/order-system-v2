@@ -132,6 +132,7 @@ class OrderItem(Base):
     order_uom_type: Mapped[PricingBasis] = mapped_column(Enum(PricingBasis, name="pricingbasis"), default=PricingBasis.uom_count)
     estimated_weight_kg: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     actual_weight_kg: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
+    shipped_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     target_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     price_ceiling: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     stockout_policy: Mapped[StockoutPolicy | None] = mapped_column(Enum(StockoutPolicy, name="stockoutpolicy"), nullable=True)

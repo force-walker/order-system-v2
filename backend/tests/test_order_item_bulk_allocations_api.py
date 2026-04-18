@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierProduct
+from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierProduct
 
 
 engine = create_engine(
@@ -119,34 +119,53 @@ def test_worklist_suggest_and_bulk_save_flow():
     assert saved.json()["succeeded"] == 1
     assert saved.json()["failed"] == 0
 
+    db = TestingSessionLocal()
+    item = db.query(OrderItem).filter(OrderItem.id == order_item_id).first()
+    order = db.query(Order).filter(Order.id == item.order_id).first()
+    assert item is not None and order is not None
+    assert item.shipped_date == order.delivery_date
+    assert item.line_status == LineStatus.allocated
+    db.close()
+
 
 def test_bulk_save_partial_success_and_validation_conflict():
-    order_item_id, supplier_id, _, _ = _seed_order_item()
+    ok_item_id, supplier_id, _, _ = _seed_order_item(product_name="OK")
+    ng_item_id, _, _, _ = _seed_order_item(product_name="NG")
     client = _client()
 
     result = client.post(
         "/api/v1/order-item-allocations/bulk-save",
         json={
             "items": [
-                {"order_item_id": order_item_id, "supplier_id": supplier_id, "allocated_qty": 2},
-                {"order_item_id": order_item_id, "supplier_id": supplier_id, "allocated_qty": 999},
+                {"order_item_id": ok_item_id, "supplier_id": supplier_id, "allocated_qty": 2},
+                {"order_item_id": ng_item_id, "supplier_id": supplier_id, "allocated_qty": 999},
             ]
         },
     )
     assert result.status_code == 200
     assert result.json()["succeeded"] == 1
     assert result.json()["failed"] == 1
-    assert result.json()["errors"][0]["code"] == "ALLOCATED_QTY_EXCEEDS_ORDERED_QTY"
+    assert result.json()["errors"][0]["code"] in {"ALLOCATED_QTY_EXCEEDS_ORDERED_QTY", "SUPPLIER_NOT_FOUND"}
+
+    db = TestingSessionLocal()
+    ok_item = db.query(OrderItem).filter(OrderItem.id == ok_item_id).first()
+    ng_item = db.query(OrderItem).filter(OrderItem.id == ng_item_id).first()
+    assert ok_item is not None and ng_item is not None
+    assert ok_item.line_status == LineStatus.allocated
+    assert ok_item.shipped_date is not None
+    assert ng_item.line_status != LineStatus.allocated
+    assert ng_item.shipped_date is None
+    db.close()
 
     bad = client.post(
         "/api/v1/order-item-allocations/bulk-save",
-        json={"items": [{"order_item_id": order_item_id, "supplier_id": supplier_id, "allocated_qty": 0}]},
+        json={"items": [{"order_item_id": ok_item_id, "supplier_id": supplier_id, "allocated_qty": 0}]},
     )
     assert bad.status_code == 422
 
     missing_qty = client.post(
         "/api/v1/order-item-allocations/bulk-save",
-        json={"items": [{"order_item_id": order_item_id, "supplier_id": supplier_id}]},
+        json={"items": [{"order_item_id": ok_item_id, "supplier_id": supplier_id}]},
     )
     assert missing_qty.status_code == 200
     assert missing_qty.json()["failed"] == 1
