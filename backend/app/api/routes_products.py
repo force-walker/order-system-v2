@@ -93,7 +93,36 @@ def create_product(payload: ProductCreateRequest, db: Session = Depends(get_db))
         sku=sku,
         name=payload.name,
         legacy_code=payload.legacy_code,
+        category_code=payload.category_code,
+        product_type_code=payload.product_type_code,
+        name_kana=payload.name_kana,
+        name_kana_key=payload.name_kana_key,
         legacy_unit_code=payload.legacy_unit_code,
+        pack_size=payload.pack_size,
+        tax_category_code=payload.tax_category_code,
+        inventory_category_code=payload.inventory_category_code,
+        owner_code=payload.owner_code,
+        origin_code=payload.origin_code,
+        jan_code=payload.jan_code,
+        sales_price=payload.sales_price,
+        sales_price_1=payload.sales_price_1,
+        sales_price_2=payload.sales_price_2,
+        sales_price_3=payload.sales_price_3,
+        sales_price_4=payload.sales_price_4,
+        sales_price_5=payload.sales_price_5,
+        sales_price_6=payload.sales_price_6,
+        purchase_price=payload.purchase_price,
+        inventory_price=payload.inventory_price,
+        list_price=payload.list_price,
+        tax_rate_code=payload.tax_rate_code,
+        handling_category_code=payload.handling_category_code,
+        name_en=payload.name_en,
+        name_zh_hk=payload.name_zh_hk,
+        customs_reference_price=payload.customs_reference_price,
+        customs_origin_text=payload.customs_origin_text,
+        remarks=payload.remarks,
+        chayafuda_flag=payload.chayafuda_flag,
+        application_category_code=payload.application_category_code,
         order_uom=payload.order_uom,
         purchase_uom=payload.purchase_uom,
         invoice_uom=payload.invoice_uom,
@@ -286,9 +315,17 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
     skipped = 0
     errors: list[BulkOperationError] = []
 
+    seen_legacy_codes: set[str] = set()
+
     for idx, item in enumerate(payload.items):
         row = None
         item_ref = item.legacy_code or item.name
+
+        if item.legacy_code:
+            if item.legacy_code in seen_legacy_codes:
+                errors.append(BulkOperationError(index=idx, itemRef=item_ref, code="DUPLICATE_LEGACY_CODE_IN_PAYLOAD", message="legacy_code duplicated in import payload"))
+                continue
+            seen_legacy_codes.add(item.legacy_code)
 
         if item.legacy_code:
             matches = db.query(Product).filter(Product.legacy_code == item.legacy_code).all()
@@ -312,7 +349,36 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
                 sku=sku,
                 name=item.name,
                 legacy_code=item.legacy_code,
+                category_code=item.category_code,
+                product_type_code=item.product_type_code,
+                name_kana=item.name_kana,
+                name_kana_key=item.name_kana_key,
                 legacy_unit_code=item.legacy_unit_code,
+                pack_size=item.pack_size,
+                tax_category_code=item.tax_category_code,
+                inventory_category_code=item.inventory_category_code,
+                owner_code=item.owner_code,
+                origin_code=item.origin_code,
+                jan_code=item.jan_code,
+                sales_price=item.sales_price,
+                sales_price_1=item.sales_price_1,
+                sales_price_2=item.sales_price_2,
+                sales_price_3=item.sales_price_3,
+                sales_price_4=item.sales_price_4,
+                sales_price_5=item.sales_price_5,
+                sales_price_6=item.sales_price_6,
+                purchase_price=item.purchase_price,
+                inventory_price=item.inventory_price,
+                list_price=item.list_price,
+                tax_rate_code=item.tax_rate_code,
+                handling_category_code=item.handling_category_code,
+                name_en=item.name_en,
+                name_zh_hk=item.name_zh_hk,
+                customs_reference_price=item.customs_reference_price,
+                customs_origin_text=item.customs_origin_text,
+                remarks=item.remarks,
+                chayafuda_flag=item.chayafuda_flag,
+                application_category_code=item.application_category_code,
                 order_uom=item.order_uom,
                 purchase_uom=item.purchase_uom,
                 invoice_uom=item.invoice_uom,
@@ -327,10 +393,42 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
             created += 1
             continue
 
+        def _num(v):
+            return float(v) if v is not None else None
+
         unchanged = (
             row.name == item.name
             and row.legacy_code == item.legacy_code
+            and row.category_code == item.category_code
+            and row.product_type_code == item.product_type_code
+            and row.name_kana == item.name_kana
+            and row.name_kana_key == item.name_kana_key
             and row.legacy_unit_code == item.legacy_unit_code
+            and row.pack_size == item.pack_size
+            and row.tax_category_code == item.tax_category_code
+            and row.inventory_category_code == item.inventory_category_code
+            and row.owner_code == item.owner_code
+            and row.origin_code == item.origin_code
+            and row.jan_code == item.jan_code
+            and _num(row.sales_price) == item.sales_price
+            and _num(row.sales_price_1) == item.sales_price_1
+            and _num(row.sales_price_2) == item.sales_price_2
+            and _num(row.sales_price_3) == item.sales_price_3
+            and _num(row.sales_price_4) == item.sales_price_4
+            and _num(row.sales_price_5) == item.sales_price_5
+            and _num(row.sales_price_6) == item.sales_price_6
+            and _num(row.purchase_price) == item.purchase_price
+            and _num(row.inventory_price) == item.inventory_price
+            and _num(row.list_price) == item.list_price
+            and row.tax_rate_code == item.tax_rate_code
+            and row.handling_category_code == item.handling_category_code
+            and row.name_en == item.name_en
+            and row.name_zh_hk == item.name_zh_hk
+            and _num(row.customs_reference_price) == item.customs_reference_price
+            and row.customs_origin_text == item.customs_origin_text
+            and row.remarks == item.remarks
+            and row.chayafuda_flag == item.chayafuda_flag
+            and row.application_category_code == item.application_category_code
             and row.order_uom == item.order_uom
             and row.purchase_uom == item.purchase_uom
             and row.invoice_uom == item.invoice_uom
@@ -345,7 +443,36 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
 
         row.name = item.name
         row.legacy_code = item.legacy_code
+        row.category_code = item.category_code
+        row.product_type_code = item.product_type_code
+        row.name_kana = item.name_kana
+        row.name_kana_key = item.name_kana_key
         row.legacy_unit_code = item.legacy_unit_code
+        row.pack_size = item.pack_size
+        row.tax_category_code = item.tax_category_code
+        row.inventory_category_code = item.inventory_category_code
+        row.owner_code = item.owner_code
+        row.origin_code = item.origin_code
+        row.jan_code = item.jan_code
+        row.sales_price = item.sales_price
+        row.sales_price_1 = item.sales_price_1
+        row.sales_price_2 = item.sales_price_2
+        row.sales_price_3 = item.sales_price_3
+        row.sales_price_4 = item.sales_price_4
+        row.sales_price_5 = item.sales_price_5
+        row.sales_price_6 = item.sales_price_6
+        row.purchase_price = item.purchase_price
+        row.inventory_price = item.inventory_price
+        row.list_price = item.list_price
+        row.tax_rate_code = item.tax_rate_code
+        row.handling_category_code = item.handling_category_code
+        row.name_en = item.name_en
+        row.name_zh_hk = item.name_zh_hk
+        row.customs_reference_price = item.customs_reference_price
+        row.customs_origin_text = item.customs_origin_text
+        row.remarks = item.remarks
+        row.chayafuda_flag = item.chayafuda_flag
+        row.application_category_code = item.application_category_code
         row.order_uom = item.order_uom
         row.purchase_uom = item.purchase_uom
         row.invoice_uom = item.invoice_uom
