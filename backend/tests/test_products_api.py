@@ -237,7 +237,10 @@ def test_import_upsert_products_create_update_skip():
             "items": [
                 {
                     "legacy_code": "LEG-100",
+                    "category_code": "CAT01",
+                    "product_type_code": "TYPE01",
                     "legacy_unit_code": "U-100",
+                    "pack_size": 10,
                     "name": "Imported Product",
                     "order_uom": "count",
                     "purchase_uom": "count",
@@ -259,7 +262,10 @@ def test_import_upsert_products_create_update_skip():
             "items": [
                 {
                     "legacy_code": "LEG-100",
+                    "category_code": "CAT02",
+                    "product_type_code": "TYPE02",
                     "legacy_unit_code": "U-200",
+                    "pack_size": 12,
                     "name": "Imported Product Updated",
                     "order_uom": "count",
                     "purchase_uom": "count",
@@ -279,7 +285,10 @@ def test_import_upsert_products_create_update_skip():
             "items": [
                 {
                     "legacy_code": "LEG-100",
+                    "category_code": "CAT02",
+                    "product_type_code": "TYPE02",
                     "legacy_unit_code": "U-200",
+                    "pack_size": 12,
                     "name": "Imported Product Updated",
                     "order_uom": "count",
                     "purchase_uom": "count",
@@ -291,3 +300,31 @@ def test_import_upsert_products_create_update_skip():
     )
     assert third.status_code == 200
     assert third.json()["skipped"] == 1
+
+    dup_payload = client.post(
+        "/api/v1/products/import-upsert",
+        json={
+            "items": [
+                {
+                    "legacy_code": "DUP-01",
+                    "name": "Dup A",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                    "pricing_basis_default": "uom_count",
+                },
+                {
+                    "legacy_code": "DUP-01",
+                    "name": "Dup B",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                    "pricing_basis_default": "uom_count",
+                },
+            ]
+        },
+    )
+    assert dup_payload.status_code == 200
+    assert dup_payload.json()["failed"] == 1
+    assert dup_payload.json()["errors"][0]["code"] == "DUPLICATE_LEGACY_CODE_IN_PAYLOAD"
+    assert "legacy_code" in dup_payload.json()["errors"][0]["message"]

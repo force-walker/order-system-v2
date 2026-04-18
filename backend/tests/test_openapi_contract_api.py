@@ -151,6 +151,9 @@ def test_openapi_phase2_query_filters_are_exposed():
     product_response_props = spec["components"]["schemas"]["ProductResponse"]["properties"]
     assert "legacy_code" in product_response_props
     assert "legacy_unit_code" in product_response_props
+    assert "category_code" in product_response_props
+    assert "sales_price_6" in product_response_props
+    assert "application_category_code" in product_response_props
 
     cancel_reason_schema = spec["components"]["schemas"].get("OrderCancelReasonCode")
     assert cancel_reason_schema is not None
