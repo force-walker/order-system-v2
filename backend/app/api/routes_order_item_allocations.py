@@ -73,6 +73,7 @@ def list_order_item_allocation_work_items(
                 product_name=product.name,
                 ordered_qty=float(item.ordered_qty),
                 delivery_date=order.delivery_date,
+                shipped_date=item.shipped_date,
                 allocation_status=("allocated" if has_alloc else "unallocated"),
                 allocated_supplier_id=(alloc.final_supplier_id if has_alloc else None),
                 allocated_qty=(float(alloc.final_qty) if has_alloc else None),

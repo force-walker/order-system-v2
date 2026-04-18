@@ -11,6 +11,7 @@ class OrderItemAllocationWorkItem(BaseModel):
     product_name: str
     ordered_qty: float
     delivery_date: date
+    shipped_date: date | None = None
     allocation_status: str
     allocated_supplier_id: int | None = None
     allocated_qty: float | None = None

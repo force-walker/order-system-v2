@@ -13,6 +13,7 @@ export type OrderItemAllocationWorkItem = {
   productName: string;
   orderedQty: number;
   deliveryDate: string;
+  shippedDate: string | null;
   allocationStatus: 'allocated' | 'unallocated' | string;
   proposedSupplierId: number | null;
   proposedQty: number | null;
@@ -62,6 +63,7 @@ type ApiWorkItem = {
   product_name: string;
   ordered_qty: number;
   delivery_date: string;
+  shipped_date: string | null;
   allocation_status: string;
   allocated_supplier_id: number | null;
   allocated_qty: number | null;
@@ -153,6 +155,7 @@ export const listOrderItemAllocationWorkItems = async (params: {
     productName: row.product_name,
     orderedQty: row.ordered_qty,
     deliveryDate: row.delivery_date,
+    shippedDate: row.shipped_date,
     allocationStatus: row.allocation_status,
     proposedSupplierId: row.allocated_supplier_id,
     proposedQty: row.allocated_qty,

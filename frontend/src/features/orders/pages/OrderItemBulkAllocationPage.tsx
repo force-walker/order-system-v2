@@ -255,21 +255,24 @@ export const OrderItemBulkAllocationPage = () => {
     try {
       const result = await bulkSaveOrderItemAllocations(payload);
       const errorById = new Map(result.errors.map((e) => [e.orderItemId, `${e.code}: ${e.message}`]));
+
+      await load();
+
       setEditById((prev) => {
         const next = { ...prev };
         Object.entries(next).forEach(([id, row]) => {
-          next[Number(id)] = { ...row, rowError: errorById.get(Number(id)) };
+          const nId = Number(id);
+          const rowError = errorById.get(nId);
+          next[nId] = { ...row, rowError, selected: Boolean(rowError) };
         });
         return next;
       });
 
       setToast(
         result.failed > 0
-          ? { type: 'error', message: `一括保存は部分成功です（成功 ${result.succeeded} / 失敗 ${result.failed}）。` }
-          : { type: 'success', message: `一括保存に成功しました（${result.succeeded}件）。` },
+          ? { type: 'error', message: `一括保存は部分成功です（成功 ${result.succeeded} / 失敗 ${result.failed}）。成功行は引当済/出荷日反映済みです。` }
+          : { type: 'success', message: `一括保存に成功しました（成功 ${result.succeeded} / 失敗 ${result.failed}）。` },
       );
-
-      await load();
     } catch (e) {
       const base = toActionableMessage(e, '一括保存に失敗しました。');
       const extra = base.includes('422') || base.includes('validation')
@@ -403,6 +406,8 @@ export const OrderItemBulkAllocationPage = () => {
                   </th>
                   <th className="col-order-no" onClick={() => onSort('orderNo')} style={{ cursor: 'pointer' }}>{sortLabel('orderNo', '注文番号')}</th>
                   <th className="col-delivery-date" onClick={() => onSort('deliveryDate')} style={{ cursor: 'pointer' }}>{sortLabel('deliveryDate', '納品日')}</th>
+                  <th>出荷日</th>
+                  <th>状態</th>
                   <th className="col-customer" onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>{sortLabel('manualSupplierId', '手動仕入先')}</th>
@@ -444,6 +449,12 @@ export const OrderItemBulkAllocationPage = () => {
                         )}
                       </td>
                       <td className={`col-delivery-date ${isNonTomorrow ? 'delivery-warning' : ''}`}>{row.deliveryDate}</td>
+                      <td>{row.shippedDate ?? '-'}</td>
+                      <td>
+                        <span className={`status-badge status-${row.allocationStatus === 'allocated' ? 'allocated' : 'new'}`}>
+                          {row.allocationStatus === 'allocated' ? '引当済（allocated）' : '未割当'}
+                        </span>
+                      </td>
                       <td className="col-customer">{row.customerName}</td>
                       <td className="col-product">{row.productName}</td>
                       <td className={hasManualSupplier ? 'manual-supplier-marked' : ''}>
