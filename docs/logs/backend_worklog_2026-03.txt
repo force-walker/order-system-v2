@@ -192,3 +192,27 @@ Validation and quality checks performed:
 Current status:
 - Major DB/API requirement gaps addressed.
 - Backend is in a frontend-resume-ready state.
+
+## 2026-04-19
+
+[2026-04-19][OpenClawBot]
+PROGRESS:
+- 直近で完了したこと:
+  - PR #144 を required checks 全pass確認後にマージ（shipping report: `/api/v1/reports/shipping`、`shipped_date` + `mode`）
+  - PR #145 をマージ（migration期間向け product legacy fields + import/upsert 基盤）
+  - PR #146 をマージ（商品マスタ取込拡張）
+    - `products` に拡張列を追加（コード系string、金額系decimal(12,2)、入数int、備考text、FLG boolean）
+    - Import/Upsert の列マッピングを実装
+    - payload内重複（`legacy_code`）検知を追加
+    - 行別エラー（index/itemRef/code/message）を返す契約を維持
+    - OpenAPI契約テスト・products APIテストを更新
+- 運用ルール継続:
+  - 1機能1PR、branch-first/PR-only、required checks + 回帰確認後にマージ
+  - マージ後に作業ブランチ整理、`main` を `origin/main` に同期
+- 補足:
+  - 実行環境依存で `pytest` 未導入のため、ローカルでは compile/静的確認を実施し、最終判定はCI passで担保
+
+参照:
+- PR #144: <https://github.com/force-walker/order-system-v2/pull/144>
+- PR #145: <https://github.com/force-walker/order-system-v2/pull/145>
+- PR #146: <https://github.com/force-walker/order-system-v2/pull/146>
