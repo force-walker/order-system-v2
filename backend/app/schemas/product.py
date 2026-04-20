@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -240,7 +241,7 @@ class ProductImportItem(BaseModel):
 
 
 class ProductImportRequest(BaseModel):
-    items: list[ProductImportItem] = Field(min_length=1, max_length=2000)
+    items: list[dict[str, Any]] = Field(min_length=1, max_length=2000)
 
 
 class ProductImportResult(BaseModel):
