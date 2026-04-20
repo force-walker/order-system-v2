@@ -118,6 +118,7 @@ export const ProductListPage = () => {
             <label className="filter-label">
               <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> アーカイブを表示
             </label>
+            <Link to="/products/import" className="order-link">IMPORT</Link>
             <Link to="/products/new" className="order-link">+ 商品を作成</Link>
           </div>
         </div>
