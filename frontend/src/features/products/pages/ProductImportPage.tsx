@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import { importProductsUpsert } from 'features/products/services/productsService';
 import { ErrorState } from 'components/common/AsyncState';
 import { toActionableMessage } from 'shared/error';
@@ -50,8 +51,88 @@ const normalizeImportPayload = (raw: unknown): { items: Record<string, unknown>[
   throw new Error('JSON形式が不正です。配列 または { "items": [...] } 形式で入力してください。');
 };
 
+const parseCsvLine = (line: string): string[] => {
+  const cells: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (ch === ',' && !inQuotes) {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += ch;
+  }
+
+  cells.push(current.trim());
+  return cells;
+};
+
+const csvToItems = (text: string): Record<string, unknown>[] => {
+  const lines = text
+    .split(/\r?\n/)
+    .map((row) => row.trim())
+    .filter((row) => row.length > 0);
+
+  if (lines.length < 2) {
+    throw new Error('CSVはヘッダ行＋データ1行以上が必要です。');
+  }
+
+  const headers = parseCsvLine(lines[0]).map((h) => h.trim());
+  if (headers.some((h) => !h)) {
+    throw new Error('CSVヘッダに空列があります。');
+  }
+
+  const items: Record<string, unknown>[] = [];
+  for (let i = 1; i < lines.length; i += 1) {
+    const values = parseCsvLine(lines[i]);
+    const row: Record<string, unknown> = {};
+    headers.forEach((key, idx) => {
+      const raw = values[idx] ?? '';
+      row[key] = raw;
+    });
+    items.push(row);
+  }
+
+  return items;
+};
+
+const xlsxToItems = async (file: File): Promise<Record<string, unknown>[]> => {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const first = workbook.SheetNames[0];
+  if (!first) throw new Error('XLSXのシートが見つかりません。');
+
+  const sheet = workbook.Sheets[first];
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+    defval: '',
+    raw: false,
+  });
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('XLSXに取り込み対象データがありません。');
+  }
+
+  return rows;
+};
+
 export const ProductImportPage = () => {
-  const [jsonText, setJsonText] = useState(SAMPLE_JSON);
+  const [jsonText, setJsonText] = useState('');
+  const [selectedFileName, setSelectedFileName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [apiError, setApiError] = useState('');
@@ -62,6 +143,11 @@ export const ProductImportPage = () => {
   const onSubmit = async () => {
     setFormError('');
     setApiError('');
+
+    if (!jsonText.trim()) {
+      setFormError('入力データが空です。JSON貼り付けまたはCSV/XLSX読込を行ってください。');
+      return;
+    }
 
     let parsed: unknown;
     try {
@@ -90,6 +176,30 @@ export const ProductImportPage = () => {
     }
   };
 
+  const onSelectFile = async (file: File | null) => {
+    setFormError('');
+    if (!file) return;
+
+    const lower = file.name.toLowerCase();
+    setSelectedFileName(file.name);
+
+    try {
+      let items: Record<string, unknown>[] = [];
+      if (lower.endsWith('.csv')) {
+        const text = await file.text();
+        items = csvToItems(text);
+      } else if (lower.endsWith('.xlsx')) {
+        items = await xlsxToItems(file);
+      } else {
+        throw new Error('対応形式は .csv / .xlsx のみです。');
+      }
+
+      setJsonText(JSON.stringify({ items }, null, 2));
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'ファイル読込に失敗しました。');
+    }
+  };
+
   return (
     <section>
       <div className="card form-grid">
@@ -113,10 +223,22 @@ export const ProductImportPage = () => {
           </label>
           <label>
             入力方式 B（CSV / XLSX）
-            <input type="file" disabled />
-            <span className="subtle">後続対応予定（本PRでは未実装）</span>
+            <input
+              type="file"
+              accept=".csv,.xlsx"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                void onSelectFile(file);
+              }}
+            />
+            {selectedFileName ? <span className="subtle">選択中: {selectedFileName}</span> : <span className="subtle">CSV/XLSXを選択するとJSON欄へ変換反映します</span>}
           </label>
         </div>
+
+        <details>
+          <summary className="subtle">JSONサンプルを表示</summary>
+          <pre>{SAMPLE_JSON}</pre>
+        </details>
 
         {formError ? <p className="form-error">{formError}</p> : null}
         <div className="form-actions">
