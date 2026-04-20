@@ -84,6 +84,7 @@ class Product(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     sku: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     legacy_code: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    import_key: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
     legacy_unit_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     category_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     product_type_code: Mapped[str | None] = mapped_column(String(16), nullable=True)

@@ -94,6 +94,7 @@ class ProductResponse(BaseModel):
     id: int
     sku: str
     legacy_code: str | None
+    import_key: str | None
     category_code: str | None
     product_type_code: str | None
     name_kana: str | None
@@ -199,10 +200,11 @@ class ProductBulkOperationResponse(BaseModel):
 
 
 class ProductImportItem(BaseModel):
+    import_key: str | None = Field(default=None, min_length=1, max_length=128)
     legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
     category_code: str | None = Field(default=None, min_length=1, max_length=16)
     product_type_code: str | None = Field(default=None, min_length=1, max_length=16)
-    name: str = Field(min_length=1, max_length=255)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
     name_kana: str | None = Field(default=None, min_length=1, max_length=255)
     name_kana_key: str | None = Field(default=None, min_length=1, max_length=64)
     legacy_unit_code: str | None = Field(default=None, min_length=1, max_length=64)
@@ -231,17 +233,28 @@ class ProductImportItem(BaseModel):
     remarks: str | None = None
     chayafuda_flag: bool | None = None
     application_category_code: str | None = Field(default=None, min_length=1, max_length=16)
-    order_uom: str = Field(min_length=1, max_length=32)
-    purchase_uom: str = Field(min_length=1, max_length=32)
-    invoice_uom: str = Field(min_length=1, max_length=32)
-    is_catch_weight: bool = False
-    weight_capture_required: bool = False
-    pricing_basis_default: PricingBasis = PricingBasis.uom_count
-    active: bool = True
+    order_uom: str | None = Field(default=None, min_length=1, max_length=32)
+    purchase_uom: str | None = Field(default=None, min_length=1, max_length=32)
+    invoice_uom: str | None = Field(default=None, min_length=1, max_length=32)
+    is_catch_weight: bool | None = None
+    weight_capture_required: bool | None = None
+    pricing_basis_default: PricingBasis | None = None
+    active: bool | None = None
+
+    model_config = {"extra": "forbid"}
 
 
 class ProductImportRequest(BaseModel):
     items: list[dict[str, Any]] = Field(min_length=1, max_length=2000)
+
+
+class ProductImportError(BaseModel):
+    index: int
+    import_key: str | None = None
+    action: str
+    code: str
+    message: str
+    product_id: int | None = None
 
 
 class ProductImportResult(BaseModel):
@@ -250,4 +263,4 @@ class ProductImportResult(BaseModel):
     updated: int
     skipped: int
     failed: int
-    errors: list[BulkOperationError] = Field(default_factory=list)
+    errors: list[ProductImportError] = Field(default_factory=list)

@@ -99,6 +99,9 @@ def test_openapi_error_contracts_for_core_apis():
     assert "ApiErrorResponse" in spec["components"]["schemas"]
     assert "details" in spec["components"]["schemas"]["ApiErrorDetail"]["properties"]
 
+    import_error_props = spec["components"]["schemas"]["ProductImportError"]["properties"]
+    assert {"index", "import_key", "action", "code", "message", "product_id"}.issubset(import_error_props)
+
 
 def test_openapi_phase2_query_filters_are_exposed():
     spec = client.get("/openapi.json").json()
