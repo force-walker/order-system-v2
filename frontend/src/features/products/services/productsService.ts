@@ -7,4 +7,7 @@ export {
   archiveProduct,
   unarchiveProduct,
   deleteProduct,
+  importProductsUpsert,
+  type ProductImportUpsertRequest,
+  type ProductImportUpsertResult,
 } from 'features/orders/services/ordersService';

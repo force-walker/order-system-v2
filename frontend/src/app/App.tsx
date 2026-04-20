@@ -11,6 +11,7 @@ import { ProductListPage } from 'features/products/pages/ProductListPage';
 import { ProductDetailPage } from 'features/products/pages/ProductDetailPage';
 import { ProductCreatePage } from 'features/products/pages/ProductCreatePage';
 import { ProductEditPage } from 'features/products/pages/ProductEditPage';
+import { ProductImportPage } from 'features/products/pages/ProductImportPage';
 import { CustomerListPage } from 'features/customers/pages/CustomerListPage';
 import { CustomerDetailPage } from 'features/customers/pages/CustomerDetailPage';
 import { CustomerCreatePage } from 'features/customers/pages/CustomerCreatePage';
@@ -34,6 +35,7 @@ export const App = () => {
         <Route path="/reports/shipping" element={<ShippingReportPage />} />
         <Route path="/products" element={<ProductListPage />} />
         <Route path="/products/new" element={<ProductCreatePage />} />
+        <Route path="/products/import" element={<ProductImportPage />} />
         <Route path="/products/:productId" element={<ProductDetailPage />} />
         <Route path="/products/:productId/edit" element={<ProductEditPage />} />
         <Route path="/customers" element={<CustomerListPage />} />

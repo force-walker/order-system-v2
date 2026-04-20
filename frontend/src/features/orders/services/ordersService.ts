@@ -680,6 +680,44 @@ export const deleteProduct = async (productId: number): Promise<void> => {
   if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
 };
 
+export type ProductImportUpsertRequest = {
+  items: Record<string, unknown>[];
+};
+
+export type ProductImportUpsertResult = {
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  errors: Array<{
+    index: number;
+    itemRef?: string | null;
+    code: string;
+    message: string;
+  }>;
+};
+
+export const importProductsUpsert = async (payload: ProductImportUpsertRequest): Promise<ProductImportUpsertResult> => {
+  if (USE_MOCK) {
+    return {
+      total: payload.items.length,
+      created: payload.items.length,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+    };
+  }
+
+  const res = await fetchWithAuth('/api/v1/products/import-upsert', {
+    method: 'POST',
+    body: payload,
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  return (await res.json()) as ProductImportUpsertResult;
+};
+
 export const listOrders = async (staleDeliveryOnly = false): Promise<OrderSummary[]> =>
   (USE_MOCK ? listOrdersMock(staleDeliveryOnly) : listOrdersApi(staleDeliveryOnly));
 
