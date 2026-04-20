@@ -328,3 +328,84 @@ def test_import_upsert_products_create_update_skip():
     assert dup_payload.json()["failed"] == 1
     assert dup_payload.json()["errors"][0]["code"] == "DUPLICATE_LEGACY_CODE_IN_PAYLOAD"
     assert "legacy_code" in dup_payload.json()["errors"][0]["message"]
+
+
+def test_import_upsert_products_name_fallback_ambiguous_is_failed():
+    db = TestingSessionLocal()
+    db.add_all(
+        [
+            Product(
+                sku="SKU-NAME-1",
+                legacy_code="L-NAME-1",
+                name="Ambiguous Name",
+                order_uom="count",
+                purchase_uom="count",
+                invoice_uom="count",
+                pricing_basis_default=PricingBasis.uom_count,
+                active=True,
+            ),
+            Product(
+                sku="SKU-NAME-2",
+                legacy_code="L-NAME-2",
+                name="Ambiguous Name",
+                order_uom="count",
+                purchase_uom="count",
+                invoice_uom="count",
+                pricing_basis_default=PricingBasis.uom_count,
+                active=True,
+            ),
+        ]
+    )
+    db.commit()
+    db.close()
+
+    client = _client()
+    res = client.post(
+        "/api/v1/products/import-upsert",
+        json={
+            "items": [
+                {
+                    "name": "Ambiguous Name",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                }
+            ]
+        },
+    )
+
+    assert res.status_code == 200
+    assert res.json()["failed"] == 1
+    assert res.json()["errors"][0]["code"] == "NAME_AMBIGUOUS"
+
+
+def test_import_upsert_products_required_missing_is_row_error_and_partial_success():
+    client = _client()
+
+    res = client.post(
+        "/api/v1/products/import-upsert",
+        json={
+            "items": [
+                {
+                    "legacy_code": "LEG-INVALID-01",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                },
+                {
+                    "legacy_code": "LEG-VALID-01",
+                    "name": "Valid Imported Product",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                },
+            ]
+        },
+    )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["total"] == 2
+    assert body["created"] == 1
+    assert body["failed"] == 1
+    assert body["errors"][0]["code"] == "ITEM_VALIDATION_ERROR"
