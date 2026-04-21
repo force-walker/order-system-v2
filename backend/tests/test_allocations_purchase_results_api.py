@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product, SupplierAllocation
+from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierAllocation
 
 
 engine = create_engine(
@@ -96,6 +96,17 @@ def _seed_allocation(final_qty: float = 3, final_supplier_id: int | None = None,
     aid = alloc.id
     db.close()
     return aid
+
+
+def _seed_supplier(name: str = "Supplier A") -> int:
+    db = TestingSessionLocal()
+    row = Supplier(supplier_code=f"S-{datetime.now(UTC).timestamp()}", name=name, active=True)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    sid = row.id
+    db.close()
+    return sid
 
 
 def test_allocation_override_and_split():
@@ -289,3 +300,64 @@ def test_purchase_result_list_filters_supplier_and_paging():
     paged = client.get(f"/api/v1/purchase-results?allocation_id={aid}&limit=1&offset=1")
     assert paged.status_code == 200
     assert len(paged.json()) == 1
+
+
+def test_purchase_result_list_returns_supplier_and_invoice_defaults_and_filter_sort():
+    aid = _seed_allocation(final_qty=10)
+    supplier_a = _seed_supplier("Supplier A")
+    supplier_b = _seed_supplier("Supplier B")
+    client = _client()
+
+    c1 = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "supplier_id": supplier_a,
+            "purchased_qty": 1,
+            "purchased_uom": "count",
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert c1.status_code == 201
+
+    c2 = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "supplier_id": supplier_b,
+            "purchased_qty": 1,
+            "purchased_uom": "count",
+            "result_status": "partially_filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert c2.status_code == 201
+
+    listed = client.get("/api/v1/purchase-results")
+    assert listed.status_code == 200
+    row = listed.json()[0]
+    assert "supplier_id" in row
+    assert "supplier_name" in row
+    assert row["invoice_qty"] is None
+    assert row["invoice_uom"] is not None
+    assert row["received_qty"] == row["purchased_qty"]
+    assert row["order_uom"] == row["purchased_uom"]
+
+    filtered_supplier = client.get(f"/api/v1/purchase-results?supplier_id={supplier_a}")
+    assert filtered_supplier.status_code == 200
+    assert len(filtered_supplier.json()) == 1
+    assert filtered_supplier.json()[0]["supplier_id"] == supplier_a
+    assert filtered_supplier.json()[0]["supplier_name"] == "Supplier A"
+
+    cid = row["customer_id"]
+    pid = row["product_id"]
+    filtered_cp = client.get(f"/api/v1/purchase-results?customer_id={cid}&product_id={pid}")
+    assert filtered_cp.status_code == 200
+    assert len(filtered_cp.json()) == 2
+
+    sorted_supplier_desc = client.get("/api/v1/purchase-results?sort_by=supplier&sort_order=desc")
+    assert sorted_supplier_desc.status_code == 200
+    named_rows = [r for r in sorted_supplier_desc.json() if r.get("supplier_name") is not None]
+    names = [r["supplier_name"] for r in named_rows]
+    assert names == sorted(names, reverse=True)

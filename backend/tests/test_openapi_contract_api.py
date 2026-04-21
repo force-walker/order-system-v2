@@ -102,6 +102,9 @@ def test_openapi_error_contracts_for_core_apis():
     import_error_props = spec["components"]["schemas"]["ProductImportError"]["properties"]
     assert {"index", "import_key", "action", "code", "message", "product_id"}.issubset(import_error_props)
 
+    purchase_result_props = spec["components"]["schemas"]["PurchaseResultResponse"]["properties"]
+    assert {"supplier_id", "supplier_name", "invoice_qty", "invoice_uom", "received_qty", "order_uom"}.issubset(purchase_result_props)
+
 
 def test_openapi_phase2_query_filters_are_exposed():
     spec = client.get("/openapi.json").json()
@@ -110,7 +113,7 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert {"order_id", "status"}.issubset(invoice_list_params)
 
     purchase_list_params = {p["name"] for p in spec["paths"]["/api/v1/purchase-results"]["get"]["parameters"]}
-    assert {"allocation_id", "supplier_id", "limit", "offset"}.issubset(purchase_list_params)
+    assert {"allocation_id", "customer_id", "product_id", "supplier_id", "sort_by", "sort_order", "limit", "offset"}.issubset(purchase_list_params)
 
     supplier_list_params = {p["name"] for p in spec["paths"]["/api/v1/suppliers"]["get"]["parameters"]}
     assert {"q", "include_inactive", "active", "limit", "offset"}.issubset(supplier_list_params)
