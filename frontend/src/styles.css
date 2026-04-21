@@ -504,6 +504,20 @@ button:disabled { opacity: 0.6; }
 .purchase-result-table .col-invoice {
   width: 120px;
   max-width: 120px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.purchase-result-table .col-ordered {
+  text-align: center;
+  border-left: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
+}
+
+.purchase-result-table .col-invoice input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .purchase-result-table .col-customer,
