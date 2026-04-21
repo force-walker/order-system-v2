@@ -6,10 +6,10 @@ const buildTime = import.meta.env.VITE_APP_BUILD_TIME ?? 'local-build';
 
 export const AppLayout = () => {
   const location = useLocation();
-  const isBulkAllocationPage = location.pathname === '/orders/item-allocations';
+  const isWidePage = location.pathname === '/orders/item-allocations' || location.pathname === '/purchases';
 
   return (
-    <div className={`page ${isBulkAllocationPage ? 'page-wide' : ''}`}>
+    <div className={`page ${isWidePage ? 'page-wide' : ''}`}>
       <header className="header">
         <div>
           <h1>Order System v2 (Mockup)</h1>
