@@ -228,184 +228,165 @@ def test_delete_product_in_use_is_409_and_no_ref_is_204():
     assert deleted.status_code == 204
 
 
-def test_import_upsert_products_create_update_skip():
+def test_import_upsert_products_create_success():
     client = _client()
-
-    first = client.post(
+    res = client.post(
         "/api/v1/products/import-upsert",
         json={
             "items": [
                 {
-                    "legacy_code": "LEG-100",
-                    "category_code": "CAT01",
-                    "product_type_code": "TYPE01",
-                    "legacy_unit_code": "U-100",
-                    "pack_size": 10,
+                    "import_key": "IMP-001",
                     "name": "Imported Product",
                     "order_uom": "count",
                     "purchase_uom": "count",
                     "invoice_uom": "count",
-                    "pricing_basis_default": "uom_count",
                 }
             ]
         },
     )
-    assert first.status_code == 200
-    assert first.json()["total"] == 1
-    assert first.json()["created"] == 1
-    assert first.json()["updated"] == 0
-    assert first.json()["skipped"] == 0
-
-    second = client.post(
-        "/api/v1/products/import-upsert",
-        json={
-            "items": [
-                {
-                    "legacy_code": "LEG-100",
-                    "category_code": "CAT02",
-                    "product_type_code": "TYPE02",
-                    "legacy_unit_code": "U-200",
-                    "pack_size": 12,
-                    "name": "Imported Product Updated",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
-                    "pricing_basis_default": "uom_count",
-                }
-            ]
-        },
-    )
-    assert second.status_code == 200
-    assert second.json()["created"] == 0
-    assert second.json()["updated"] == 1
-
-    third = client.post(
-        "/api/v1/products/import-upsert",
-        json={
-            "items": [
-                {
-                    "legacy_code": "LEG-100",
-                    "category_code": "CAT02",
-                    "product_type_code": "TYPE02",
-                    "legacy_unit_code": "U-200",
-                    "pack_size": 12,
-                    "name": "Imported Product Updated",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
-                    "pricing_basis_default": "uom_count",
-                }
-            ]
-        },
-    )
-    assert third.status_code == 200
-    assert third.json()["skipped"] == 1
-
-    dup_payload = client.post(
-        "/api/v1/products/import-upsert",
-        json={
-            "items": [
-                {
-                    "legacy_code": "DUP-01",
-                    "name": "Dup A",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
-                    "pricing_basis_default": "uom_count",
-                },
-                {
-                    "legacy_code": "DUP-01",
-                    "name": "Dup B",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
-                    "pricing_basis_default": "uom_count",
-                },
-            ]
-        },
-    )
-    assert dup_payload.status_code == 200
-    assert dup_payload.json()["failed"] == 1
-    assert dup_payload.json()["errors"][0]["code"] == "DUPLICATE_LEGACY_CODE_IN_PAYLOAD"
-    assert "legacy_code" in dup_payload.json()["errors"][0]["message"]
-
-
-def test_import_upsert_products_name_fallback_ambiguous_is_failed():
-    db = TestingSessionLocal()
-    db.add_all(
-        [
-            Product(
-                sku="SKU-NAME-1",
-                legacy_code="L-NAME-1",
-                name="Ambiguous Name",
-                order_uom="count",
-                purchase_uom="count",
-                invoice_uom="count",
-                pricing_basis_default=PricingBasis.uom_count,
-                active=True,
-            ),
-            Product(
-                sku="SKU-NAME-2",
-                legacy_code="L-NAME-2",
-                name="Ambiguous Name",
-                order_uom="count",
-                purchase_uom="count",
-                invoice_uom="count",
-                pricing_basis_default=PricingBasis.uom_count,
-                active=True,
-            ),
-        ]
-    )
-    db.commit()
-    db.close()
-
-    client = _client()
-    res = client.post(
-        "/api/v1/products/import-upsert",
-        json={
-            "items": [
-                {
-                    "name": "Ambiguous Name",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
-                }
-            ]
-        },
-    )
-
     assert res.status_code == 200
-    assert res.json()["failed"] == 1
-    assert res.json()["errors"][0]["code"] == "NAME_AMBIGUOUS"
+    body = res.json()
+    assert body["total"] == 1
+    assert body["created"] == 1
+    assert body["updated"] == 0
+    assert body["failed"] == 0
 
 
-def test_import_upsert_products_required_missing_is_row_error_and_partial_success():
+def test_import_upsert_products_import_key_update_success():
     client = _client()
 
-    res = client.post(
+    created = client.post(
         "/api/v1/products/import-upsert",
         json={
             "items": [
                 {
-                    "legacy_code": "LEG-INVALID-01",
+                    "import_key": "IMP-UPD-001",
+                    "name": "Before Update",
                     "order_uom": "count",
                     "purchase_uom": "count",
                     "invoice_uom": "count",
-                },
-                {
-                    "legacy_code": "LEG-VALID-01",
-                    "name": "Valid Imported Product",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
-                },
+                }
             ]
         },
+    )
+    assert created.status_code == 200
+
+    updated = client.post(
+        "/api/v1/products/import-upsert",
+        json={"items": [{"import_key": "IMP-UPD-001", "name": "After Update"}]},
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["created"] == 0
+    assert body["updated"] == 1
+
+
+def test_import_upsert_products_create_required_missing_is_failed():
+    client = _client()
+    res = client.post(
+        "/api/v1/products/import-upsert",
+        json={"items": [{"import_key": "IMP-MISS-001", "name": "Missing UOM"}]},
     )
 
     assert res.status_code == 200
     body = res.json()
-    assert body["total"] == 2
-    assert body["created"] == 1
+    assert body["created"] == 0
     assert body["failed"] == 1
+    assert body["errors"][0]["action"] == "create"
+    assert body["errors"][0]["code"] == "REQUIRED_FIELDS_MISSING"
+
+
+def test_import_upsert_products_partial_update_keeps_unspecified_and_null_fields():
+    client = _client()
+
+    created = client.post(
+        "/api/v1/products/import-upsert",
+        json={
+            "items": [
+                {
+                    "import_key": "IMP-PARTIAL-001",
+                    "name": "Partial Base",
+                    "legacy_code": "LEG-BASE",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                }
+            ]
+        },
+    )
+    assert created.status_code == 200
+
+    updated = client.post(
+        "/api/v1/products/import-upsert",
+        json={"items": [{"import_key": "IMP-PARTIAL-001", "name": "Partial Updated", "legacy_code": ""}]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["updated"] == 1
+
+    listed = client.get("/api/v1/products?include_inactive=true")
+    rows = [r for r in listed.json() if r.get("import_key") == "IMP-PARTIAL-001"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["name"] == "Partial Updated"
+    assert row["legacy_code"] == "LEG-BASE"
+
+
+def test_import_upsert_products_duplicate_import_key_conflict_in_payload():
+    client = _client()
+    res = client.post(
+        "/api/v1/products/import-upsert",
+        json={
+            "items": [
+                {
+                    "import_key": "IMP-DUP-001",
+                    "name": "A",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                },
+                {
+                    "import_key": "IMP-DUP-001",
+                    "name": "B",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                },
+            ]
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["failed"] == 1
+    assert body["errors"][0]["code"] == "DUPLICATE_IMPORT_KEY_IN_PAYLOAD"
+
+
+def test_import_upsert_products_invalid_numeric_is_row_error_and_empty_string_is_null():
+    client = _client()
+    res = client.post(
+        "/api/v1/products/import-upsert",
+        json={
+            "items": [
+                {
+                    "import_key": "IMP-NUM-001",
+                    "name": "Num Test",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                    "sales_price": "not-number",
+                },
+                {
+                    "import_key": "IMP-NUM-002",
+                    "name": "Num Test2",
+                    "order_uom": "count",
+                    "purchase_uom": "count",
+                    "invoice_uom": "count",
+                    "sales_price": "",
+                },
+            ]
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["failed"] == 1
+    assert body["created"] == 1
     assert body["errors"][0]["code"] == "ITEM_VALIDATION_ERROR"

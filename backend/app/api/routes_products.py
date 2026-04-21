@@ -8,7 +8,7 @@ from app.core.exception_mapping import map_integrity_error
 from app.core.audit import AuditAction, write_audit_log
 from app.core.codegen import generate_next_code
 from app.db.session import get_db
-from app.models.entities import OrderItem, Product, SupplierProduct
+from app.models.entities import OrderItem, PricingBasis, Product, SupplierProduct
 from app.schemas.common import ApiErrorResponse
 from app.schemas.product import (
     BulkOperationError,
@@ -19,6 +19,7 @@ from app.schemas.product import (
     ProductBulkUpdateRequest,
     ProductBulkUpsertRequest,
     ProductCreateRequest,
+    ProductImportError,
     ProductImportItem,
     ProductImportRequest,
     ProductImportResult,
@@ -318,71 +319,157 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
     created = 0
     updated = 0
     skipped = 0
-    errors: list[BulkOperationError] = []
+    errors: list[ProductImportError] = []
 
-    seen_legacy_codes: set[str] = set()
+    seen_import_keys: set[str] = set()
 
-    def _num(v):
-        return float(v) if v is not None else None
+    def _append_row_error(
+        *,
+        idx: int,
+        import_key: str | None,
+        action: str,
+        code: str,
+        message: str,
+        product_id: int | None = None,
+    ) -> None:
+        errors.append(
+            ProductImportError(
+                index=idx,
+                import_key=import_key,
+                action=action,
+                code=code,
+                message=message,
+                product_id=product_id,
+            )
+        )
 
-    def _append_validation_error(idx: int, item_ref: str | None, exc: Exception) -> None:
-        if isinstance(exc, ValidationError):
+    def _normalize_raw_item(raw_item: dict) -> dict:
+        normalized = {}
+        for k, v in raw_item.items():
+            if isinstance(v, str) and v.strip() == "":
+                normalized[k] = None
+            else:
+                normalized[k] = v
+        return normalized
+
+    updatable_fields = {
+        "import_key",
+        "legacy_code",
+        "category_code",
+        "product_type_code",
+        "name",
+        "name_kana",
+        "name_kana_key",
+        "legacy_unit_code",
+        "pack_size",
+        "tax_category_code",
+        "inventory_category_code",
+        "owner_code",
+        "origin_code",
+        "jan_code",
+        "sales_price",
+        "sales_price_1",
+        "sales_price_2",
+        "sales_price_3",
+        "sales_price_4",
+        "sales_price_5",
+        "sales_price_6",
+        "purchase_price",
+        "inventory_price",
+        "list_price",
+        "tax_rate_code",
+        "handling_category_code",
+        "name_en",
+        "name_zh_hk",
+        "customs_reference_price",
+        "customs_origin_text",
+        "remarks",
+        "chayafuda_flag",
+        "application_category_code",
+        "order_uom",
+        "purchase_uom",
+        "invoice_uom",
+        "is_catch_weight",
+        "weight_capture_required",
+        "pricing_basis_default",
+        "active",
+    }
+
+    for idx, raw_item in enumerate(payload.items):
+        if not isinstance(raw_item, dict):
+            _append_row_error(idx=idx, import_key=None, action="create", code="ITEM_VALIDATION_ERROR", message="item must be an object")
+            continue
+
+        normalized = _normalize_raw_item(raw_item)
+        import_key = normalized.get("import_key")
+        if import_key is not None and not isinstance(import_key, str):
+            _append_row_error(idx=idx, import_key=None, action="create", code="ITEM_VALIDATION_ERROR", message="import_key must be a string")
+            continue
+
+        try:
+            item = ProductImportItem.model_validate(normalized)
+        except ValidationError as exc:
             detail_rows = []
             for err in exc.errors():
-                loc = ".".join(str(p) for p in err.get("loc", []))
+                loc = ".".join(str(part) for part in err.get("loc", []))
                 msg = err.get("msg", "invalid value")
                 detail_rows.append(f"{loc}: {msg}" if loc else msg)
             message = "; ".join(detail_rows) if detail_rows else "invalid import item"
-            errors.append(BulkOperationError(index=idx, itemRef=item_ref, code="ITEM_VALIDATION_ERROR", message=message))
-            return
-
-        errors.append(BulkOperationError(index=idx, itemRef=item_ref, code="ITEM_VALIDATION_ERROR", message="invalid import item"))
-
-    for idx, raw_item in enumerate(payload.items):
-        item_ref = None
-        try:
-            item = ProductImportItem.model_validate(raw_item)
-            item_ref = item.legacy_code or item.name
-        except Exception as exc:
-            if isinstance(raw_item, dict):
-                item_ref = raw_item.get("legacy_code") or raw_item.get("name")
-            _append_validation_error(idx, item_ref, exc)
+            _append_row_error(
+                idx=idx,
+                import_key=import_key,
+                action="create",
+                code="ITEM_VALIDATION_ERROR",
+                message=message,
+            )
             continue
 
-        if item.legacy_code:
-            if item.legacy_code in seen_legacy_codes:
-                errors.append(BulkOperationError(index=idx, itemRef=item_ref, code="DUPLICATE_LEGACY_CODE_IN_PAYLOAD", message="legacy_code duplicated in import payload"))
+        if item.import_key:
+            if item.import_key in seen_import_keys:
+                _append_row_error(
+                    idx=idx,
+                    import_key=item.import_key,
+                    action="create",
+                    code="DUPLICATE_IMPORT_KEY_IN_PAYLOAD",
+                    message="import_key duplicated in import payload",
+                )
                 continue
-            seen_legacy_codes.add(item.legacy_code)
+            seen_import_keys.add(item.import_key)
+
+        target = None
+        action = "create"
+        if item.import_key:
+            target = db.query(Product).filter(Product.import_key == item.import_key).first()
+            if target is not None:
+                action = "update"
+
+        if action == "create":
+            required_missing = [
+                name
+                for name in ("name", "order_uom", "purchase_uom", "invoice_uom")
+                if getattr(item, name) is None
+            ]
+            if required_missing:
+                _append_row_error(
+                    idx=idx,
+                    import_key=item.import_key,
+                    action="create",
+                    code="REQUIRED_FIELDS_MISSING",
+                    message=f"missing required fields for create: {', '.join(required_missing)}",
+                )
+                continue
 
         try:
             with db.begin_nested():
-                row = None
-
-                if item.legacy_code:
-                    matches = db.query(Product).filter(Product.legacy_code == item.legacy_code).all()
-                    if len(matches) > 1:
-                        errors.append(BulkOperationError(index=idx, itemRef=item_ref, code="LEGACY_CODE_CONFLICT", message="multiple products have same legacy_code"))
-                        continue
-                    if len(matches) == 1:
-                        row = matches[0]
-
-                if row is None:
-                    name_matches = db.query(Product).filter(Product.name == item.name).all()
-                    if len(name_matches) > 1:
-                        errors.append(BulkOperationError(index=idx, itemRef=item_ref, code="NAME_AMBIGUOUS", message="multiple products match by name"))
-                        continue
-                    if len(name_matches) == 1:
-                        row = name_matches[0]
-
-                if row is None:
+                if action == "create":
                     sku = generate_next_code(db, Product, "sku", prefix="SKU-")
                     row = Product(
                         sku=sku,
-                        name=item.name,
+                        import_key=item.import_key,
                         legacy_code=item.legacy_code,
                         category_code=item.category_code,
                         product_type_code=item.product_type_code,
+                        name=item.name,
                         name_kana=item.name_kana,
                         name_kana_key=item.name_kana_key,
                         legacy_unit_code=item.legacy_unit_code,
@@ -414,10 +501,10 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
                         order_uom=item.order_uom,
                         purchase_uom=item.purchase_uom,
                         invoice_uom=item.invoice_uom,
-                        is_catch_weight=item.is_catch_weight,
-                        weight_capture_required=item.weight_capture_required,
-                        pricing_basis_default=item.pricing_basis_default,
-                        active=item.active,
+                        is_catch_weight=item.is_catch_weight if item.is_catch_weight is not None else False,
+                        weight_capture_required=item.weight_capture_required if item.weight_capture_required is not None else False,
+                        pricing_basis_default=item.pricing_basis_default or PricingBasis.uom_count,
+                        active=True if item.active is None else item.active,
                     )
                     db.add(row)
                     db.flush()
@@ -425,99 +512,38 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
                     created += 1
                     continue
 
-                unchanged = (
-                    row.name == item.name
-                    and row.legacy_code == item.legacy_code
-                    and row.category_code == item.category_code
-                    and row.product_type_code == item.product_type_code
-                    and row.name_kana == item.name_kana
-                    and row.name_kana_key == item.name_kana_key
-                    and row.legacy_unit_code == item.legacy_unit_code
-                    and row.pack_size == item.pack_size
-                    and row.tax_category_code == item.tax_category_code
-                    and row.inventory_category_code == item.inventory_category_code
-                    and row.owner_code == item.owner_code
-                    and row.origin_code == item.origin_code
-                    and row.jan_code == item.jan_code
-                    and _num(row.sales_price) == item.sales_price
-                    and _num(row.sales_price_1) == item.sales_price_1
-                    and _num(row.sales_price_2) == item.sales_price_2
-                    and _num(row.sales_price_3) == item.sales_price_3
-                    and _num(row.sales_price_4) == item.sales_price_4
-                    and _num(row.sales_price_5) == item.sales_price_5
-                    and _num(row.sales_price_6) == item.sales_price_6
-                    and _num(row.purchase_price) == item.purchase_price
-                    and _num(row.inventory_price) == item.inventory_price
-                    and _num(row.list_price) == item.list_price
-                    and row.tax_rate_code == item.tax_rate_code
-                    and row.handling_category_code == item.handling_category_code
-                    and row.name_en == item.name_en
-                    and row.name_zh_hk == item.name_zh_hk
-                    and _num(row.customs_reference_price) == item.customs_reference_price
-                    and row.customs_origin_text == item.customs_origin_text
-                    and row.remarks == item.remarks
-                    and row.chayafuda_flag == item.chayafuda_flag
-                    and row.application_category_code == item.application_category_code
-                    and row.order_uom == item.order_uom
-                    and row.purchase_uom == item.purchase_uom
-                    and row.invoice_uom == item.invoice_uom
-                    and row.is_catch_weight == item.is_catch_weight
-                    and row.weight_capture_required == item.weight_capture_required
-                    and row.pricing_basis_default == item.pricing_basis_default
-                    and row.active == item.active
-                )
-                if unchanged:
+                changed = False
+                for field, value in normalized.items():
+                    if field not in updatable_fields or field == "sku":
+                        continue
+                    if value is None:
+                        continue
+                    if getattr(target, field) != value:
+                        setattr(target, field, value)
+                        changed = True
+
+                if not changed:
                     skipped += 1
                     continue
 
-                row.name = item.name
-                row.legacy_code = item.legacy_code
-                row.category_code = item.category_code
-                row.product_type_code = item.product_type_code
-                row.name_kana = item.name_kana
-                row.name_kana_key = item.name_kana_key
-                row.legacy_unit_code = item.legacy_unit_code
-                row.pack_size = item.pack_size
-                row.tax_category_code = item.tax_category_code
-                row.inventory_category_code = item.inventory_category_code
-                row.owner_code = item.owner_code
-                row.origin_code = item.origin_code
-                row.jan_code = item.jan_code
-                row.sales_price = item.sales_price
-                row.sales_price_1 = item.sales_price_1
-                row.sales_price_2 = item.sales_price_2
-                row.sales_price_3 = item.sales_price_3
-                row.sales_price_4 = item.sales_price_4
-                row.sales_price_5 = item.sales_price_5
-                row.sales_price_6 = item.sales_price_6
-                row.purchase_price = item.purchase_price
-                row.inventory_price = item.inventory_price
-                row.list_price = item.list_price
-                row.tax_rate_code = item.tax_rate_code
-                row.handling_category_code = item.handling_category_code
-                row.name_en = item.name_en
-                row.name_zh_hk = item.name_zh_hk
-                row.customs_reference_price = item.customs_reference_price
-                row.customs_origin_text = item.customs_origin_text
-                row.remarks = item.remarks
-                row.chayafuda_flag = item.chayafuda_flag
-                row.application_category_code = item.application_category_code
-                row.order_uom = item.order_uom
-                row.purchase_uom = item.purchase_uom
-                row.invoice_uom = item.invoice_uom
-                row.is_catch_weight = item.is_catch_weight
-                row.weight_capture_required = item.weight_capture_required
-                row.pricing_basis_default = item.pricing_basis_default
-                row.active = item.active
                 db.flush()
-                write_audit_log(db, entity_type="product", entity_id=row.id, action=AuditAction.UPDATE)
+                write_audit_log(db, entity_type="product", entity_id=target.id, action=AuditAction.UPDATE)
                 updated += 1
         except IntegrityError as exc:
             _, code, message = map_integrity_error(exc)
-            errors.append(BulkOperationError(index=idx, itemRef=item_ref, code=code, message=message))
+            product_id = target.id if target is not None else None
+            _append_row_error(idx=idx, import_key=item.import_key, action=action, code=code, message=message, product_id=product_id)
             continue
         except SQLAlchemyError:
-            errors.append(BulkOperationError(index=idx, itemRef=item_ref, code="DB_ERROR", message="database operation failed"))
+            product_id = target.id if target is not None else None
+            _append_row_error(
+                idx=idx,
+                import_key=item.import_key,
+                action=action,
+                code="DB_ERROR",
+                message="database operation failed",
+                product_id=product_id,
+            )
             continue
 
     db.commit()
