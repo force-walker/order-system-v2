@@ -301,16 +301,14 @@ export const PurchasePage = () => {
                   <th onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
                   <th>受注数量 + 受注単位</th>
-                  <th>受取数量 + 受注単位</th>
                   <th>請求数量 + 請求単位</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedRows.map((r) => {
+                {sortedRows.map((r, rowIndex) => {
                   const units = unitsByProductId[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
                   const edit = editByItemId[r.orderItemId];
                   const supplierName = r.manualSupplierId ? supplierNameById.get(r.manualSupplierId) ?? `仕入先#${r.manualSupplierId}` : '-';
-                  const receivedQty = r.manualQty ?? r.orderedQty;
 
                   return (
                     <tr key={r.orderItemId}>
@@ -329,14 +327,22 @@ export const PurchasePage = () => {
                       <td>{r.productName}</td>
                       <td>{supplierName}</td>
                       <td>{r.orderedQty} {units.orderUom}</td>
-                      <td>{receivedQty} {units.orderUom}</td>
                       <td>
                         <input
                           type="number"
                           min={0}
                           step="1"
+                          data-invoice-row={rowIndex}
                           value={edit?.invoiceQty ?? ''}
                           onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], invoiceQty: e.target.value, rowError: undefined } }))}
+                          onKeyDown={(e) => {
+                            const moveDown = e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey);
+                            if (!moveDown) return;
+                            const next = document.querySelector<HTMLInputElement>(`input[data-invoice-row="${rowIndex + 1}"]`);
+                            if (!next) return;
+                            e.preventDefault();
+                            next.focus();
+                          }}
                           placeholder=""
                         /> {units.invoiceUom}
                       </td>
