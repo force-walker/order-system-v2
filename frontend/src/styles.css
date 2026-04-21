@@ -495,6 +495,65 @@ button:disabled { opacity: 0.6; }
   background: #dcfce7;
 }
 
+.purchase-result-table .col-order-no {
+  width: 90px;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.purchase-result-table .col-order-no .order-link {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.purchase-result-table .col-ordered,
+.purchase-result-table .col-invoice {
+  width: 130px;
+  max-width: 130px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.purchase-result-table .col-invoice {
+  width: 260px;
+  max-width: 260px;
+}
+
+.purchase-result-table .col-ordered {
+  text-align: center;
+  border-left: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
+}
+
+.purchase-result-table .col-invoice {
+  text-align: left;
+  padding-right: 4px;
+}
+
+.purchase-result-table .col-invoice input {
+  width: 180px;
+  max-width: 180px;
+  box-sizing: border-box;
+  margin-right: 8px;
+}
+
+.purchase-result-table .col-customer,
+.purchase-result-table .col-product {
+  min-width: 240px;
+}
+
+.purchase-result-table .col-supplier {
+  min-width: 110px;
+  border-left: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
+}
+
 .bulk-allocation-table .delivery-warning {
   color: #b91c1c;
   font-weight: 700;

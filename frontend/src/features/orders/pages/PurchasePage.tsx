@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { listOrderItemAllocationWorkItems, type OrderItemAllocationWorkItem } from 'features/orders/services/orderItemAllocationsService';
+import {
+  listOrderItemAllocationWorkItems,
+  listSupplierFilterOptions,
+  type OrderItemAllocationWorkItem,
+  type SupplierFilterOption,
+} from 'features/orders/services/orderItemAllocationsService';
 import { bulkUpsertPurchaseResults } from 'features/orders/services/purchaseService';
 import { getProductDetail } from 'features/products/services/productsService';
 import { toActionableMessage } from 'shared/error';
 
 type RowEdit = {
   selected: boolean;
-  receivedQty: string;
   invoiceQty: string;
   rowError?: string;
 };
@@ -18,20 +22,44 @@ type UnitPair = {
   invoiceUom: string;
 };
 
+type SortKey = 'customerName' | 'productName' | 'supplierName';
+type SortDirection = 'asc' | 'desc';
+
 export const PurchasePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rows, setRows] = useState<OrderItemAllocationWorkItem[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierFilterOption[]>([]);
   const [unitsByProductId, setUnitsByProductId] = useState<Record<number, UnitPair>>({});
   const [editByItemId, setEditByItemId] = useState<Record<number, RowEdit>>({});
   const [saving, setSaving] = useState(false);
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [productFilter, setProductFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('customerName');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
+
+  const supplierNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    suppliers.forEach((s) => {
+      const name = s.label.includes(':') ? s.label.split(':').slice(1).join(':').trim() : s.label;
+      map.set(s.id, name);
+    });
+    return map;
+  }, [suppliers]);
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const all = await listOrderItemAllocationWorkItems({ unallocatedOnly: false });
+      const [all, supplierOptions] = await Promise.all([
+        listOrderItemAllocationWorkItems({ unallocatedOnly: false }),
+        listSupplierFilterOptions(),
+      ]);
+      setSuppliers(supplierOptions);
+
       const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
 
       const raw = sessionStorage.getItem('osv2_purchase_target_allocations');
@@ -65,8 +93,7 @@ export const PurchasePage = () => {
             r.orderItemId,
             {
               selected: prev[r.orderItemId]?.selected ?? false,
-              receivedQty: prev[r.orderItemId]?.receivedQty ?? String(r.manualQty ?? r.orderedQty),
-              invoiceQty: prev[r.orderItemId]?.invoiceQty ?? String(r.manualQty ?? r.orderedQty),
+              invoiceQty: prev[r.orderItemId]?.invoiceQty ?? '',
               rowError: undefined,
             },
           ]),
@@ -89,6 +116,93 @@ export const PurchasePage = () => {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  const filteredRows = useMemo(() => {
+    const customerQ = customerFilter.trim().toLowerCase();
+    const productQ = productFilter.trim().toLowerCase();
+    const supplierQ = supplierFilter.trim().toLowerCase();
+
+    return rows.filter((r) => {
+      const supplierName = r.manualSupplierId ? supplierNameById.get(r.manualSupplierId) ?? `仕入先#${r.manualSupplierId}` : '';
+      if (customerQ && !r.customerName.toLowerCase().includes(customerQ)) return false;
+      if (productQ && !r.productName.toLowerCase().includes(productQ)) return false;
+      if (supplierQ && !supplierName.toLowerCase().includes(supplierQ)) return false;
+      return true;
+    });
+  }, [rows, customerFilter, productFilter, supplierFilter, supplierNameById]);
+
+  const sortedRows = useMemo(() => {
+    const sorted = [...filteredRows];
+    const dir = sortDirection === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      const supplierA = a.manualSupplierId ? supplierNameById.get(a.manualSupplierId) ?? `仕入先#${a.manualSupplierId}` : '';
+      const supplierB = b.manualSupplierId ? supplierNameById.get(b.manualSupplierId) ?? `仕入先#${b.manualSupplierId}` : '';
+
+      const av = sortKey === 'customerName' ? a.customerName : sortKey === 'productName' ? a.productName : supplierA;
+      const bv = sortKey === 'customerName' ? b.customerName : sortKey === 'productName' ? b.productName : supplierB;
+
+      return av.localeCompare(bv, 'ja') * dir;
+    });
+
+    return sorted;
+  }, [filteredRows, sortKey, sortDirection, supplierNameById]);
+
+  const onSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection('asc');
+  };
+
+  const sortLabel = (key: SortKey, label: string) => {
+    if (sortKey !== key) return label;
+    return `${label} ${sortDirection === 'asc' ? '▲' : '▼'}`;
+  };
+
+  const visibleIds = useMemo(() => sortedRows.map((r) => r.orderItemId), [sortedRows]);
+
+  const selectVisibleChecked = useMemo(
+    () => visibleIds.length > 0 && visibleIds.every((id) => editByItemId[id]?.selected),
+    [visibleIds, editByItemId],
+  );
+
+  const toggleSelectVisible = (checked: boolean) => {
+    setEditByItemId((prev) => {
+      const next = { ...prev };
+      visibleIds.forEach((id) => {
+        if (!next[id]) return;
+        next[id] = { ...next[id], selected: checked };
+      });
+      return next;
+    });
+  };
+
+  const onRowCheckboxChange = (orderItemId: number, checked: boolean, shiftKey: boolean) => {
+    const targetIndex = sortedRows.findIndex((row) => row.orderItemId === orderItemId);
+
+    setEditByItemId((prev) => {
+      const next = { ...prev };
+      if (shiftKey && lastSelectedId != null) {
+        const lastIndex = sortedRows.findIndex((row) => row.orderItemId === lastSelectedId);
+        if (lastIndex >= 0 && targetIndex >= 0) {
+          const [start, end] = lastIndex < targetIndex ? [lastIndex, targetIndex] : [targetIndex, lastIndex];
+          for (let i = start; i <= end; i += 1) {
+            const id = sortedRows[i].orderItemId;
+            if (!next[id]) continue;
+            next[id] = { ...next[id], selected: checked };
+          }
+        }
+      } else if (next[orderItemId]) {
+        next[orderItemId] = { ...next[orderItemId], selected: checked };
+      }
+      return next;
+    });
+
+    setLastSelectedId(orderItemId);
+  };
+
   const selectedCount = useMemo(() => rows.filter((r) => editByItemId[r.orderItemId]?.selected).length, [rows, editByItemId]);
 
   const saveBulk = async () => {
@@ -101,7 +215,7 @@ export const PurchasePage = () => {
     const payload = selectedRows.map((r) => {
       const edit = editByItemId[r.orderItemId];
       const units = unitsByProductId[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
-      const received = Number(edit.receivedQty);
+      const received = Number(r.manualQty ?? r.orderedQty);
       const invoiced = Number(edit.invoiceQty);
       const shortage = Math.max(r.orderedQty - received, 0);
       return {
@@ -154,57 +268,86 @@ export const PurchasePage = () => {
           </div>
         </div>
 
+        <div className="list-controls" style={{ marginBottom: 12 }}>
+          <label className="filter-label">
+            顧客フィルター
+            <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="例: テスト商事" />
+          </label>
+          <label className="filter-label">
+            商品フィルター
+            <input value={productFilter} onChange={(e) => setProductFilter(e.target.value)} placeholder="例: 鶏もも" />
+          </label>
+          <label className="filter-label">
+            仕入先フィルター
+            <input value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)} placeholder="例: サプライヤA" />
+          </label>
+          <button type="button" className="secondary" onClick={() => { setCustomerFilter(''); setProductFilter(''); setSupplierFilter(''); }}>フィルター解除</button>
+        </div>
+
         {rows.length === 0 ? (
           <EmptyState title="対象データがありません" description="一括割当で保存済み行が見つかりません。" actionLabel="再読み込み" onAction={load} />
+        ) : sortedRows.length === 0 ? (
+          <EmptyState title="対象データがありません" description="条件に合う行がありません。" actionLabel="条件をリセット" onAction={() => { setCustomerFilter(''); setProductFilter(''); setSupplierFilter(''); }} />
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="purchase-result-table">
               <thead>
                 <tr>
-                  <th>選択</th>
-                  <th>注文番号</th>
-                  <th>顧客</th>
-                  <th>商品</th>
-                  <th>受注数量 + 受注単位</th>
-                  <th>受取数量 + 受注単位</th>
-                  <th>請求数量 + 請求単位</th>
+                  <th className="col-select">
+                    <input type="checkbox" checked={selectVisibleChecked} onChange={(e) => toggleSelectVisible(e.target.checked)} />
+                  </th>
+                  <th className="col-order-no">注文番号</th>
+                  <th className="col-customer" onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
+                  <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
+                  <th className="col-supplier" onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
+                  <th className="col-ordered">受注数量</th>
+                  <th className="col-invoice">請求数量</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {sortedRows.map((r, rowIndex) => {
                   const units = unitsByProductId[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
                   const edit = editByItemId[r.orderItemId];
+                  const supplierName = r.manualSupplierId ? supplierNameById.get(r.manualSupplierId) ?? `仕入先#${r.manualSupplierId}` : '-';
+
                   return (
                     <tr key={r.orderItemId}>
                       <td>
                         <input
                           type="checkbox"
                           checked={Boolean(edit?.selected)}
-                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], selected: e.target.checked } }))}
+                          onClick={(e) => onRowCheckboxChange(r.orderItemId, !Boolean(edit?.selected), e.shiftKey)}
+                          readOnly
                         />
                       </td>
-                      <td>
+                      <td className="col-order-no">
                         {r.orderId ? <Link to={`/orders/${r.orderId}/edit`} className="order-link">{r.orderNo}</Link> : r.orderNo}
                       </td>
-                      <td>{r.customerName}</td>
-                      <td>{r.productName}</td>
-                      <td>{r.orderedQty} {units.orderUom}</td>
-                      <td>
+                      <td className="col-customer">{r.customerName}</td>
+                      <td className="col-product">{r.productName}</td>
+                      <td className="col-supplier">{supplierName}</td>
+                      <td className="col-ordered">{r.orderedQty} {units.orderUom}</td>
+                      <td className="col-invoice">
                         <input
                           type="number"
                           min={0}
                           step="1"
-                          value={edit?.receivedQty ?? ''}
-                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], receivedQty: e.target.value, rowError: undefined } }))}
-                        /> {units.orderUom}
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min={0}
-                          step="1"
+                          data-invoice-row={rowIndex}
                           value={edit?.invoiceQty ?? ''}
                           onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], invoiceQty: e.target.value, rowError: undefined } }))}
+                          onKeyDown={(e) => {
+                            const moveDown = e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey);
+                            const moveUp = e.key === 'ArrowUp';
+                            if (!moveDown && !moveUp) return;
+
+                            const targetRow = moveUp ? rowIndex - 1 : rowIndex + 1;
+                            const target = document.querySelector<HTMLInputElement>(`input[data-invoice-row="${targetRow}"]`);
+                            if (!target) return;
+
+                            e.preventDefault();
+                            target.focus();
+                          }}
+                          placeholder=""
                         /> {units.invoiceUom}
                       </td>
                     </tr>
