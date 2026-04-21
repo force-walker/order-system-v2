@@ -495,6 +495,23 @@ button:disabled { opacity: 0.6; }
   background: #dcfce7;
 }
 
+.purchase-result-table .col-order-no {
+  width: 110px;
+  max-width: 110px;
+}
+
+.purchase-result-table .col-ordered,
+.purchase-result-table .col-invoice {
+  width: 120px;
+  max-width: 120px;
+}
+
+.purchase-result-table .col-customer,
+.purchase-result-table .col-product,
+.purchase-result-table .col-supplier {
+  min-width: 240px;
+}
+
 .bulk-allocation-table .delivery-warning {
   color: #b91c1c;
   font-weight: 700;

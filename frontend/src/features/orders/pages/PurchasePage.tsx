@@ -290,18 +290,18 @@ export const PurchasePage = () => {
           <EmptyState title="対象データがありません" description="条件に合う行がありません。" actionLabel="条件をリセット" onAction={() => { setCustomerFilter(''); setProductFilter(''); setSupplierFilter(''); }} />
         ) : (
           <div className="table-wrap">
-            <table>
+            <table className="purchase-result-table">
               <thead>
                 <tr>
-                  <th>
+                  <th className="col-select">
                     <input type="checkbox" checked={selectVisibleChecked} onChange={(e) => toggleSelectVisible(e.target.checked)} />
                   </th>
-                  <th>注文番号</th>
-                  <th onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
-                  <th onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
-                  <th onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
-                  <th>受注数量 + 受注単位</th>
-                  <th>請求数量 + 請求単位</th>
+                  <th className="col-order-no">注文番号</th>
+                  <th className="col-customer" onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
+                  <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
+                  <th className="col-supplier" onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
+                  <th className="col-ordered">受注数量 + 受注単位</th>
+                  <th className="col-invoice">請求数量 + 請求単位</th>
                 </tr>
               </thead>
               <tbody>
@@ -320,14 +320,14 @@ export const PurchasePage = () => {
                           readOnly
                         />
                       </td>
-                      <td>
+                      <td className="col-order-no">
                         {r.orderId ? <Link to={`/orders/${r.orderId}/edit`} className="order-link">{r.orderNo}</Link> : r.orderNo}
                       </td>
-                      <td>{r.customerName}</td>
-                      <td>{r.productName}</td>
-                      <td>{supplierName}</td>
-                      <td>{r.orderedQty} {units.orderUom}</td>
-                      <td>
+                      <td className="col-customer">{r.customerName}</td>
+                      <td className="col-product">{r.productName}</td>
+                      <td className="col-supplier">{supplierName}</td>
+                      <td className="col-ordered">{r.orderedQty} {units.orderUom}</td>
+                      <td className="col-invoice">
                         <input
                           type="number"
                           min={0}
