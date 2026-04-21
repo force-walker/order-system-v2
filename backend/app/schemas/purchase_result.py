@@ -44,8 +44,17 @@ class PurchaseResultResponse(BaseModel):
     id: int
     allocation_id: int
     supplier_id: int | None
+    supplier_name: str | None = None
     purchased_qty: float
     purchased_uom: str
+    received_qty: float
+    order_uom: str
+    invoice_qty: float | None = None
+    invoice_uom: str | None = None
+    customer_id: int | None = None
+    customer_name: str | None = None
+    product_id: int | None = None
+    product_name: str | None = None
     actual_weight_kg: float | None
     unit_cost: float | None
     final_unit_cost: float | None
