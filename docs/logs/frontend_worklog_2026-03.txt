@@ -161,3 +161,57 @@ PROGRESS:
 参照:
 - #04-frontend
 - PR #140 #141 #143
+
+## 2026-04-22
+
+[2026-04-22][OpenClawBot]
+PROGRESS:
+- 何を変更したか（画面・UI・変換ロジック）:
+  - Purchase Result（納品確認）画面のUI/操作性を段階改善
+    - テーブル列幅の再配分（請求列の横幅拡張、supplier/order列の圧縮、重複qty列の整理）
+    - ヘッダ文言の簡素化、wide layout適用で視認性を改善
+    - invoice入力列のオーバーフロー解消とフォーカス遷移改善
+    - キーボード操作改善（invoice入力時の ArrowUp/フォーカス移動安定化）
+  - 一覧の選択挙動を改善
+    - 行選択/入力フォーカスの競合を抑制し、入力中の誤選択を低減
+  - Import系UIの変換ロジック調整（先行対応分）
+    - CSV/XLSX由来値の正規化を強化（空文字・型変換前処理）
+    - import payload正規化により backend import-upsert 契約と整合
+
+- なぜ変更したか（背景）:
+  - 納品確認画面で「請求数量/請求単位」入力時の可読性と入力効率が低く、実運用でミスが起きやすかったため。
+  - 行選択とセル入力のUXが衝突し、誤操作が発生していたため。
+  - Backend側で追加された import/purchase-results 契約（空値・部分成功・列追加）にFrontendを整合させる必要があったため。
+
+- 動作確認結果（再現手順つき）:
+  - 画面表示/UI:
+    1) Frontendを起動し、Purchase Result画面を開く
+    2) 横スクロール有無、請求列幅、ヘッダ文言、列重複がないことを確認
+    3) invoiceセルに入力し、ArrowUp/Tabでフォーカス移動が破綻しないことを確認
+    - 結果: 期待どおり（表示崩れ・重複列・フォーカス逸脱を解消）
+  - 選択挙動:
+    1) 行を選択後、invoiceセルへ入力を開始
+    2) 入力中に行選択状態が意図せず切り替わらないことを確認
+    - 結果: 期待どおり（入力/選択の競合を抑制）
+  - Import変換:
+    1) CSV/XLSX由来データを取り込み、payload生成内容を確認
+    2) 空文字・数値列の正規化結果を確認
+    3) backend import-upsert呼び出しで422全体失敗ではなく行別処理されることを確認
+    - 結果: 期待どおり（正規化後のpayloadで契約整合）
+
+- 未対応事項・次アクション:
+  - Purchase Result一覧の新規列（supplier/customer/product/filter/sort）に合わせた最終UI磨き込み
+  - invoice初期null表示の文言/プレースホルダ最終調整
+  - E2Eシナリオ（キーボード操作中心）を追加して回帰耐性を上げる
+
+参照PR/コミットID:
+- Frontend作業ブランチ: `feature/frontend-purchase-result-ui-update`
+- 主なコミット:
+  - `499b922` feat(frontend): update purchase result list UX and selection behavior
+  - `0294dc9` fix(frontend): remove duplicate qty column and improve invoice focus navigation
+  - `3227d04` style(frontend): rebalance purchase result table column widths
+  - `da21f13` style(frontend): adjust purchase qty column borders and center ordered qty
+  - `73dcbc6` style(frontend): simplify purchase headers and tighten supplier/order columns
+  - `9fbe014` style(frontend): fix invoice column overflow and rebalance purchase table widths
+  - `902f5ff` style(frontend): widen purchase invoice column and use wide layout on purchases
+  - `9289527` fix(frontend): support ArrowUp invoice focus navigation
