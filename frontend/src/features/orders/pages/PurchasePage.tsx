@@ -337,11 +337,15 @@ export const PurchasePage = () => {
                           onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], invoiceQty: e.target.value, rowError: undefined } }))}
                           onKeyDown={(e) => {
                             const moveDown = e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey);
-                            if (!moveDown) return;
-                            const next = document.querySelector<HTMLInputElement>(`input[data-invoice-row="${rowIndex + 1}"]`);
-                            if (!next) return;
+                            const moveUp = e.key === 'ArrowUp';
+                            if (!moveDown && !moveUp) return;
+
+                            const targetRow = moveUp ? rowIndex - 1 : rowIndex + 1;
+                            const target = document.querySelector<HTMLInputElement>(`input[data-invoice-row="${targetRow}"]`);
+                            if (!target) return;
+
                             e.preventDefault();
-                            next.focus();
+                            target.focus();
                           }}
                           placeholder=""
                         /> {units.invoiceUom}
