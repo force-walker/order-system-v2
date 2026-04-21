@@ -21,6 +21,12 @@ type ProductImportResult = {
   errors: ImportErrorRow[];
 };
 
+type PreflightErrorRow = {
+  row: number;
+  field: string;
+  message: string;
+};
+
 const MAX_ERROR_ROWS = 100;
 
 const SAMPLE_JSON = `[
@@ -33,6 +39,23 @@ const SAMPLE_JSON = `[
     "pricing_basis_default": "uom_count"
   }
 ]`;
+
+const STRING_NULLABLE_FIELDS = ['legacy_unit_code', 'owner_code', 'origin_code', 'jan_code'] as const;
+const DECIMAL_NULLABLE_FIELDS = [
+  'sales_price',
+  'sales_price_1',
+  'sales_price_2',
+  'sales_price_3',
+  'sales_price_4',
+  'sales_price_5',
+  'sales_price_6',
+  'purchase_price',
+  'inventory_price',
+  'list_price',
+  'customs_reference_price',
+] as const;
+const INTEGER_NULLABLE_FIELDS = ['pack_size'] as const;
+const DROP_BEFORE_SEND_FIELDS = ['created_at', 'updated_at'] as const;
 
 const normalizeImportPayload = (raw: unknown): { items: Record<string, unknown>[] } => {
   if (Array.isArray(raw)) {
@@ -51,6 +74,77 @@ const normalizeImportPayload = (raw: unknown): { items: Record<string, unknown>[
   throw new Error('JSON形式が不正です。配列 または { "items": [...] } 形式で入力してください。');
 };
 
+const normalizeEmptyStringToNull = (v: unknown): string | null | unknown => {
+  if (typeof v !== 'string') return v;
+  const trimmed = v.trim();
+  return trimmed === '' ? null : trimmed;
+};
+
+const toDecimalOrNull = (v: unknown): { value: number | null; valid: boolean } => {
+  if (v === null || v === undefined) return { value: null, valid: true };
+  if (typeof v === 'number') return Number.isFinite(v) ? { value: v, valid: true } : { value: null, valid: false };
+  if (typeof v !== 'string') return { value: null, valid: false };
+
+  const trimmed = v.trim();
+  if (!trimmed) return { value: null, valid: true };
+  const numeric = trimmed.replace(/,/g, '');
+  const n = Number(numeric);
+  if (!Number.isFinite(n)) return { value: null, valid: false };
+  return { value: n, valid: true };
+};
+
+const toIntegerOrNull = (v: unknown): { value: number | null; valid: boolean } => {
+  if (v === null || v === undefined) return { value: null, valid: true };
+  if (typeof v === 'number') return Number.isInteger(v) ? { value: v, valid: true } : { value: null, valid: false };
+  if (typeof v !== 'string') return { value: null, valid: false };
+
+  const trimmed = v.trim();
+  if (!trimmed) return { value: null, valid: true };
+  const normalized = trimmed.replace(/,/g, '');
+  if (!/^[-+]?\d+$/.test(normalized)) return { value: null, valid: false };
+  const n = Number(normalized);
+  if (!Number.isInteger(n)) return { value: null, valid: false };
+  return { value: n, valid: true };
+};
+
+const normalizeItemsBeforeSubmit = (items: Record<string, unknown>[]) => {
+  const errors: PreflightErrorRow[] = [];
+
+  const normalized = items.map((raw, idx) => {
+    const row = { ...raw } as Record<string, unknown>;
+
+    for (const field of DROP_BEFORE_SEND_FIELDS) {
+      delete row[field];
+    }
+
+    for (const field of STRING_NULLABLE_FIELDS) {
+      row[field] = normalizeEmptyStringToNull(row[field]);
+    }
+
+    for (const field of DECIMAL_NULLABLE_FIELDS) {
+      const converted = toDecimalOrNull(row[field]);
+      if (!converted.valid) {
+        errors.push({ row: idx + 1, field, message: '数値を入力してください（空欄は null として扱います）' });
+      } else {
+        row[field] = converted.value;
+      }
+    }
+
+    for (const field of INTEGER_NULLABLE_FIELDS) {
+      const converted = toIntegerOrNull(row[field]);
+      if (!converted.valid) {
+        errors.push({ row: idx + 1, field, message: '整数を入力してください（空欄は null として扱います）' });
+      } else {
+        row[field] = converted.value;
+      }
+    }
+
+    return row;
+  });
+
+  return { normalized, errors };
+};
+
 const parseCsvLine = (line: string): string[] => {
   const cells: string[] = [];
   let current = '';
@@ -58,7 +152,6 @@ const parseCsvLine = (line: string): string[] => {
 
   for (let i = 0; i < line.length; i += 1) {
     const ch = line[i];
-
     if (ch === '"') {
       if (inQuotes && line[i + 1] === '"') {
         current += '"';
@@ -70,7 +163,7 @@ const parseCsvLine = (line: string): string[] => {
     }
 
     if (ch === ',' && !inQuotes) {
-      cells.push(current.trim());
+      cells.push(current);
       current = '';
       continue;
     }
@@ -78,55 +171,44 @@ const parseCsvLine = (line: string): string[] => {
     current += ch;
   }
 
-  cells.push(current.trim());
+  cells.push(current);
   return cells;
 };
 
 const csvToItems = (text: string): Record<string, unknown>[] => {
   const lines = text
     .split(/\r?\n/)
-    .map((row) => row.trim())
-    .filter((row) => row.length > 0);
+    .map((line) => line.replace(/\uFEFF/g, ''))
+    .filter((line) => line.trim().length > 0);
 
   if (lines.length < 2) {
     throw new Error('CSVはヘッダ行＋データ1行以上が必要です。');
   }
 
   const headers = parseCsvLine(lines[0]).map((h) => h.trim());
-  if (headers.some((h) => !h)) {
-    throw new Error('CSVヘッダに空列があります。');
-  }
+  if (headers.some((h) => !h)) throw new Error('CSVヘッダに空列があります。');
 
-  const items: Record<string, unknown>[] = [];
-  for (let i = 1; i < lines.length; i += 1) {
-    const values = parseCsvLine(lines[i]);
+  return lines.slice(1).map((line) => {
+    const values = parseCsvLine(line);
     const row: Record<string, unknown> = {};
-    headers.forEach((key, idx) => {
-      const raw = values[idx] ?? '';
-      row[key] = raw;
+    headers.forEach((key, i) => {
+      row[key] = values[i] ?? '';
     });
-    items.push(row);
-  }
-
-  return items;
+    return row;
+  });
 };
 
 const xlsxToItems = async (file: File): Promise<Record<string, unknown>[]> => {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array' });
-  const first = workbook.SheetNames[0];
-  if (!first) throw new Error('XLSXのシートが見つかりません。');
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) throw new Error('XLSXのシートが見つかりません。');
 
-  const sheet = workbook.Sheets[first];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheetName], {
     defval: '',
     raw: false,
   });
-
-  if (!Array.isArray(rows) || rows.length === 0) {
-    throw new Error('XLSXに取り込み対象データがありません。');
-  }
-
+  if (!rows.length) throw new Error('XLSXに取り込み対象データがありません。');
   return rows;
 };
 
@@ -136,13 +218,16 @@ export const ProductImportPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [apiError, setApiError] = useState('');
+  const [preflightErrors, setPreflightErrors] = useState<PreflightErrorRow[]>([]);
   const [result, setResult] = useState<ProductImportResult | null>(null);
 
   const visibleErrors = useMemo(() => result?.errors.slice(0, MAX_ERROR_ROWS) ?? [], [result]);
+  const visiblePreflightErrors = useMemo(() => preflightErrors.slice(0, MAX_ERROR_ROWS), [preflightErrors]);
 
   const onSubmit = async () => {
     setFormError('');
     setApiError('');
+    setPreflightErrors([]);
 
     if (!jsonText.trim()) {
       setFormError('入力データが空です。JSON貼り付けまたはCSV/XLSX読込を行ってください。');
@@ -165,9 +250,19 @@ export const ProductImportPage = () => {
       return;
     }
 
+    const normalized = normalizeItemsBeforeSubmit(payload.items);
+    if (normalized.errors.length > 0) {
+      setPreflightErrors(normalized.errors);
+      setFormError('送信前検証エラーがあります。内容を修正してください。');
+      return;
+    }
+
+    const normalizedPayload = { items: normalized.normalized };
+    setJsonText(JSON.stringify(normalizedPayload, null, 2));
+
     setSubmitting(true);
     try {
-      const res = await importProductsUpsert(payload);
+      const res = await importProductsUpsert(normalizedPayload);
       setResult(res);
     } catch (e) {
       setApiError(toActionableMessage(e, 'IMPORT実行に失敗しました。'));
@@ -178,16 +273,17 @@ export const ProductImportPage = () => {
 
   const onSelectFile = async (file: File | null) => {
     setFormError('');
+    setApiError('');
+    setPreflightErrors([]);
     if (!file) return;
 
-    const lower = file.name.toLowerCase();
     setSelectedFileName(file.name);
-
     try {
-      let items: Record<string, unknown>[] = [];
+      const lower = file.name.toLowerCase();
+      let items: Record<string, unknown>[];
+
       if (lower.endsWith('.csv')) {
-        const text = await file.text();
-        items = csvToItems(text);
+        items = csvToItems(await file.text());
       } else if (lower.endsWith('.xlsx')) {
         items = await xlsxToItems(file);
       } else {
@@ -231,7 +327,11 @@ export const ProductImportPage = () => {
                 void onSelectFile(file);
               }}
             />
-            {selectedFileName ? <span className="subtle">選択中: {selectedFileName}</span> : <span className="subtle">CSV/XLSXを選択するとJSON欄へ変換反映します</span>}
+            {selectedFileName ? (
+              <span className="subtle">選択中: {selectedFileName}</span>
+            ) : (
+              <span className="subtle">CSV/XLSXを選択するとJSON欄へ変換反映します</span>
+            )}
           </label>
         </div>
 
@@ -241,6 +341,31 @@ export const ProductImportPage = () => {
         </details>
 
         {formError ? <p className="form-error">{formError}</p> : null}
+
+        {visiblePreflightErrors.length > 0 ? (
+          <div className="table-wrap">
+            <h4>送信前検証エラー（先頭 {visiblePreflightErrors.length} / {preflightErrors.length} 件）</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>行</th>
+                  <th>項目</th>
+                  <th>エラー</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visiblePreflightErrors.map((e, idx) => (
+                  <tr key={`${e.row}-${e.field}-${idx}`}>
+                    <td>{e.row}</td>
+                    <td>{e.field}</td>
+                    <td>{e.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
         <div className="form-actions">
           <button type="button" onClick={onSubmit} disabled={submitting}>{submitting ? 'IMPORT実行中...' : 'IMPORT実行'}</button>
         </div>
