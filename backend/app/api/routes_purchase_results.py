@@ -65,39 +65,51 @@ def _validate_quantity_limit(
 
 
 def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseResultResponse:
-    joined = (
-        db.query(
-            Supplier.name.label("supplier_name"),
-            Product.id.label("product_id"),
-            Product.name.label("product_name"),
-            Product.invoice_uom.label("invoice_uom"),
-            Customer.id.label("customer_id"),
-            Customer.name.label("customer_name"),
-        )
-        .join(SupplierAllocation, SupplierAllocation.id == row.allocation_id)
-        .join(OrderItem, OrderItem.id == SupplierAllocation.order_item_id)
-        .join(Product, Product.id == OrderItem.product_id)
-        .join(Order, Order.id == OrderItem.order_id)
-        .join(Customer, Customer.id == Order.customer_id)
-        .outerjoin(Supplier, Supplier.id == row.supplier_id)
-        .first()
-    )
+    alloc = db.query(SupplierAllocation).filter(SupplierAllocation.id == row.allocation_id).first()
+
+    product_id = None
+    product_name = None
+    invoice_uom = None
+    customer_id = None
+    customer_name = None
+
+    if alloc is not None:
+        order_item = db.query(OrderItem).filter(OrderItem.id == alloc.order_item_id).first()
+        if order_item is not None:
+            product = db.query(Product).filter(Product.id == order_item.product_id).first()
+            if product is not None:
+                product_id = product.id
+                product_name = product.name
+                invoice_uom = product.invoice_uom
+
+            order = db.query(Order).filter(Order.id == order_item.order_id).first()
+            if order is not None:
+                customer = db.query(Customer).filter(Customer.id == order.customer_id).first()
+                if customer is not None:
+                    customer_id = customer.id
+                    customer_name = customer.name
+
+    supplier_name = None
+    if row.supplier_id is not None:
+        supplier = db.query(Supplier).filter(Supplier.id == row.supplier_id).first()
+        if supplier is not None:
+            supplier_name = supplier.name
 
     return PurchaseResultResponse(
         id=row.id,
         allocation_id=row.allocation_id,
         supplier_id=row.supplier_id,
-        supplier_name=joined.supplier_name if joined else None,
+        supplier_name=supplier_name,
         purchased_qty=float(row.purchased_qty),
         purchased_uom=row.purchased_uom,
         received_qty=float(row.purchased_qty),
         order_uom=row.purchased_uom,
         invoice_qty=None,
-        invoice_uom=joined.invoice_uom if joined else None,
-        customer_id=joined.customer_id if joined else None,
-        customer_name=joined.customer_name if joined else None,
-        product_id=joined.product_id if joined else None,
-        product_name=joined.product_name if joined else None,
+        invoice_uom=invoice_uom,
+        customer_id=customer_id,
+        customer_name=customer_name,
+        product_id=product_id,
+        product_name=product_name,
         actual_weight_kg=float(row.actual_weight_kg) if row.actual_weight_kg is not None else None,
         unit_cost=float(row.unit_cost) if row.unit_cost is not None else None,
         final_unit_cost=float(row.final_unit_cost) if row.final_unit_cost is not None else None,
