@@ -496,8 +496,20 @@ button:disabled { opacity: 0.6; }
 }
 
 .purchase-result-table .col-order-no {
-  width: 110px;
-  max-width: 110px;
+  width: 90px;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.purchase-result-table .col-order-no .order-link {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .purchase-result-table .col-ordered,
@@ -521,9 +533,14 @@ button:disabled { opacity: 0.6; }
 }
 
 .purchase-result-table .col-customer,
-.purchase-result-table .col-product,
+.purchase-result-table .col-product {
+  min-width: 260px;
+}
+
 .purchase-result-table .col-supplier {
-  min-width: 240px;
+  min-width: 120px;
+  border-left: 1px solid #e5e7eb;
+  border-right: 1px solid #e5e7eb;
 }
 
 .bulk-allocation-table .delivery-warning {

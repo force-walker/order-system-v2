@@ -300,8 +300,8 @@ export const PurchasePage = () => {
                   <th className="col-customer" onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th className="col-supplier" onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
-                  <th className="col-ordered">受注数量 + 受注単位</th>
-                  <th className="col-invoice">請求数量 + 請求単位</th>
+                  <th className="col-ordered">受注数量</th>
+                  <th className="col-invoice">請求数量</th>
                 </tr>
               </thead>
               <tbody>
