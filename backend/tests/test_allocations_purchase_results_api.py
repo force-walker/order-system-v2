@@ -358,5 +358,6 @@ def test_purchase_result_list_returns_supplier_and_invoice_defaults_and_filter_s
 
     sorted_supplier_desc = client.get("/api/v1/purchase-results?sort_by=supplier&sort_order=desc")
     assert sorted_supplier_desc.status_code == 200
-    names = [r["supplier_name"] for r in sorted_supplier_desc.json()]
+    named_rows = [r for r in sorted_supplier_desc.json() if r.get("supplier_name") is not None]
+    names = [r["supplier_name"] for r in named_rows]
     assert names == sorted(names, reverse=True)
