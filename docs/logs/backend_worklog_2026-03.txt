@@ -216,3 +216,61 @@ PROGRESS:
 - PR #144: <https://github.com/force-walker/order-system-v2/pull/144>
 - PR #145: <https://github.com/force-walker/order-system-v2/pull/145>
 - PR #146: <https://github.com/force-walker/order-system-v2/pull/146>
+
+## 2026-04-22
+
+[2026-04-22][OpenClawBot]
+PROGRESS:
+- 何を変更したか（機能・API・migration）:
+  - PR #149 を実装・マージ（商品マスタIMPORTの `import_key` 基準 upsert へ移行）
+    - `POST /api/v1/products/import-upsert` を `import_key` 優先の create/update 判定に変更
+    - 部分列JSON受け口に変更（全列必須ではなく行単位で検証）
+    - create時のみ必須チェック（`name/order_uom/purchase_uom/invoice_uom`）
+    - update時は未指定項目維持・`null`上書き抑止
+    - `""` を `null` 相当に正規化、数値項目 `""` も `null` 扱い
+    - 行別エラー契約を拡張（`index/import_key/action/code/message/product_id`）
+    - migration追加: `backend/alembic/versions/2026042101_add_products_import_key.py`
+      - `products.import_key`（nullable）追加
+      - unique index (`ix_products_import_key`) 追加
+  - PR #151 を実装・マージ（納品確認一覧 API 拡張）
+    - `GET /api/v1/purchase-results` に supplier表示列を追加
+      - `supplier_id`, `supplier_name`
+    - 請求初期値契約を追加
+      - `invoice_qty` は初期 `null`
+      - `invoice_uom` は SKU 由来（`products.invoice_uom`）
+      - `received_qty` + `order_uom` を初期確定値として返却（Frontend側編集不可契約を維持）
+    - 一覧フィルター追加: `customer_id`, `product_id`, `supplier_id`（既存 `allocation_id` 維持）
+    - 一覧ソート追加: `sort_by=recorded_at|customer|product|supplier`, `sort_order=asc|desc`
+    - 不具合修正: create/list時のレスポンス組み立てで 500 を返す問題を修正
+      - `PurchaseResultResponse` 生成ロジックを段階取得に変更して安定化
+
+- なぜ変更したか（背景）:
+  - 商品マスタIMPORTを本番運用可能にするため、CSV由来の欠損/空文字に耐える部分成功モデルへ強化が必要だった。
+  - import元外部システム連携のため、自然キー（name/legacy_code）依存を減らし `import_key` で冪等更新可能にする必要があった。
+  - 納品確認一覧で業務上必要な列（顧客/商品/仕入先/請求初期値）と検索導線（filter/sort）をFrontend要件に合わせる必要があった。
+  - 回帰で検出された `POST /api/v1/purchase-results` の 500 を解消し、一覧/作成系APIを安定運用させる必要があった。
+
+- テスト結果（通過/失敗）:
+  - PR #149:
+    - 初回: merge前に base差分/保護ルール調整あり
+    - required checks 最終通過後にマージ
+    - `backend-lint` / `backend-schema` / `backend-test` / `frontend-typecheck` pass
+  - PR #151:
+    - 初回: `backend-test` fail（`test_purchase_result_list_returns_supplier_and_invoice_defaults_and_filter_sort`）
+      - 原因: supplier sort検証で `supplier_name=None` 行混在により比較で TypeError
+    - 修正後再実行: required checks 全pass
+      - `backend-lint` / `backend-schema` / `backend-test` / `frontend-typecheck` pass
+  - 補足: ローカル実行環境では `pytest` 未導入のため、ローカルは `py_compile` 整合確認、最終判定はCIで担保
+
+- 未対応事項・次アクション:
+  - Frontend実装へ移行（Purchase Result一覧の追加列表示・filter/sort UI連携）
+  - Import UI側で `import_key` 付与ルールとCSVヘッダ正規化を確定
+  - 必要に応じて purchase-results 一覧の sort nulls-last 方針を明文化（現在はDB既定順依存）
+
+参照PR/コミットID:
+- PR #149: <https://github.com/force-walker/order-system-v2/pull/149>
+  - merge commit: `1953d32df55f4ec62e391b1fa0e26478f6db65a4`
+  - 主な修正コミット: `f97f73e`
+- PR #151: <https://github.com/force-walker/order-system-v2/pull/151>
+  - merge commit: `a1b8bbba34cfa8571967ae1226bd46888f120384`
+  - 主な修正コミット: `7dfc456`, `b53ceb9`, `34da1bb`
