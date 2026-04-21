@@ -514,8 +514,8 @@ button:disabled { opacity: 0.6; }
 
 .purchase-result-table .col-ordered,
 .purchase-result-table .col-invoice {
-  width: 120px;
-  max-width: 120px;
+  width: 130px;
+  max-width: 130px;
   white-space: nowrap;
   box-sizing: border-box;
 }
@@ -526,19 +526,25 @@ button:disabled { opacity: 0.6; }
   border-right: 1px solid #e5e7eb;
 }
 
+.purchase-result-table .col-invoice {
+  text-align: left;
+  padding-right: 4px;
+}
+
 .purchase-result-table .col-invoice input {
-  width: 100%;
-  max-width: 100%;
+  width: 78px;
+  max-width: 78px;
   box-sizing: border-box;
+  margin-right: 4px;
 }
 
 .purchase-result-table .col-customer,
 .purchase-result-table .col-product {
-  min-width: 260px;
+  min-width: 240px;
 }
 
 .purchase-result-table .col-supplier {
-  min-width: 120px;
+  min-width: 110px;
   border-left: 1px solid #e5e7eb;
   border-right: 1px solid #e5e7eb;
 }
