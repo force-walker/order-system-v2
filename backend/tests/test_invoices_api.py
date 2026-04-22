@@ -16,6 +16,9 @@ from app.models.entities import (
     OrderStatus,
     PricingBasis,
     Product,
+    PurchaseResult,
+    PurchaseResultStatus,
+    SupplierAllocation,
 )
 
 
@@ -113,6 +116,37 @@ def _seed_order(with_items: bool = False, include_kg_without_weight: bool = Fals
     oid = o.id
     db.close()
     return oid
+
+
+def _seed_purchase_result_for_order(order_id: int, purchased_qty: float = 2) -> int:
+    db = TestingSessionLocal()
+    item = db.query(OrderItem).filter(OrderItem.order_id == order_id).first()
+    assert item is not None
+
+    alloc = SupplierAllocation(
+        order_item_id=item.id,
+        suggested_supplier_id=101,
+        suggested_qty=float(purchased_qty),
+        final_supplier_id=101,
+        final_qty=float(purchased_qty),
+        final_uom="count",
+    )
+    db.add(alloc)
+    db.flush()
+
+    pr = PurchaseResult(
+        allocation_id=alloc.id,
+        supplier_id=101,
+        purchased_qty=float(purchased_qty),
+        purchased_uom="count",
+        result_status=PurchaseResultStatus.filled,
+        invoiceable_flag=True,
+    )
+    db.add(pr)
+    db.commit()
+    rid = pr.id
+    db.close()
+    return rid
 
 
 def test_create_invoice_invalid_date_range_is_422():
@@ -264,3 +298,29 @@ def test_list_invoice_items_and_invoice_filters():
     filtered_by_order = client.get(f"/api/v1/invoices?order_id={order_id}")
     assert filtered_by_order.status_code == 200
     assert any(row["id"] == invoice_id for row in filtered_by_order.json())
+
+
+def test_generate_draft_from_purchase_results_and_finalize_separation():
+    order_id = _seed_order(with_items=True)
+    _seed_purchase_result_for_order(order_id, purchased_qty=2)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-DRAFT-001",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+        },
+    )
+    assert draft.status_code == 201
+    invoice_id = draft.json()["id"]
+    assert draft.json()["status"] == "draft"
+
+    items = client.get(f"/api/v1/invoices/{invoice_id}/items")
+    assert items.status_code == 200
+    assert len(items.json()) >= 1
+
+    fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
+    assert fin.status_code == 200
+    assert fin.json()["status"] == "finalized"
