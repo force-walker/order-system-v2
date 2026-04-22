@@ -7,7 +7,14 @@ import {
   type OrderItemAllocationWorkItem,
   type SupplierFilterOption,
 } from 'features/orders/services/orderItemAllocationsService';
-import { bulkUpsertPurchaseResults } from 'features/orders/services/purchaseService';
+import {
+  bulkUpsertPurchaseResults,
+  deferPurchaseResult,
+  generateDraftInvoiceFromPurchase,
+  listPurchaseWorkQueue,
+  undeferPurchaseResult,
+} from 'features/orders/services/purchaseService';
+import type { PurchaseResultItem } from 'features/orders/types/order';
 import { getProductDetail } from 'features/products/services/productsService';
 import { toActionableMessage } from 'shared/error';
 
@@ -30,6 +37,8 @@ export const PurchasePage = () => {
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rows, setRows] = useState<OrderItemAllocationWorkItem[]>([]);
+  const [queueItems, setQueueItems] = useState<PurchaseResultItem[]>([]);
+  const [queueResultMessage, setQueueResultMessage] = useState<Record<number, string>>({});
   const [suppliers, setSuppliers] = useState<SupplierFilterOption[]>([]);
   const [unitsByProductId, setUnitsByProductId] = useState<Record<number, UnitPair>>({});
   const [editByItemId, setEditByItemId] = useState<Record<number, RowEdit>>({});
@@ -54,11 +63,13 @@ export const PurchasePage = () => {
     setLoading(true);
     setError('');
     try {
-      const [all, supplierOptions] = await Promise.all([
+      const [all, supplierOptions, queue] = await Promise.all([
         listOrderItemAllocationWorkItems({ unallocatedOnly: false }),
         listSupplierFilterOptions(),
+        listPurchaseWorkQueue(),
       ]);
       setSuppliers(supplierOptions);
+      setQueueItems(queue.items);
 
       const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
 
@@ -205,6 +216,42 @@ export const PurchasePage = () => {
 
   const selectedCount = useMemo(() => rows.filter((r) => editByItemId[r.orderItemId]?.selected).length, [rows, editByItemId]);
 
+  const onDefer = async (id: number) => {
+    try {
+      await deferPurchaseResult(id, 'manual defer');
+      setQueueResultMessage((prev) => ({ ...prev, [id]: '後回しに設定しました' }));
+      await load();
+    } catch (e) {
+      setQueueResultMessage((prev) => ({ ...prev, [id]: toActionableMessage(e, '後回し設定に失敗') }));
+    }
+  };
+
+  const onUndefer = async (id: number) => {
+    try {
+      await undeferPurchaseResult(id);
+      setQueueResultMessage((prev) => ({ ...prev, [id]: '後回し解除しました' }));
+      await load();
+    } catch (e) {
+      setQueueResultMessage((prev) => ({ ...prev, [id]: toActionableMessage(e, '後回し解除に失敗') }));
+    }
+  };
+
+  const onGenerateDraft = async (item: PurchaseResultItem) => {
+    const orderId = rows.find((r) => r.allocationId === item.allocationId)?.orderId;
+    if (!orderId) {
+      setQueueResultMessage((prev) => ({ ...prev, [item.id]: 'order特定不可のためdraft生成不可' }));
+      return;
+    }
+    const invoiceNo = `DRAFT-${item.id}-${Date.now()}`;
+    const invoiceDate = new Date().toISOString().slice(0, 10);
+    try {
+      const invoiceId = await generateDraftInvoiceFromPurchase({ invoiceNo, orderId, invoiceDate });
+      setQueueResultMessage((prev) => ({ ...prev, [item.id]: `draft作成: invoice#${invoiceId}` }));
+    } catch (e) {
+      setQueueResultMessage((prev) => ({ ...prev, [item.id]: toActionableMessage(e, 'draft生成失敗') }));
+    }
+  };
+
   const saveBulk = async () => {
     const selectedRows = rows.filter((r) => editByItemId[r.orderItemId]?.selected);
     if (selectedRows.length === 0) {
@@ -266,6 +313,47 @@ export const PurchasePage = () => {
           <div className="list-controls">
             <button type="button" onClick={() => void saveBulk()} disabled={saving}>{saving ? '保存中...' : `選択行を保存 (${selectedCount})`}</button>
           </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 12 }}>
+          <h3>作業キュー（work-queue API）</h3>
+          {queueItems.length === 0 ? <p className="subtle">対象なし</p> : (
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>顧客</th>
+                  <th>商品</th>
+                  <th>仕入先</th>
+                  <th>受取</th>
+                  <th>請求</th>
+                  <th>操作</th>
+                  <th>結果</th>
+                </tr>
+              </thead>
+              <tbody>
+                {queueItems.map((q) => (
+                  <tr key={q.id}>
+                    <td>{q.id}</td>
+                    <td>{q.customerName ?? '-'}</td>
+                    <td>{q.productName ?? '-'}</td>
+                    <td>{q.supplierName ?? '-'}</td>
+                    <td>{q.receivedQty ?? q.purchasedQty} {q.orderUom ?? q.purchasedUom}</td>
+                    <td>{q.invoiceQty ?? '-'} {q.invoiceUom ?? ''}</td>
+                    <td>
+                      {q.isDeferred ? (
+                        <button type="button" className="secondary" onClick={() => void onUndefer(q.id)}>解除</button>
+                      ) : (
+                        <button type="button" className="secondary" onClick={() => void onDefer(q.id)}>後回し</button>
+                      )}
+                      <button type="button" onClick={() => void onGenerateDraft(q)} style={{ marginLeft: 8 }}>draft生成</button>
+                    </td>
+                    <td>{queueResultMessage[q.id] ?? ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
 
         <div className="list-controls" style={{ marginBottom: 12 }}>
