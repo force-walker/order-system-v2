@@ -40,6 +40,12 @@ class PurchaseResultBulkUpsertRequest(BaseModel):
     items: list[PurchaseResultCreateRequest] = Field(min_length=1)
 
 
+class PurchaseResultDeferRequest(BaseModel):
+    defer_until: datetime | None = None
+    defer_reason: str | None = Field(default=None, min_length=1, max_length=255)
+    deferred_by: str | None = Field(default=None, min_length=1, max_length=64)
+
+
 class PurchaseResultResponse(BaseModel):
     id: int
     allocation_id: int
@@ -65,5 +71,10 @@ class PurchaseResultResponse(BaseModel):
     recorded_by: str | None
     recorded_at: datetime
     note: str | None
+    is_deferred: bool = False
+    defer_until: datetime | None = None
+    defer_reason: str | None = None
+    deferred_by: str | None = None
+    deferred_at: datetime | None = None
 
     model_config = {"from_attributes": True}
