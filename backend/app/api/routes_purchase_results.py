@@ -1,8 +1,8 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import asc, desc
+from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
@@ -218,6 +218,87 @@ def list_purchase_results(
         raise HTTPException(status_code=422, detail={"code": "VALIDATION_ERROR", "message": "invalid sort_order"})
 
     rows = query.order_by(order_func(sort_col), PurchaseResult.id.asc()).offset(offset).limit(limit).all()
+    return [_to_purchase_result_response(db, row) for row in rows]
+
+
+@router.get(
+    "/queue/work-queue",
+    response_model=list[PurchaseResultResponse],
+    responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES},
+)
+def list_purchase_result_work_queue(
+    target_date: date | None = Query(default=None),
+    customer_id: int | None = Query(default=None, gt=0),
+    product_id: int | None = Query(default=None, gt=0),
+    supplier_id: int | None = Query(default=None, gt=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[PurchaseResultResponse]:
+    day = target_date or date.today()
+    now = datetime.now(UTC)
+
+    query = (
+        db.query(PurchaseResult)
+        .join(SupplierAllocation, SupplierAllocation.id == PurchaseResult.allocation_id)
+        .join(OrderItem, OrderItem.id == SupplierAllocation.order_item_id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(Product, Product.id == OrderItem.product_id)
+        .join(Customer, Customer.id == Order.customer_id)
+        .outerjoin(Supplier, Supplier.id == PurchaseResult.supplier_id)
+        .filter(PurchaseResult.invoiceable_flag.is_(True))
+        .filter(func.date(PurchaseResult.recorded_at) == day)
+        .filter((PurchaseResult.is_deferred.is_(False)) | ((PurchaseResult.defer_until.is_not(None)) & (PurchaseResult.defer_until <= now)))
+    )
+
+    if customer_id is not None:
+        query = query.filter(Customer.id == customer_id)
+    if product_id is not None:
+        query = query.filter(Product.id == product_id)
+    if supplier_id is not None:
+        query = query.filter(PurchaseResult.supplier_id == supplier_id)
+
+    rows = query.order_by(PurchaseResult.recorded_at.asc(), PurchaseResult.id.asc()).offset(offset).limit(limit).all()
+    return [_to_purchase_result_response(db, row) for row in rows]
+
+
+@router.get(
+    "/queue/history",
+    response_model=list[PurchaseResultResponse],
+    responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES},
+)
+def list_purchase_result_history(
+    from_date: date | None = Query(default=None),
+    to_date: date | None = Query(default=None),
+    customer_id: int | None = Query(default=None, gt=0),
+    product_id: int | None = Query(default=None, gt=0),
+    supplier_id: int | None = Query(default=None, gt=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[PurchaseResultResponse]:
+    query = (
+        db.query(PurchaseResult)
+        .join(SupplierAllocation, SupplierAllocation.id == PurchaseResult.allocation_id)
+        .join(OrderItem, OrderItem.id == SupplierAllocation.order_item_id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(Product, Product.id == OrderItem.product_id)
+        .join(Customer, Customer.id == Order.customer_id)
+        .outerjoin(Supplier, Supplier.id == PurchaseResult.supplier_id)
+    )
+
+    if from_date is not None:
+        query = query.filter(func.date(PurchaseResult.recorded_at) >= from_date)
+    if to_date is not None:
+        query = query.filter(func.date(PurchaseResult.recorded_at) <= to_date)
+    if customer_id is not None:
+        query = query.filter(Customer.id == customer_id)
+    if product_id is not None:
+        query = query.filter(Product.id == product_id)
+    if supplier_id is not None:
+        query = query.filter(PurchaseResult.supplier_id == supplier_id)
+
+    rows = query.order_by(PurchaseResult.recorded_at.desc(), PurchaseResult.id.desc()).offset(offset).limit(limit).all()
     return [_to_purchase_result_response(db, row) for row in rows]
 
 

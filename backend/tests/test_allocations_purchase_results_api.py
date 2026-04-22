@@ -393,3 +393,54 @@ def test_purchase_result_defer_and_undefer():
     assert undeferred.status_code == 200
     assert undeferred.json()["is_deferred"] is False
     assert undeferred.json()["defer_reason"] is None
+
+
+def test_purchase_result_work_queue_and_history_separation():
+    aid = _seed_allocation(final_qty=10)
+    client = _client()
+
+    active = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "supplier_id": 501,
+            "purchased_qty": 1,
+            "purchased_uom": "count",
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert active.status_code == 201
+    active_id = active.json()["id"]
+
+    deferred = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "supplier_id": 502,
+            "purchased_qty": 1,
+            "purchased_uom": "count",
+            "result_status": "partially_filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert deferred.status_code == 201
+    deferred_id = deferred.json()["id"]
+
+    defer_res = client.post(
+        f"/api/v1/purchase-results/{deferred_id}/defer",
+        json={"defer_reason": "postpone", "deferred_by": "tester"},
+    )
+    assert defer_res.status_code == 200
+
+    work = client.get("/api/v1/purchase-results/queue/work-queue")
+    assert work.status_code == 200
+    work_ids = {r["id"] for r in work.json()}
+    assert active_id in work_ids
+    assert deferred_id not in work_ids
+
+    hist = client.get("/api/v1/purchase-results/queue/history")
+    assert hist.status_code == 200
+    hist_ids = {r["id"] for r in hist.json()}
+    assert active_id in hist_ids
+    assert deferred_id in hist_ids
