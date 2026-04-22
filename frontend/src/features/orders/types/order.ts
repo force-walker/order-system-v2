@@ -140,8 +140,17 @@ export type PurchaseResultItem = {
   id: number;
   allocationId: number;
   supplierId?: number;
+  supplierName?: string;
+  customerId?: number;
+  customerName?: string;
+  productId?: number;
+  productName?: string;
   purchasedQty: number;
   purchasedUom: string;
+  receivedQty?: number;
+  orderUom?: string;
+  invoiceQty?: number;
+  invoiceUom?: string;
   actualWeightKg?: number;
   unitCost?: number;
   finalUnitCost?: number;
@@ -152,6 +161,11 @@ export type PurchaseResultItem = {
   recordedBy?: string;
   recordedAt: string;
   note?: string;
+  isDeferred?: boolean;
+  deferUntil?: string;
+  deferReason?: string;
+  deferredBy?: string;
+  deferredAt?: string;
 };
 
 export type PurchaseResultFilter = {
