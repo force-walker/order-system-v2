@@ -433,13 +433,13 @@ def test_purchase_result_work_queue_and_history_separation():
     )
     assert defer_res.status_code == 200
 
-    work = client.get("/api/v1/purchase-results/work-queue")
+    work = client.get("/api/v1/purchase-results/queue/work-queue")
     assert work.status_code == 200
     work_ids = {r["id"] for r in work.json()}
     assert active_id in work_ids
     assert deferred_id not in work_ids
 
-    hist = client.get("/api/v1/purchase-results/history")
+    hist = client.get("/api/v1/purchase-results/queue/history")
     assert hist.status_code == 200
     hist_ids = {r["id"] for r in hist.json()}
     assert active_id in hist_ids

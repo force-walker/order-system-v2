@@ -222,7 +222,7 @@ def list_purchase_results(
 
 
 @router.get(
-    "/work-queue",
+    "/queue/work-queue",
     response_model=list[PurchaseResultResponse],
     responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES},
 )
@@ -263,7 +263,7 @@ def list_purchase_result_work_queue(
 
 
 @router.get(
-    "/history",
+    "/queue/history",
     response_model=list[PurchaseResultResponse],
     responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES},
 )
