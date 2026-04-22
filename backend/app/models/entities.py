@@ -239,6 +239,11 @@ class PurchaseResult(Base):
     recorded_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_deferred: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    defer_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    defer_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    deferred_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    deferred_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class InvoiceStatus(str, enum.Enum):

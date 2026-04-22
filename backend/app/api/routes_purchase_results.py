@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,6 +12,7 @@ from app.schemas.common import ApiErrorResponse
 from app.schemas.purchase_result import (
     PurchaseResultBulkUpsertRequest,
     PurchaseResultCreateRequest,
+    PurchaseResultDeferRequest,
     PurchaseResultResponse,
     PurchaseResultUpdateRequest,
 )
@@ -120,6 +122,11 @@ def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseRe
         recorded_by=row.recorded_by,
         recorded_at=row.recorded_at,
         note=row.note,
+        is_deferred=row.is_deferred,
+        defer_until=row.defer_until,
+        defer_reason=row.defer_reason,
+        deferred_by=row.deferred_by,
+        deferred_at=row.deferred_at,
     )
 
 
@@ -233,6 +240,52 @@ def update_purchase_result(result_id: int, payload: PurchaseResultUpdateRequest,
 
     if row.supplier_id is None:
         row.supplier_id = _default_supplier_id(None, alloc)
+
+    db.flush()
+    write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.UPDATE)
+    db.commit()
+    db.refresh(row)
+    return _to_purchase_result_response(db, row)
+
+
+@router.post(
+    "/{result_id}/defer",
+    response_model=PurchaseResultResponse,
+    responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def defer_purchase_result(result_id: int, payload: PurchaseResultDeferRequest, db: Session = Depends(get_db)) -> PurchaseResultResponse:
+    row = db.query(PurchaseResult).filter(PurchaseResult.id == result_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "purchase result not found"})
+
+    row.is_deferred = True
+    row.defer_until = payload.defer_until
+    row.defer_reason = payload.defer_reason
+    row.deferred_by = payload.deferred_by
+    row.deferred_at = datetime.now(UTC)
+
+    db.flush()
+    write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.UPDATE)
+    db.commit()
+    db.refresh(row)
+    return _to_purchase_result_response(db, row)
+
+
+@router.post(
+    "/{result_id}/undefer",
+    response_model=PurchaseResultResponse,
+    responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def undefer_purchase_result(result_id: int, db: Session = Depends(get_db)) -> PurchaseResultResponse:
+    row = db.query(PurchaseResult).filter(PurchaseResult.id == result_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "purchase result not found"})
+
+    row.is_deferred = False
+    row.defer_until = None
+    row.defer_reason = None
+    row.deferred_by = None
+    row.deferred_at = None
 
     db.flush()
     write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.UPDATE)

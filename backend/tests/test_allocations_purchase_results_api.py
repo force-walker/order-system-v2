@@ -361,3 +361,35 @@ def test_purchase_result_list_returns_supplier_and_invoice_defaults_and_filter_s
     named_rows = [r for r in sorted_supplier_desc.json() if r.get("supplier_name") is not None]
     names = [r["supplier_name"] for r in named_rows]
     assert names == sorted(names, reverse=True)
+
+
+def test_purchase_result_defer_and_undefer():
+    aid = _seed_allocation(final_qty=5)
+    client = _client()
+
+    created = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "supplier_id": 101,
+            "purchased_qty": 1,
+            "purchased_uom": "count",
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert created.status_code == 201
+    rid = created.json()["id"]
+
+    deferred = client.post(
+        f"/api/v1/purchase-results/{rid}/defer",
+        json={"defer_reason": "later", "deferred_by": "tester"},
+    )
+    assert deferred.status_code == 200
+    assert deferred.json()["is_deferred"] is True
+    assert deferred.json()["defer_reason"] == "later"
+
+    undeferred = client.post(f"/api/v1/purchase-results/{rid}/undefer")
+    assert undeferred.status_code == 200
+    assert undeferred.json()["is_deferred"] is False
+    assert undeferred.json()["defer_reason"] is None
