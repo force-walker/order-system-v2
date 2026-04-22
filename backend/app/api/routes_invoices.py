@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, PricingBasis
+from app.models.entities import Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, PricingBasis, PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
     InvoiceCreateRequest,
+    InvoiceDraftFromPurchaseResultsRequest,
     InvoiceFinalizeResponse,
     InvoiceGenerateRequest,
     InvoiceItemResponse,
@@ -238,6 +239,96 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
     return InvoiceResponse.model_validate(invoice)
 
 
+
+
+@router.post(
+    "/generate-draft-from-purchase-results",
+    response_model=InvoiceResponse,
+    status_code=201,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResultsRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
+    _validate_due_date(payload.invoice_date, payload.due_date)
+    order = _get_order_or_404(db, payload.order_id)
+    _ensure_invoice_no_unique(db, payload.invoice_no)
+
+    rows = (
+        db.query(PurchaseResult, OrderItem)
+        .join(SupplierAllocation, SupplierAllocation.id == PurchaseResult.allocation_id)
+        .join(OrderItem, OrderItem.id == SupplierAllocation.order_item_id)
+        .filter(OrderItem.order_id == order.id)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=422, detail={"code": "PURCHASE_RESULTS_NOT_FOUND", "message": "order has no purchase results"})
+
+    invoice = Invoice(
+        invoice_no=payload.invoice_no,
+        customer_id=order.customer_id,
+        invoice_date=payload.invoice_date,
+        delivery_date=order.delivery_date,
+        due_date=payload.due_date,
+        subtotal=0,
+        tax_total=0,
+        grand_total=0,
+        status=InvoiceStatus.draft,
+        is_locked=False,
+    )
+    db.add(invoice)
+    db.flush()
+
+    subtotal = Decimal("0")
+    for pr, item in rows:
+        billable_qty = Decimal(str(pr.purchased_qty))
+        sales_unit_price = Decimal("0")
+        if item.pricing_basis == PricingBasis.uom_kg and item.unit_price_uom_kg is not None:
+            sales_unit_price = _amount(Decimal(str(item.unit_price_uom_kg)))
+        elif item.unit_price_uom_count is not None:
+            sales_unit_price = _amount(Decimal(str(item.unit_price_uom_count)))
+
+        line_amount = _amount(billable_qty * sales_unit_price)
+        subtotal += line_amount
+
+        db.add(
+            InvoiceItem(
+                invoice_id=invoice.id,
+                order_item_id=item.id,
+                billable_qty=float(billable_qty),
+                billable_uom=pr.purchased_uom,
+                invoice_line_status="uninvoiced",
+                sales_unit_price=float(sales_unit_price),
+                unit_cost_basis=float(pr.final_unit_cost) if pr.final_unit_cost is not None else None,
+                line_amount=float(line_amount),
+                tax_amount=0,
+            )
+        )
+
+    invoice.subtotal = float(_amount(subtotal))
+    invoice.tax_total = 0
+    invoice.grand_total = float(_amount(subtotal))
+
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        action=AuditAction.CREATE,
+        after={
+            "status": invoice.status.value,
+            "is_locked": invoice.is_locked,
+            "subtotal": float(invoice.subtotal),
+            "grand_total": float(invoice.grand_total),
+            "source": "purchase_results",
+            "source_order_id": order.id,
+            "generated_item_count": len(rows),
+        },
+    )
+    db.commit()
+    db.refresh(invoice)
+    return InvoiceResponse.model_validate(invoice)
 @router.post(
     "/{invoice_id}/finalize",
     response_model=InvoiceFinalizeResponse,
