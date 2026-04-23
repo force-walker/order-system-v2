@@ -225,6 +225,7 @@ class PurchaseResult(Base):
     supplier_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
     purchased_qty: Mapped[float] = mapped_column(Numeric(12, 3))
     purchased_uom: Mapped[str] = mapped_column(String(32))
+    invoice_qty: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     actual_weight_kg: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     final_unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)

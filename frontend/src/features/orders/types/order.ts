@@ -139,6 +139,7 @@ export type PurchaseResultStatus = 'not_filled' | 'filled' | 'partially_filled' 
 export type PurchaseResultItem = {
   id: number;
   allocationId: number;
+  orderId?: number;
   supplierId?: number;
   supplierName?: string;
   customerId?: number;
@@ -187,6 +188,7 @@ export type PurchaseResultCreateRequest = {
   purchasedQty: number;
   purchasedUom: string;
   actualWeightKg?: number;
+  invoiceQty?: number;
   unitCost?: number;
   finalUnitCost?: number;
   shortageQty?: number;

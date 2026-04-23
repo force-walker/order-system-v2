@@ -72,6 +72,7 @@ def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseRe
     product_id = None
     product_name = None
     invoice_uom = None
+    order_id = None
     customer_id = None
     customer_name = None
 
@@ -86,6 +87,7 @@ def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseRe
 
             order = db.query(Order).filter(Order.id == order_item.order_id).first()
             if order is not None:
+                order_id = order.id
                 customer = db.query(Customer).filter(Customer.id == order.customer_id).first()
                 if customer is not None:
                     customer_id = customer.id
@@ -100,13 +102,14 @@ def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseRe
     return PurchaseResultResponse(
         id=row.id,
         allocation_id=row.allocation_id,
+        order_id=order_id,
         supplier_id=row.supplier_id,
         supplier_name=supplier_name,
         purchased_qty=float(row.purchased_qty),
         purchased_uom=row.purchased_uom,
         received_qty=float(row.purchased_qty),
         order_uom=row.purchased_uom,
-        invoice_qty=None,
+        invoice_qty=float(row.invoice_qty) if row.invoice_qty is not None else None,
         invoice_uom=invoice_uom,
         customer_id=customer_id,
         customer_name=customer_name,

@@ -11,6 +11,7 @@ class PurchaseResultCreateRequest(BaseModel):
     purchased_qty: float = Field(gt=0)
     purchased_uom: str = Field(min_length=1, max_length=32)
     actual_weight_kg: float | None = Field(default=None, gt=0)
+    invoice_qty: float | None = Field(default=None, ge=0)
     unit_cost: float | None = Field(default=None, ge=0)
     final_unit_cost: float | None = Field(default=None, ge=0)
     shortage_qty: float | None = Field(default=None, ge=0)
@@ -26,6 +27,7 @@ class PurchaseResultUpdateRequest(BaseModel):
     purchased_qty: float | None = Field(default=None, gt=0)
     purchased_uom: str | None = Field(default=None, min_length=1, max_length=32)
     actual_weight_kg: float | None = Field(default=None, gt=0)
+    invoice_qty: float | None = Field(default=None, ge=0)
     unit_cost: float | None = Field(default=None, ge=0)
     final_unit_cost: float | None = Field(default=None, ge=0)
     shortage_qty: float | None = Field(default=None, ge=0)
@@ -49,6 +51,7 @@ class PurchaseResultDeferRequest(BaseModel):
 class PurchaseResultResponse(BaseModel):
     id: int
     allocation_id: int
+    order_id: int | None = None
     supplier_id: int | None
     supplier_name: str | None = None
     purchased_qty: float

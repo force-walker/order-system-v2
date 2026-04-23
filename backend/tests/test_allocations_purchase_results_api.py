@@ -444,3 +444,32 @@ def test_purchase_result_work_queue_and_history_separation():
     hist_ids = {r["id"] for r in hist.json()}
     assert active_id in hist_ids
     assert deferred_id in hist_ids
+
+
+def test_purchase_result_invoice_qty_persists_after_save():
+    aid = _seed_allocation(final_qty=10)
+    client = _client()
+
+    created = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "supplier_id": 600,
+            "purchased_qty": 2,
+            "purchased_uom": "count",
+            "invoice_qty": 3,
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert created.status_code == 201
+    rid = created.json()["id"]
+    assert float(created.json()["invoice_qty"]) == 3.0
+
+    got = client.get(f"/api/v1/purchase-results/{rid}")
+    assert got.status_code == 200
+    assert float(got.json()["invoice_qty"]) == 3.0
+
+    listed = client.get(f"/api/v1/purchase-results?allocation_id={aid}")
+    assert listed.status_code == 200
+    assert any(float(r["invoice_qty"]) == 3.0 for r in listed.json() if r["id"] == rid)
