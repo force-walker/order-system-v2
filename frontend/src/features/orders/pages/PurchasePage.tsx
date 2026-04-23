@@ -439,7 +439,13 @@ export const PurchasePage = () => {
                           value={edit?.invoiceQty ?? ''}
                           onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], invoiceQty: e.target.value, rowError: undefined } }))}
                           onKeyDown={(e) => {
-                            const moveDown = e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey);
+                            const native = e.nativeEvent as KeyboardEvent;
+                            const isComposing = native.isComposing || native.keyCode === 229;
+
+                            const moveDown =
+                              e.key === 'ArrowDown' ||
+                              (e.key === 'Tab' && !e.shiftKey) ||
+                              (e.key === 'Enter' && !isComposing);
                             const moveUp = e.key === 'ArrowUp';
                             if (!moveDown && !moveUp) return;
 
