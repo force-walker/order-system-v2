@@ -196,3 +196,28 @@ export type PurchaseResultCreateRequest = {
   recordedBy?: string;
   note?: string;
 };
+
+export type InvoiceStatus = 'draft' | 'finalized' | 'sent' | 'cancelled';
+
+export type InvoiceDraftItem = {
+  id: number;
+  orderItemId: number;
+  billableQty: number;
+  billableUom: string;
+  salesUnitPrice: number;
+  lineAmount: number;
+  taxAmount: number;
+};
+
+export type InvoiceDraftSummary = {
+  id: number;
+  invoiceNo: string;
+  customerId: number;
+  invoiceDate: string;
+  deliveryDate: string;
+  itemCount: number;
+  subtotal: number;
+  taxTotal: number;
+  grandTotal: number;
+  status: InvoiceStatus;
+};

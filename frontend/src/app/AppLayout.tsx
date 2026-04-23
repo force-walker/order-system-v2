@@ -20,6 +20,7 @@ export const AppLayout = () => {
           <NavLink to="/orders" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>注文一覧</NavLink>
           <NavLink to="/orders/item-allocations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>一括割当</NavLink>
           <NavLink to="/reports/shipping" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>帳票</NavLink>
+          <NavLink to="/invoices/drafts" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>請求ドラフト</NavLink>
           <NavLink to="/products" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>商品</NavLink>
           <NavLink to="/customers" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>顧客</NavLink>
           <NavLink to="/suppliers" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>仕入先</NavLink>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   listOrderItemAllocationWorkItems,
@@ -33,12 +33,14 @@ type SortKey = 'customerName' | 'productName' | 'supplierName';
 type SortDirection = 'asc' | 'desc';
 
 export const PurchasePage = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rows, setRows] = useState<OrderItemAllocationWorkItem[]>([]);
   const [queueItems, setQueueItems] = useState<PurchaseResultItem[]>([]);
   const [queueResultMessage, setQueueResultMessage] = useState<Record<number, string>>({});
+  const [queueDraftInvoiceId, setQueueDraftInvoiceId] = useState<Record<number, number>>({});
   const [suppliers, setSuppliers] = useState<SupplierFilterOption[]>([]);
   const [unitsByProductId, setUnitsByProductId] = useState<Record<number, UnitPair>>({});
   const [editByItemId, setEditByItemId] = useState<Record<number, RowEdit>>({});
@@ -246,7 +248,9 @@ export const PurchasePage = () => {
     const invoiceDate = new Date().toISOString().slice(0, 10);
     try {
       const invoiceId = await generateDraftInvoiceFromPurchase({ invoiceNo, orderId, invoiceDate });
-      setQueueResultMessage((prev) => ({ ...prev, [item.id]: `draft作成: invoice#${invoiceId}` }));
+      setQueueDraftInvoiceId((prev) => ({ ...prev, [item.id]: invoiceId }));
+      setQueueResultMessage((prev) => ({ ...prev, [item.id]: `請求ドラフト作成完了: invoice#${invoiceId}` }));
+      setToast({ type: 'success', message: `請求ドラフトを作成しました（invoice#${invoiceId}）。` });
     } catch (e) {
       setQueueResultMessage((prev) => ({ ...prev, [item.id]: toActionableMessage(e, 'draft生成失敗') }));
     }
@@ -316,7 +320,10 @@ export const PurchasePage = () => {
         </div>
 
         <div className="card" style={{ marginBottom: 12 }}>
-          <h3>作業キュー（work-queue API）</h3>
+          <div className="list-header">
+            <h3>作業キュー（納品確認）</h3>
+            <button type="button" className="secondary" onClick={() => navigate('/invoices/drafts')}>請求ドラフト一覧へ</button>
+          </div>
           {queueItems.length === 0 ? <p className="subtle">対象なし</p> : (
             <table>
               <thead>
@@ -339,16 +346,24 @@ export const PurchasePage = () => {
                     <td>{q.productName ?? '-'}</td>
                     <td>{q.supplierName ?? '-'}</td>
                     <td>{q.receivedQty ?? q.purchasedQty} {q.orderUom ?? q.purchasedUom}</td>
-                    <td>{q.invoiceQty ?? '-'} {q.invoiceUom ?? ''}</td>
+                    <td>{q.invoiceQty ?? ''} {q.invoiceUom ?? ''}</td>
                     <td>
                       {q.isDeferred ? (
-                        <button type="button" className="secondary" onClick={() => void onUndefer(q.id)}>解除</button>
+                        <button type="button" className="secondary" onClick={() => void onUndefer(q.id)}>後回し解除</button>
                       ) : (
-                        <button type="button" className="secondary" onClick={() => void onDefer(q.id)}>後回し</button>
+                        <button type="button" className="secondary" onClick={() => void onDefer(q.id)}>作業キューから後回し</button>
                       )}
-                      <button type="button" onClick={() => void onGenerateDraft(q)} style={{ marginLeft: 8 }}>draft生成</button>
+                      <button type="button" onClick={() => void onGenerateDraft(q)} style={{ marginLeft: 8 }}>請求ドラフト生成</button>
                     </td>
-                    <td>{queueResultMessage[q.id] ?? ''}</td>
+                    <td>
+                      {queueResultMessage[q.id] ?? ''}
+                      {queueDraftInvoiceId[q.id] ? (
+                        <>
+                          {' '}
+                          <Link to={`/invoices/drafts/${queueDraftInvoiceId[q.id]}`}>確認</Link>
+                        </>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>

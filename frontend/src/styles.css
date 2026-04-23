@@ -549,7 +549,11 @@ button:disabled { opacity: 0.6; }
 }
 
 .purchase-result-table .col-supplier {
-  min-width: 110px;
+  min-width: 180px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border-left: 1px solid #e5e7eb;
   border-right: 1px solid #e5e7eb;
 }
