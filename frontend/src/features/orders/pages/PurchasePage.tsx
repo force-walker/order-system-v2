@@ -265,7 +265,8 @@ export const PurchasePage = () => {
       const invoiceId = await generateDraftInvoiceFromPurchase({ invoiceNo, orderId, invoiceDate });
       setQueueDraftInvoiceId((prev) => ({ ...prev, [item.id]: invoiceId }));
       setQueueResultMessage((prev) => ({ ...prev, [item.id]: `請求ドラフト作成完了: invoice#${invoiceId}` }));
-      setToast({ type: 'success', message: `請求ドラフトを作成しました（invoice#${invoiceId}）。` });
+      setToast({ type: 'success', message: `請求ドラフトを作成しました（invoice#${invoiceId}）。請求ドラフト詳細へ移動します。` });
+      navigate(`/invoices/drafts/${invoiceId}`);
     } catch (e) {
       setQueueResultMessage((prev) => ({ ...prev, [item.id]: toActionableMessage(e, 'draft生成失敗') }));
     }
