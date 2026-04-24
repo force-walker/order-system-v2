@@ -11,6 +11,7 @@ import {
   bulkUpsertPurchaseResults,
   deferPurchaseResult,
   generateDraftInvoiceFromPurchase,
+  listPurchaseResults,
   listPurchaseWorkQueue,
   undeferPurchaseResult,
 } from 'features/orders/services/purchaseService';
@@ -65,17 +66,23 @@ export const PurchasePage = () => {
     setLoading(true);
     setError('');
     try {
-      const [all, supplierOptions, queue] = await Promise.all([
+      const [all, supplierOptions, queue, persisted] = await Promise.all([
         listOrderItemAllocationWorkItems({ unallocatedOnly: false }),
         listSupplierFilterOptions(),
         listPurchaseWorkQueue(),
+        listPurchaseResults({ limit: 1000, offset: 0 }),
       ]);
       setSuppliers(supplierOptions);
       setQueueItems(queue.items);
 
       const invoiceQtyByAllocationId = new Map<number, number | undefined>();
-      queue.items.forEach((q) => {
+      persisted.items.forEach((q) => {
         invoiceQtyByAllocationId.set(q.allocationId, q.invoiceQty);
+      });
+      queue.items.forEach((q) => {
+        if (!invoiceQtyByAllocationId.has(q.allocationId)) {
+          invoiceQtyByAllocationId.set(q.allocationId, q.invoiceQty);
+        }
       });
 
       const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
