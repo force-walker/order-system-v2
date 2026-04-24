@@ -239,7 +239,7 @@ export const PurchasePage = () => {
   };
 
   const onGenerateDraft = async (item: PurchaseResultItem) => {
-    const orderId = rows.find((r) => r.allocationId === item.allocationId)?.orderId;
+    const orderId = item.orderId ?? rows.find((r) => r.allocationId === item.allocationId)?.orderId;
     if (!orderId) {
       setQueueResultMessage((prev) => ({ ...prev, [item.id]: 'order特定不可のためdraft生成不可' }));
       return;
@@ -267,7 +267,8 @@ export const PurchasePage = () => {
       const edit = editByItemId[r.orderItemId];
       const units = unitsByProductId[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
       const received = Number(r.manualQty ?? r.orderedQty);
-      const invoiced = Number(edit.invoiceQty);
+      const invoiceText = edit.invoiceQty.trim();
+      const invoiced = invoiceText === '' ? undefined : Number(invoiceText);
       const shortage = Math.max(r.orderedQty - received, 0);
       return {
         orderItemId: r.orderItemId,
@@ -276,15 +277,21 @@ export const PurchasePage = () => {
           supplierId: r.manualSupplierId ?? undefined,
           purchasedQty: received,
           purchasedUom: units.orderUom,
+          invoiceQty: invoiced,
           shortageQty: shortage > 0 ? shortage : undefined,
           resultStatus: shortage > 0 ? ('partially_filled' as const) : ('filled' as const),
           invoiceableFlag: true,
-          note: `invoice_qty=${invoiced} ${units.invoiceUom}`,
         },
       };
     });
 
-    const invalid = payload.filter((p) => !Number.isFinite(p.row.purchasedQty) || p.row.purchasedQty < 0 || Number.isNaN(Number((editByItemId[p.orderItemId]?.invoiceQty ?? ''))));
+    const invalid = payload.filter((p) => {
+      if (!Number.isFinite(p.row.purchasedQty) || p.row.purchasedQty < 0) return true;
+      const invoiceRaw = editByItemId[p.orderItemId]?.invoiceQty ?? '';
+      if (invoiceRaw.trim() === '') return false;
+      const parsed = Number(invoiceRaw);
+      return Number.isNaN(parsed) || parsed < 0;
+    });
     if (invalid.length > 0) {
       setToast({ type: 'error', message: '受取数量/請求数量の数値入力を確認してください。' });
       return;

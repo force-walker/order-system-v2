@@ -18,6 +18,7 @@ type ApiTokenResponse = { access_token: string; refresh_token: string };
 type ApiPurchaseResultResponse = {
   id: number;
   allocation_id: number;
+  order_id?: number | null;
   supplier_id: number | null;
   supplier_name?: string | null;
   customer_id?: number | null;
@@ -78,6 +79,7 @@ const fetchWithAuth = async (path: string, init?: { method?: string; body?: unkn
 const toItem = (row: ApiPurchaseResultResponse): PurchaseResultItem => ({
   id: row.id,
   allocationId: row.allocation_id,
+  orderId: row.order_id ?? undefined,
   supplierId: row.supplier_id ?? undefined,
   supplierName: row.supplier_name ?? undefined,
   customerId: row.customer_id ?? undefined,
@@ -172,6 +174,7 @@ const toRequestBody = (payload: PurchaseResultCreateRequest) => ({
   purchased_qty: payload.purchasedQty,
   purchased_uom: payload.purchasedUom,
   actual_weight_kg: payload.actualWeightKg ?? null,
+  invoice_qty: payload.invoiceQty ?? null,
   unit_cost: payload.unitCost ?? null,
   final_unit_cost: payload.finalUnitCost ?? null,
   shortage_qty: payload.shortageQty ?? null,
