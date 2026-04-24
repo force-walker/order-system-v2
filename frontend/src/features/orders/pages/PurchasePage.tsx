@@ -70,7 +70,7 @@ export const PurchasePage = () => {
         listOrderItemAllocationWorkItems({ unallocatedOnly: false }),
         listSupplierFilterOptions(),
         listPurchaseWorkQueue(),
-        listPurchaseResults({ limit: 1000, offset: 0 }),
+        listPurchaseResults({ limit: 500, offset: 0 }),
       ]);
       setSuppliers(supplierOptions);
       setQueueItems(queue.items);
