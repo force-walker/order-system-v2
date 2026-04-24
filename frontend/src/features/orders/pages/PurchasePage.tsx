@@ -73,6 +73,11 @@ export const PurchasePage = () => {
       setSuppliers(supplierOptions);
       setQueueItems(queue.items);
 
+      const invoiceQtyByAllocationId = new Map<number, number | undefined>();
+      queue.items.forEach((q) => {
+        invoiceQtyByAllocationId.set(q.allocationId, q.invoiceQty);
+      });
+
       const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
 
       const raw = sessionStorage.getItem('osv2_purchase_target_allocations');
@@ -102,14 +107,17 @@ export const PurchasePage = () => {
 
       setEditByItemId((prev) =>
         Object.fromEntries(
-          filtered.map((r) => [
-            r.orderItemId,
-            {
-              selected: prev[r.orderItemId]?.selected ?? false,
-              invoiceQty: prev[r.orderItemId]?.invoiceQty ?? '',
-              rowError: undefined,
-            },
-          ]),
+          filtered.map((r) => {
+            const restoredInvoiceQty = typeof r.allocationId === 'number' ? invoiceQtyByAllocationId.get(r.allocationId) : undefined;
+            return [
+              r.orderItemId,
+              {
+                selected: prev[r.orderItemId]?.selected ?? false,
+                invoiceQty: prev[r.orderItemId]?.invoiceQty ?? (restoredInvoiceQty != null ? String(restoredInvoiceQty) : ''),
+                rowError: undefined,
+              },
+            ];
+          }),
         ),
       );
     } catch (e) {
