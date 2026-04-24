@@ -42,6 +42,7 @@ export const PurchasePage = () => {
   const [queueItems, setQueueItems] = useState<PurchaseResultItem[]>([]);
   const [queueResultMessage, setQueueResultMessage] = useState<Record<number, string>>({});
   const [queueDraftInvoiceId, setQueueDraftInvoiceId] = useState<Record<number, number>>({});
+  const [orderIdByAllocationId, setOrderIdByAllocationId] = useState<Record<number, number>>({});
   const [suppliers, setSuppliers] = useState<SupplierFilterOption[]>([]);
   const [unitsByProductId, setUnitsByProductId] = useState<Record<number, UnitPair>>({});
   const [editByItemId, setEditByItemId] = useState<Record<number, RowEdit>>({});
@@ -86,6 +87,14 @@ export const PurchasePage = () => {
       });
 
       const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
+
+      const orderMap: Record<number, number> = {};
+      allocated.forEach((r) => {
+        if (typeof r.allocationId === 'number' && typeof r.orderId === 'number') {
+          orderMap[r.allocationId] = r.orderId;
+        }
+      });
+      setOrderIdByAllocationId(orderMap);
 
       const raw = sessionStorage.getItem('osv2_purchase_target_allocations');
       const targetAllocationIds: number[] = raw ? (JSON.parse(raw) as number[]) : [];
@@ -254,7 +263,7 @@ export const PurchasePage = () => {
   };
 
   const onGenerateDraft = async (item: PurchaseResultItem) => {
-    const orderId = item.orderId ?? rows.find((r) => r.allocationId === item.allocationId)?.orderId;
+    const orderId = item.orderId ?? orderIdByAllocationId[item.allocationId] ?? rows.find((r) => r.allocationId === item.allocationId)?.orderId;
     if (!orderId) {
       setQueueResultMessage((prev) => ({ ...prev, [item.id]: 'order特定不可のためdraft生成不可' }));
       return;
