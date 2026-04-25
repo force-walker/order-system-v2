@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
+import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveProduct, deleteProduct, listProducts, unarchiveProduct } from 'features/products/services/productsService';
 import type { ProductOption } from 'features/products/types/product';
 import { toActionableMessage } from 'shared/error';
@@ -123,71 +123,71 @@ export const ProductListPage = () => {
           </div>
         </div>
 
-        {filteredProducts.length === 0 ? (
-          <EmptyState title="データがありません" description="条件に合うデータがありません。検索・フィルタ条件を見直してください。" actionLabel="条件をリセット" onAction={() => { setKeyword(''); setPricingFilter('all'); setSortMode('idAsc'); }} />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>SKU</th>
+                <th>商品名</th>
+                <th>注文単位</th>
+                <th>課金基準</th>
+                <th>作成日時</th>
+                <th>更新日時</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProducts.length === 0 ? (
                 <tr>
-                  <th>ID</th>
-                  <th>SKU</th>
-                  <th>商品名</th>
-                  <th>注文単位</th>
-                  <th>課金基準</th>
-                  <th>作成日時</th>
-                  <th>更新日時</th>
-                  <th>操作</th>
+                  <td colSpan={8} className="subtle">条件に合うデータがありません。検索・フィルタ条件を見直してください。</td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.id}</td>
-                    <td>{p.sku ?? '-'}</td>
-                    <td>{p.name}</td>
-                    <td>{p.orderUom}</td>
-                    <td>{p.pricingBasisDefault}</td>
-                    <td>{p.createdAt ?? '-'}</td>
-                    <td>{p.updatedAt ?? '-'}</td>
-                    <td>
-                      <Link to={`/products/${p.id}`} className="order-link">詳細</Link>
-                      {' / '}
-                      <Link to={`/products/${p.id}/edit`} className="order-link">編集</Link>
-                      {' / '}
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => {
-                          const confirmed = window.confirm(`${p.name} を${p.active ? 'アーカイブ' : '復元'}しますか？`);
-                          if (!confirmed) return;
-                          void runAction(
-                            () => (p.active ? archiveProduct(p.id) : unarchiveProduct(p.id)),
-                            p.active ? '商品をアーカイブしました' : '商品を復元しました',
-                          );
-                        }}
-                      >
-                        {p.active ? 'アーカイブ' : '復元'}
-                      </button>
-                      {' / '}
-                      <button
-                        type="button"
-                        className="danger"
-                        onClick={() => {
-                          const confirmed = window.confirm(`${p.name} を削除しますか？（参照がある場合は削除できません）`);
-                          if (!confirmed) return;
-                          void runAction(() => deleteProduct(p.id), '商品を削除しました');
-                        }}
-                      >
-                        削除
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ) : filteredProducts.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.id}</td>
+                  <td>{p.sku ?? '-'}</td>
+                  <td>{p.name}</td>
+                  <td>{p.orderUom}</td>
+                  <td>{p.pricingBasisDefault}</td>
+                  <td>{p.createdAt ?? '-'}</td>
+                  <td>{p.updatedAt ?? '-'}</td>
+                  <td>
+                    <Link to={`/products/${p.id}`} className="order-link">詳細</Link>
+                    {' / '}
+                    <Link to={`/products/${p.id}/edit`} className="order-link">編集</Link>
+                    {' / '}
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        const confirmed = window.confirm(`${p.name} を${p.active ? 'アーカイブ' : '復元'}しますか？`);
+                        if (!confirmed) return;
+                        void runAction(
+                          () => (p.active ? archiveProduct(p.id) : unarchiveProduct(p.id)),
+                          p.active ? '商品をアーカイブしました' : '商品を復元しました',
+                        );
+                      }}
+                    >
+                      {p.active ? 'アーカイブ' : '復元'}
+                    </button>
+                    {' / '}
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => {
+                        const confirmed = window.confirm(`${p.name} を削除しますか？（参照がある場合は削除できません）`);
+                        if (!confirmed) return;
+                        void runAction(() => deleteProduct(p.id), '商品を削除しました');
+                      }}
+                    >
+                      削除
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );

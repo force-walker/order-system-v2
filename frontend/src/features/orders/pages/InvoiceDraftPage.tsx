@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
+import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { listInvoiceDraftListRows } from 'features/orders/services/invoiceService';
 import type { InvoiceDraftListRow, InvoiceStatus } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
@@ -86,11 +86,8 @@ export const InvoiceDraftPage = () => {
           </label>
         </div>
 
-        {filtered.length === 0 ? (
-          <EmptyState title="表示対象がありません" description="条件に合う請求ドラフトがありません。" />
-        ) : (
-          <div className="table-wrap">
-            <table>
+        <div className="table-wrap">
+          <table>
               <thead>
                 <tr>
                   <th>取引先名</th>
@@ -104,7 +101,11 @@ export const InvoiceDraftPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => {
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="subtle">条件に合う請求ドラフトがありません。</td>
+                  </tr>
+                ) : filtered.map((row) => {
                   const editedPriceRaw = editedUnitPriceByItemId[row.invoiceItemId];
                   const raw = editedPriceRaw ?? String(row.salesUnitPrice);
                   const hasError = Boolean(unitPriceErrorByItemId[row.invoiceItemId]);
@@ -156,7 +157,6 @@ export const InvoiceDraftPage = () => {
               </tbody>
             </table>
           </div>
-        )}
       </div>
     </section>
   );

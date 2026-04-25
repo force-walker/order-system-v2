@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
+import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveCustomer, deleteCustomer, listCustomers, unarchiveCustomer } from 'features/customers/services/customersService';
 import type { CustomerOption } from 'features/customers/types/customer';
 import { toActionableMessage } from 'shared/error';
@@ -112,23 +112,24 @@ export const CustomerListPage = () => {
           </div>
         </div>
 
-        {filteredCustomers.length === 0 ? (
-          <EmptyState title="データがありません" description="条件に合うデータがありません。検索条件を見直してください。" actionLabel="条件をリセット" onAction={() => setKeyword('')} />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>コード</th>
+                <th>表示名</th>
+                <th>作成日時</th>
+                <th>更新日時</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCustomers.length === 0 ? (
                 <tr>
-                  <th>ID</th>
-                  <th>コード</th>
-                  <th>表示名</th>
-                  <th>作成日時</th>
-                  <th>更新日時</th>
-                  <th>操作</th>
+                  <td colSpan={6} className="subtle">条件に合うデータがありません。検索条件を見直してください。</td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredCustomers.map((c) => (
+              ) : filteredCustomers.map((c) => (
                   <tr key={c.id}>
                     <td>{c.id}</td>
                     <td>{c.customerCode ?? '-'}</td>
@@ -174,7 +175,6 @@ export const CustomerListPage = () => {
               </tbody>
             </table>
           </div>
-        )}
       </div>
     </section>
   );
