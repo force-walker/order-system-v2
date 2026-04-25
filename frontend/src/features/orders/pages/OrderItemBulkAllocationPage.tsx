@@ -45,6 +45,8 @@ export const OrderItemBulkAllocationPage = () => {
   const [bulkSupplierQuery, setBulkSupplierQuery] = useState('');
   const [selectVisibleChecked, setSelectVisibleChecked] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: 'deliveryDate', direction: 'asc' });
+  const [filterUnassignedSupplierOnly, setFilterUnassignedSupplierOnly] = useState(false);
+  const [filterNonZeroDiffOnly, setFilterNonZeroDiffOnly] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -100,9 +102,19 @@ export const OrderItemBulkAllocationPage = () => {
     return items.filter((row) => {
       if (product && !row.productName.toLowerCase().includes(product)) return false;
       if (customer && !row.customerName.toLowerCase().includes(customer)) return false;
+
+      const edit = editById[row.orderItemId];
+      const manualSupplierId = edit?.manualSupplierId ?? row.manualSupplierId ?? null;
+      if (filterUnassignedSupplierOnly && manualSupplierId != null) return false;
+
+      const manualQtyNum = Number(edit?.manualQty ?? row.manualQty ?? 0);
+      const allocatedQty = Number.isFinite(manualQtyNum) ? manualQtyNum : 0;
+      const diff = Number((row.orderedQty - allocatedQty).toFixed(3));
+      if (filterNonZeroDiffOnly && Math.abs(diff) < 1e-9) return false;
+
       return true;
     });
-  }, [items, productFilter, customerFilter]);
+  }, [items, productFilter, customerFilter, editById, filterUnassignedSupplierOnly, filterNonZeroDiffOnly]);
 
   const sortedItems = useMemo(() => {
     const rows = [...filteredItems];
@@ -179,6 +191,8 @@ export const OrderItemBulkAllocationPage = () => {
         const next = { ...prev };
         for (const s of suggestions) {
           if (!next[s.orderItemId]) continue;
+          const currentSupplier = next[s.orderItemId].manualSupplierId;
+          if (currentSupplier != null) continue;
           next[s.orderItemId] = {
             ...next[s.orderItemId],
             manualSupplierId: s.suggestedSupplierId,
@@ -199,6 +213,8 @@ export const OrderItemBulkAllocationPage = () => {
       const next = { ...prev };
       for (const row of sortedItems) {
         if (!next[row.orderItemId]) continue;
+        const currentQty = String(next[row.orderItemId].manualQty ?? '').trim();
+        if (currentQty !== '') continue;
         next[row.orderItemId] = {
           ...next[row.orderItemId],
           manualQty: String(row.orderedQty),
@@ -427,10 +443,38 @@ export const OrderItemBulkAllocationPage = () => {
                   <th>状態</th>
                   <th className="col-customer" onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
-                  <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>{sortLabel('manualSupplierId', '手動仕入先')}</th>
+                  <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>
+                    {sortLabel('manualSupplierId', '手動仕入先')}
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ marginLeft: 6, padding: '0 6px', lineHeight: 1.2 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFilterUnassignedSupplierOnly((v) => !v);
+                      }}
+                      title="未選択（未割当）を絞り込み"
+                    >
+                      ⛃
+                    </button>
+                  </th>
                   <th className="col-ordered-qty" onClick={() => onSort('orderedQty')} style={{ cursor: 'pointer' }}>{sortLabel('orderedQty', '受注数量')}</th>
                   <th className="col-allocated-qty" onClick={() => onSort('manualQty')} style={{ cursor: 'pointer' }}>{sortLabel('manualQty', '割当数')}</th>
-                  <th className="col-shortage-qty" onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>{sortLabel('shortageQty', '不足数')}</th>
+                  <th className="col-shortage-qty" onClick={() => onSort('shortageQty')} style={{ cursor: 'pointer' }}>
+                    {sortLabel('shortageQty', '不足数')}
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ marginLeft: 6, padding: '0 6px', lineHeight: 1.2 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFilterNonZeroDiffOnly((v) => !v);
+                      }}
+                      title="受注数-割当数 差分ありを絞り込み"
+                    >
+                      ⛃
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -438,7 +482,8 @@ export const OrderItemBulkAllocationPage = () => {
                   const edit = editById[row.orderItemId];
                   const manualQtyNum = Number(edit?.manualQty ?? row.manualQty ?? 0);
                   const allocatedQty = Number.isFinite(manualQtyNum) ? manualQtyNum : 0;
-                  const shortageQty = Number(Math.max(row.orderedQty - allocatedQty, 0).toFixed(3));
+                  const diffQty = Number((row.orderedQty - allocatedQty).toFixed(3));
+                  const shortageQty = Number(Math.max(diffQty, 0).toFixed(3));
 
                   const hasManualSupplier = (edit?.manualSupplierId ?? row.manualSupplierId) != null;
                   const isNonTomorrow = row.deliveryDate !== tomorrowDateStr;
@@ -508,7 +553,8 @@ export const OrderItemBulkAllocationPage = () => {
                         />
                       </td>
                       <td className="col-shortage-qty">
-                        {shortageQty > 0 ? <span className="field-error">{shortageQty}</span> : <span className="subtle">-</span>}
+                        {shortageQty > 0 ? <span className="field-error">不足: {shortageQty}</span> : <span className="subtle">不足: -</span>}
+                        <div className={Math.abs(diffQty) > 1e-9 ? 'field-error' : 'subtle'}>差分: {diffQty > 0 ? `+${diffQty}` : diffQty}</div>
                         {edit?.rowError ? <div className="field-error">{edit.rowError}</div> : null}
                       </td>
                     </tr>
