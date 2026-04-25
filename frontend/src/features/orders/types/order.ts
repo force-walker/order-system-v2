@@ -227,11 +227,13 @@ export type InvoiceDraftSummary = {
 export type InvoiceDraftListRow = {
   invoiceId: number;
   invoiceItemId: number;
+  orderNo: string;
   customerName: string;
   productName: string;
   billableQty: number;
   billableUom: string;
   salesUnitPrice: number;
+  unitCostBasis?: number;
   lineAmount: number;
   grossMarginPct?: number;
   deliveryDate?: string;

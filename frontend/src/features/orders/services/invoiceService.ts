@@ -34,11 +34,13 @@ type ApiInvoiceItem = {
 type ApiInvoiceDraftListRow = {
   invoice_id: number;
   invoice_item_id: number;
+  order_no: string;
   customer_name: string;
   product_name: string;
   billable_qty: number;
   billable_uom: string;
   sales_unit_price: number;
+  unit_cost_basis: number | null;
   line_amount: number;
   gross_margin_pct: number | null;
 };
@@ -135,11 +137,13 @@ export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]>
     return {
       invoiceId: r.invoice_id,
       invoiceItemId: r.invoice_item_id,
+      orderNo: r.order_no,
       customerName: r.customer_name,
       productName: r.product_name,
       billableQty: r.billable_qty,
       billableUom: r.billable_uom,
       salesUnitPrice: r.sales_unit_price,
+      unitCostBasis: r.unit_cost_basis ?? undefined,
       lineAmount: r.line_amount,
       grossMarginPct: r.gross_margin_pct ?? undefined,
       deliveryDate: s?.deliveryDate,

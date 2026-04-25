@@ -124,18 +124,19 @@ def list_invoices(
 @router.get("/draft-list", response_model=list[InvoiceDraftListRow])
 def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftListRow]:
     rows = (
-        db.query(Invoice, InvoiceItem, Customer, Product)
+        db.query(Invoice, InvoiceItem, Customer, Product, Order)
         .join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)
         .join(OrderItem, OrderItem.id == InvoiceItem.order_item_id)
+        .join(Order, Order.id == OrderItem.order_id)
         .join(Product, Product.id == OrderItem.product_id)
         .join(Customer, Customer.id == Invoice.customer_id)
         .filter(Invoice.status == InvoiceStatus.draft)
-        .order_by(Invoice.id.desc(), InvoiceItem.id.asc())
+        .order_by(Order.order_no.asc(), InvoiceItem.id.asc())
         .all()
     )
 
     result: list[InvoiceDraftListRow] = []
-    for inv, item, customer, product in rows:
+    for inv, item, customer, product, order in rows:
         line_amount = float(item.line_amount)
         gross_margin_pct = None
         if line_amount > 0 and item.unit_cost_basis is not None:
@@ -146,11 +147,13 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
             InvoiceDraftListRow(
                 invoice_id=inv.id,
                 invoice_item_id=item.id,
+                order_no=order.order_no,
                 customer_name=customer.name,
                 product_name=product.name,
                 billable_qty=float(item.billable_qty),
                 billable_uom=item.billable_uom,
                 sales_unit_price=float(item.sales_unit_price),
+                unit_cost_basis=float(item.unit_cost_basis) if item.unit_cost_basis is not None else None,
                 line_amount=line_amount,
                 gross_margin_pct=gross_margin_pct,
             )

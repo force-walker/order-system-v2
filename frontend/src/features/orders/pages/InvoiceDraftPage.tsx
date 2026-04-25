@@ -18,6 +18,7 @@ export const InvoiceDraftPage = () => {
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftListRow[]>([]);
   const [editedUnitPriceByItemId, setEditedUnitPriceByItemId] = useState<Record<number, string>>({});
+  const [unitPriceErrorByItemId, setUnitPriceErrorByItemId] = useState<Record<number, string>>({});
 
   const [customerFilter, setCustomerFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
@@ -41,12 +42,14 @@ export const InvoiceDraftPage = () => {
 
   const filtered = useMemo(() => {
     const cq = customerFilter.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (statusFilter && r.status !== statusFilter) return false;
-      if (dateFilter && r.deliveryDate !== dateFilter) return false;
-      if (cq && !r.customerName.toLowerCase().includes(cq)) return false;
-      return true;
-    });
+    return rows
+      .filter((r) => {
+        if (statusFilter && r.status !== statusFilter) return false;
+        if (dateFilter && r.deliveryDate !== dateFilter) return false;
+        if (cq && !r.customerName.toLowerCase().includes(cq)) return false;
+        return true;
+      })
+      .sort((a, b) => a.orderNo.localeCompare(b.orderNo));
   }, [rows, customerFilter, dateFilter, statusFilter]);
 
   if (error) return <ErrorState title="請求ドラフト一覧の取得に失敗しました" description={error} />;
@@ -103,18 +106,19 @@ export const InvoiceDraftPage = () => {
               <tbody>
                 {filtered.map((row) => {
                   const editedPriceRaw = editedUnitPriceByItemId[row.invoiceItemId];
+                  const raw = editedPriceRaw ?? String(row.salesUnitPrice);
+                  const hasError = Boolean(unitPriceErrorByItemId[row.invoiceItemId]);
+                  const isHalfWidthNumeric = /^\d+(\.\d+)?$/.test(raw.trim());
                   const editedPrice =
-                    editedPriceRaw != null && editedPriceRaw.trim() !== '' && !Number.isNaN(Number(editedPriceRaw))
-                      ? Number(editedPriceRaw)
+                    raw.trim() !== '' && isHalfWidthNumeric
+                      ? Number(raw)
                       : row.salesUnitPrice;
                   const calculatedAmount = editedPrice * row.billableQty;
-                  const baseCost = row.grossMarginPct != null
-                    ? row.lineAmount * (1 - row.grossMarginPct / 100)
-                    : null;
+                  const unitCostPerUnit = row.unitCostBasis != null ? row.unitCostBasis / row.billableQty : null;
                   const calculatedMargin =
-                    baseCost != null && calculatedAmount > 0
-                      ? ((calculatedAmount - baseCost) / calculatedAmount) * 100
-                      : row.grossMarginPct;
+                    unitCostPerUnit != null && editedPrice > 0
+                      ? ((editedPrice - unitCostPerUnit / 20) / editedPrice) * 100
+                      : undefined;
 
                   return (
                     <tr key={row.invoiceItemId}>
@@ -124,16 +128,27 @@ export const InvoiceDraftPage = () => {
                       <td>{row.billableUom}</td>
                       <td style={{ textAlign: 'right' }}>
                         <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={editedPriceRaw ?? String(row.salesUnitPrice)}
-                          onChange={(e) => setEditedUnitPriceByItemId((prev) => ({ ...prev, [row.invoiceItemId]: e.target.value }))}
-                          style={{ width: 110, textAlign: 'right' }}
+                          type="text"
+                          inputMode="decimal"
+                          value={raw}
+                          onFocus={(e) => e.currentTarget.select()}
+                          onChange={(e) => {
+                            setEditedUnitPriceByItemId((prev) => ({ ...prev, [row.invoiceItemId]: e.target.value }));
+                            setUnitPriceErrorByItemId((prev) => ({ ...prev, [row.invoiceItemId]: '' }));
+                          }}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v === '') return;
+                            if (!/^\d+(\.\d+)?$/.test(v)) {
+                              setUnitPriceErrorByItemId((prev) => ({ ...prev, [row.invoiceItemId]: '半角数値で入力してください' }));
+                            }
+                          }}
+                          style={{ width: 110, textAlign: 'right', borderColor: hasError ? '#dc2626' : undefined }}
                         />
+                        {hasError ? <div className="field-error">{unitPriceErrorByItemId[row.invoiceItemId]}</div> : null}
                       </td>
                       <td style={{ textAlign: 'right' }}>{currency.format(calculatedAmount)}</td>
-                      <td style={{ textAlign: 'right' }}>{formatGrossMargin(calculatedMargin ?? undefined)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatGrossMargin(calculatedMargin)}</td>
                       <td><Link to={`/invoices/drafts/${row.invoiceId}`}>詳細</Link></td>
                     </tr>
                   );
