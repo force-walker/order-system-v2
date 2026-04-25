@@ -42,6 +42,8 @@ export const PurchasePage = () => {
   const [queueItems, setQueueItems] = useState<PurchaseResultItem[]>([]);
   const [queueResultMessage, setQueueResultMessage] = useState<Record<number, string>>({});
   const [queueDraftInvoiceId, setQueueDraftInvoiceId] = useState<Record<number, number>>({});
+  const [orderIdByAllocationId, setOrderIdByAllocationId] = useState<Record<number, number>>({});
+  const [purchaseResultByAllocationId, setPurchaseResultByAllocationId] = useState<Record<number, PurchaseResultItem>>({});
   const [suppliers, setSuppliers] = useState<SupplierFilterOption[]>([]);
   const [unitsByProductId, setUnitsByProductId] = useState<Record<number, UnitPair>>({});
   const [editByItemId, setEditByItemId] = useState<Record<number, RowEdit>>({});
@@ -76,16 +78,29 @@ export const PurchasePage = () => {
       setQueueItems(queue.items);
 
       const invoiceQtyByAllocationId = new Map<number, number | undefined>();
+      const persistedByAllocationId: Record<number, PurchaseResultItem> = {};
       persisted.items.forEach((q) => {
         invoiceQtyByAllocationId.set(q.allocationId, q.invoiceQty);
+        persistedByAllocationId[q.allocationId] = q;
       });
       queue.items.forEach((q) => {
         if (!invoiceQtyByAllocationId.has(q.allocationId)) {
           invoiceQtyByAllocationId.set(q.allocationId, q.invoiceQty);
         }
+        if (!persistedByAllocationId[q.allocationId]) {
+          persistedByAllocationId[q.allocationId] = q;
+        }
       });
+      setPurchaseResultByAllocationId(persistedByAllocationId);
 
       const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
+      const orderMap: Record<number, number> = {};
+      allocated.forEach((r) => {
+        if (typeof r.allocationId === 'number' && typeof r.orderId === 'number') {
+          orderMap[r.allocationId] = r.orderId;
+        }
+      });
+      setOrderIdByAllocationId(orderMap);
 
       const raw = sessionStorage.getItem('osv2_purchase_target_allocations');
       const targetAllocationIds: number[] = raw ? (JSON.parse(raw) as number[]) : [];
@@ -254,7 +269,7 @@ export const PurchasePage = () => {
   };
 
   const onGenerateDraft = async (item: PurchaseResultItem) => {
-    const orderId = item.orderId ?? rows.find((r) => r.allocationId === item.allocationId)?.orderId;
+    const orderId = item.orderId ?? orderIdByAllocationId[item.allocationId] ?? rows.find((r) => r.allocationId === item.allocationId)?.orderId;
     if (!orderId) {
       setQueueResultMessage((prev) => ({ ...prev, [item.id]: 'order特定不可のためdraft生成不可' }));
       return;
@@ -269,6 +284,28 @@ export const PurchasePage = () => {
       navigate(`/invoices/drafts/${invoiceId}`);
     } catch (e) {
       setQueueResultMessage((prev) => ({ ...prev, [item.id]: toActionableMessage(e, 'draft生成失敗') }));
+    }
+  };
+
+  const onGenerateDraftByAllocation = async (allocationId: number) => {
+    const pr = purchaseResultByAllocationId[allocationId];
+    if (!pr) {
+      setToast({ type: 'error', message: '先に「選択行を保存」で納品確認を保存してください。' });
+      return;
+    }
+    await onGenerateDraft(pr);
+  };
+
+  const onDeferByAllocation = async (allocationId: number) => {
+    const pr = purchaseResultByAllocationId[allocationId];
+    if (!pr) {
+      setToast({ type: 'error', message: 'この行はまだ後回し操作できません（未保存）。' });
+      return;
+    }
+    if (pr.isDeferred) {
+      await onUndefer(pr.id);
+    } else {
+      await onDefer(pr.id);
     }
   };
 
@@ -428,6 +465,8 @@ export const PurchasePage = () => {
                   <th className="col-supplier" onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
                   <th className="col-ordered">受注数量</th>
                   <th className="col-invoice">請求数量</th>
+                  <th>操作</th>
+                  <th>結果</th>
                 </tr>
               </thead>
               <tbody>
@@ -481,6 +520,41 @@ export const PurchasePage = () => {
                           }}
                           placeholder=""
                         /> {units.invoiceUom}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => void onDeferByAllocation(Number(r.allocationId))}
+                          style={{ marginRight: 8 }}
+                        >
+                          {purchaseResultByAllocationId[Number(r.allocationId)]?.isDeferred ? '後回し解除' : '後回し'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void onGenerateDraftByAllocation(Number(r.allocationId))}
+                        >
+                          請求ドラフト生成
+                        </button>
+                      </td>
+                      <td>
+                        {(() => {
+                          const pr = purchaseResultByAllocationId[Number(r.allocationId)];
+                          if (!pr) return '未保存';
+                          const msg = queueResultMessage[pr.id];
+                          const draftId = queueDraftInvoiceId[pr.id];
+                          return (
+                            <>
+                              {msg ?? ''}
+                              {draftId ? (
+                                <>
+                                  {' '}
+                                  <Link to={`/invoices/drafts/${draftId}`}>確認</Link>
+                                </>
+                              ) : null}
+                            </>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
