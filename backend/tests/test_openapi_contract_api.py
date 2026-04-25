@@ -103,7 +103,7 @@ def test_openapi_error_contracts_for_core_apis():
     assert {"index", "import_key", "action", "code", "message", "product_id"}.issubset(import_error_props)
 
     purchase_result_props = spec["components"]["schemas"]["PurchaseResultResponse"]["properties"]
-    assert {"supplier_id", "supplier_name", "invoice_qty", "invoice_uom", "received_qty", "order_uom"}.issubset(purchase_result_props)
+    assert {"supplier_id", "supplier_name", "invoice_qty", "invoice_uom", "received_qty", "order_uom", "unit_cost"}.issubset(purchase_result_props)
 
 
 def test_openapi_phase2_query_filters_are_exposed():
