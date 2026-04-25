@@ -34,9 +34,29 @@ class BulkAllocationSaveItem(BaseModel):
     allocated_qty: float | None = Field(default=None, gt=0)
 
 
+class BulkAllocationQtySaveItem(BaseModel):
+    order_item_id: int = Field(gt=0)
+    allocated_qty: float = Field(gt=0)
+
+
+class BulkAllocationSupplierSaveItem(BaseModel):
+    order_item_id: int = Field(gt=0)
+    supplier_id: int | None = Field(default=None, gt=0)
+
+
 class BulkAllocationSaveRequest(BaseModel):
     items: list[BulkAllocationSaveItem] = Field(min_length=1, max_length=500)
     override_reason_code: str | None = Field(default="bulk_manual", max_length=64)
+
+
+class BulkAllocationQtySaveRequest(BaseModel):
+    items: list[BulkAllocationQtySaveItem] = Field(min_length=1, max_length=500)
+    override_reason_code: str | None = Field(default="bulk_qty_manual", max_length=64)
+
+
+class BulkAllocationSupplierSaveRequest(BaseModel):
+    items: list[BulkAllocationSupplierSaveItem] = Field(min_length=1, max_length=500)
+    override_reason_code: str | None = Field(default="bulk_supplier_manual", max_length=64)
 
 
 class BulkAllocationSaveError(BaseModel):

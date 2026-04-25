@@ -434,7 +434,8 @@ def test_purchase_result_work_queue_and_history_separation():
     )
     assert defer_res.status_code == 200
 
-    work = client.get("/api/v1/purchase-results/queue/work-queue")
+    target_date = active.json()["recorded_at"][:10]
+    work = client.get(f"/api/v1/purchase-results/queue/work-queue?target_date={target_date}")
     assert work.status_code == 200
     work_ids = {r["id"] for r in work.json()}
     assert active_id in work_ids

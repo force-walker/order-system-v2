@@ -230,3 +230,43 @@ def test_worklist_filters_by_product_and_customer_with_paging():
     paged = client.get("/api/v1/order-item-allocations?limit=1&offset=1")
     assert paged.status_code == 200
     assert len(paged.json()) == 1
+
+
+def test_bulk_save_qty_and_supplier_separately():
+    order_item_id, supplier_id, _, _ = _seed_order_item()
+    client = _client()
+
+    qty_only = client.post(
+        "/api/v1/order-item-allocations/bulk-save-qty",
+        json={"items": [{"order_item_id": order_item_id, "allocated_qty": 4}]},
+    )
+    assert qty_only.status_code == 200
+    assert qty_only.json()["succeeded"] == 1
+
+    mid = client.get("/api/v1/order-item-allocations")
+    row = [x for x in mid.json() if x["order_item_id"] == order_item_id][0]
+    assert row["allocated_qty"] == 4
+    assert row["allocated_supplier_id"] is None
+
+    supplier_only = client.post(
+        "/api/v1/order-item-allocations/bulk-save-suppliers",
+        json={"items": [{"order_item_id": order_item_id, "supplier_id": supplier_id}]},
+    )
+    assert supplier_only.status_code == 200
+    assert supplier_only.json()["succeeded"] == 1
+
+    fin = client.get("/api/v1/order-item-allocations")
+    row2 = [x for x in fin.json() if x["order_item_id"] == order_item_id][0]
+    assert row2["allocated_qty"] == 4
+    assert row2["allocated_supplier_id"] == supplier_id
+
+
+def test_bulk_save_qty_invalid_is_422():
+    order_item_id, _, _, _ = _seed_order_item()
+    client = _client()
+
+    bad = client.post(
+        "/api/v1/order-item-allocations/bulk-save-qty",
+        json={"items": [{"order_item_id": order_item_id, "allocated_qty": 0}]},
+    )
+    assert bad.status_code == 422
