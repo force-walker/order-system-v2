@@ -96,6 +96,7 @@ def test_openapi_error_contracts_for_core_apis():
     assert "401" in _responses("/api/v1/auth/me", "get")
 
     spec = client.get("/openapi.json").json()
+    assert "/api/v1/invoices/draft-list" in spec["paths"]
     assert "ApiErrorResponse" in spec["components"]["schemas"]
     assert "details" in spec["components"]["schemas"]["ApiErrorDetail"]["properties"]
 

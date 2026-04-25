@@ -5,13 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, PricingBasis, PurchaseResult, SupplierAllocation
+from app.models.entities import Customer, Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, PricingBasis, Product, PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
     InvoiceCreateRequest,
     InvoiceDraftFromPurchaseResultsRequest,
     InvoiceFinalizeResponse,
     InvoiceGenerateRequest,
+    InvoiceDraftListRow,
     InvoiceItemResponse,
     InvoiceResetRequest,
     InvoiceResetResponse,
@@ -118,6 +119,44 @@ def list_invoices(
     return [InvoiceResponse.model_validate(row) for row in rows]
 
 
+
+
+@router.get("/draft-list", response_model=list[InvoiceDraftListRow])
+def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftListRow]:
+    rows = (
+        db.query(Invoice, InvoiceItem, Customer, Product)
+        .join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)
+        .join(OrderItem, OrderItem.id == InvoiceItem.order_item_id)
+        .join(Product, Product.id == OrderItem.product_id)
+        .join(Customer, Customer.id == Invoice.customer_id)
+        .filter(Invoice.status == InvoiceStatus.draft)
+        .order_by(Invoice.id.desc(), InvoiceItem.id.asc())
+        .all()
+    )
+
+    result: list[InvoiceDraftListRow] = []
+    for inv, item, customer, product in rows:
+        line_amount = float(item.line_amount)
+        gross_margin_pct = None
+        if line_amount > 0 and item.unit_cost_basis is not None:
+            cost_total = float(item.unit_cost_basis) * float(item.billable_qty)
+            gross_margin_pct = round(((line_amount - cost_total) / line_amount) * 100, 2)
+
+        result.append(
+            InvoiceDraftListRow(
+                invoice_id=inv.id,
+                invoice_item_id=item.id,
+                customer_name=customer.name,
+                product_name=product.name,
+                billable_qty=float(item.billable_qty),
+                billable_uom=item.billable_uom,
+                sales_unit_price=float(item.sales_unit_price),
+                line_amount=line_amount,
+                gross_margin_pct=gross_margin_pct,
+            )
+        )
+
+    return result
 @router.get(
     "/{invoice_id}",
     response_model=InvoiceResponse,
