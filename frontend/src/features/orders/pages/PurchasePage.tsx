@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
+import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   listOrderItemAllocationWorkItems,
   listSupplierFilterOptions,
@@ -423,13 +423,8 @@ export const PurchasePage = () => {
           <button type="button" className="secondary" onClick={() => { setCustomerFilter(''); setProductFilter(''); setSupplierFilter(''); }}>フィルター解除</button>
         </div>
 
-        {rows.length === 0 ? (
-          <EmptyState title="対象データがありません" description="一括割当で保存済み行が見つかりません。" actionLabel="再読み込み" onAction={load} />
-        ) : sortedRows.length === 0 ? (
-          <EmptyState title="対象データがありません" description="条件に合う行がありません。" actionLabel="条件をリセット" onAction={() => { setCustomerFilter(''); setProductFilter(''); setSupplierFilter(''); }} />
-        ) : (
-          <div className="table-wrap">
-            <table className="purchase-result-table">
+        <div className="table-wrap">
+          <table className="purchase-result-table">
               <thead>
                 <tr>
                   <th className="col-select">
@@ -445,7 +440,13 @@ export const PurchasePage = () => {
                 </tr>
               </thead>
               <tbody>
-                {sortedRows.map((r, rowIndex) => {
+                {sortedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="subtle">
+                      {rows.length === 0 ? '一括割当で保存済み行が見つかりません。' : '条件に合う行がありません。'}
+                    </td>
+                  </tr>
+                ) : sortedRows.map((r, rowIndex) => {
                   const units = unitsByProductId[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
                   const edit = editByItemId[r.orderItemId];
                   const supplierName = r.manualSupplierId ? supplierNameById.get(r.manualSupplierId) ?? `仕入先#${r.manualSupplierId}` : '-';
@@ -542,8 +543,7 @@ export const PurchasePage = () => {
                 })}
               </tbody>
             </table>
-          </div>
-        )}
+        </div>
       </div>
     </section>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
+import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveSupplier, deleteSupplier, listSuppliers, unarchiveSupplier } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
 import { toActionableMessage } from 'shared/error';
@@ -135,33 +135,24 @@ export const SupplierListPage = () => {
           </label>
         </div>
 
-        {filteredItems.length === 0 ? (
-          <EmptyState
-            title="データがありません"
-            description="条件に合う仕入先がありません。検索条件を見直してください。"
-            actionLabel="条件クリア"
-            onAction={() => {
-              setQ('');
-              setShowArchived(false);
-              setLimit(20);
-              setOffset(0);
-            }}
-          />
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>supplier_code</th>
+                <th>name</th>
+                <th>active</th>
+                <th>updated_at</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredItems.length === 0 ? (
                 <tr>
-                  <th>ID</th>
-                  <th>supplier_code</th>
-                  <th>name</th>
-                  <th>active</th>
-                  <th>updated_at</th>
-                  <th>操作</th>
+                  <td colSpan={6} className="subtle">条件に合う仕入先がありません。検索条件を見直してください。</td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredItems.map((row) => (
+              ) : filteredItems.map((row) => (
                   <tr key={row.id}>
                     <td>{row.id}</td>
                     <td>{row.supplierCode}</td>
@@ -205,7 +196,6 @@ export const SupplierListPage = () => {
               </tbody>
             </table>
           </div>
-        )}
 
         <div className="list-controls" style={{ marginTop: 12 }}>
           <button type="button" className="secondary" onClick={onPrev} disabled={offset === 0}>前へ</button>

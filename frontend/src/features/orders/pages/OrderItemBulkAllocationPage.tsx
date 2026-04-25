@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
+import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   bulkSaveOrderItemAllocations,
   listOrderItemAllocationWorkItems,
@@ -424,11 +424,8 @@ export const OrderItemBulkAllocationPage = () => {
 
         <p className="subtle" style={{ marginBottom: 12 }}>※ ヘッダークリックで昇順/降順を切替。選択操作は表示中の行のみ対象。</p>
 
-        {sortedItems.length === 0 ? (
-          <EmptyState title="データがありません" description="条件に合う受注アイテムがありません。" actionLabel="再読み込み" onAction={load} />
-        ) : (
-          <div className="table-wrap">
-            <table className="bulk-allocation-table">
+        <div className="table-wrap">
+          <table className="bulk-allocation-table">
               <thead>
                 <tr>
                   <th>
@@ -478,7 +475,11 @@ export const OrderItemBulkAllocationPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {sortedItems.map((row) => {
+                {sortedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="subtle">条件に合う受注アイテムがありません。</td>
+                  </tr>
+                ) : sortedItems.map((row) => {
                   const edit = editById[row.orderItemId];
                   const manualQtyNum = Number(edit?.manualQty ?? row.manualQty ?? 0);
                   const allocatedQty = Number.isFinite(manualQtyNum) ? manualQtyNum : 0;
@@ -563,7 +564,6 @@ export const OrderItemBulkAllocationPage = () => {
               </tbody>
             </table>
           </div>
-        )}
       </div>
     </section>
   );

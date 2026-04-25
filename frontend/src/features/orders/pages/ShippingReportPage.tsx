@@ -68,8 +68,6 @@ export const ShippingReportPage = () => {
         <ErrorState title="帳票リストの取得に失敗しました" description={error} actionLabel="再試行" onAction={load} />
       ) : rows == null ? (
         <EmptyState title="未表示" description="出荷日と表示モードを選択すると自動で表示されます。" />
-      ) : rows.length === 0 ? (
-        <EmptyState title="該当データがありません" description="指定した出荷日・表示モードでは帳票対象が0件です。" actionLabel="再取得" onAction={load} />
       ) : (
         <div className="card">
           <div className="table-wrap">
@@ -85,7 +83,11 @@ export const ShippingReportPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, idx) => (
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="subtle">指定した出荷日・表示モードでは帳票対象が0件です。</td>
+                  </tr>
+                ) : rows.map((r, idx) => (
                   <tr key={`${r.shippedDate}-${r.supplierName}-${r.customerName}-${r.productName}-${idx}`}>
                     <td>{r.shippedDate}</td>
                     <td>{r.supplierName}</td>

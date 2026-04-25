@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
+import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { bulkCancelOrders, listOrders } from 'features/orders/services/ordersService';
 import type { OrderStatus, OrderSummary } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
@@ -160,9 +160,6 @@ export const OrderListPage = () => {
     return <LoadingState title="注文一覧を読み込み中" description="しばらくお待ちください" />;
   }
 
-  if (orders.length === 0) {
-    return <EmptyState title="データがありません" description="条件を見直すか、データ登録後に再度お試しください。" actionLabel="再読み込み" onAction={() => window.location.reload()} />;
-  }
 
   return (
     <section>
@@ -219,62 +216,62 @@ export const OrderListPage = () => {
           </label>
         </div>
 
-      {filteredOrders.length === 0 ? (
-        <EmptyState title="データがありません" description="条件に合うデータがありません。検索・フィルタ条件を見直してください。" actionLabel="条件をリセット" onAction={() => { setKeyword(''); setStatusFilter('all'); setSortMode('newest'); setStaleOnly(false); }} />
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>
+                <input type="checkbox" checked={headerChecked} onChange={(e) => toggleVisible(e.target.checked)} />
+              </th>
+              <th>ID</th>
+              <th>注文番号</th>
+              <th>顧客</th>
+              <th>納品日（顧客納品日）</th>
+              <th>状態</th>
+              <th>アイテム数</th>
+              <th>詳細</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredOrders.length === 0 ? (
               <tr>
-                <th>
-                  <input type="checkbox" checked={headerChecked} onChange={(e) => toggleVisible(e.target.checked)} />
-                </th>
-                <th>ID</th>
-                <th>注文番号</th>
-                <th>顧客</th>
-                <th>納品日（顧客納品日）</th>
-                <th>状態</th>
-                <th>アイテム数</th>
-                <th>詳細</th>
+                <td colSpan={8} className="subtle">条件に合うデータがありません。検索・フィルタ条件を見直してください。</td>
               </tr>
-            </thead>
-            <tbody>
-              {filteredOrders.map((order) => {
-                const firstItem = order.items[0];
-                return (
-                  <tr key={order.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(selectedByOrderId[order.id])}
-                        onClick={(e) => onRowSelect(order.id, !Boolean(selectedByOrderId[order.id]), e.shiftKey)}
-                        readOnly
-                      />
-                    </td>
-                    <td>{order.id}</td>
-                    <td>
-                      <Link to={`/orders/${order.id}/edit`} className="order-link">{order.orderNo}</Link>
-                    </td>
-                    <td>{order.customerName}</td>
-                    <td>{order.deliveryDate}</td>
-                    <td>
-                      <span className={`status-badge status-${order.status}`}>{STATUS_LABEL[order.status]}</span>
-                    </td>
-                    <td>{order.items.length}</td>
-                    <td>
-                      {firstItem ? (
-                        <Link to={`/orders/${order.id}/items/${firstItem.id}`}>先頭アイテム</Link>
-                      ) : (
-                        <span>-</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ) : filteredOrders.map((order) => {
+              const firstItem = order.items[0];
+              return (
+                <tr key={order.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedByOrderId[order.id])}
+                      onClick={(e) => onRowSelect(order.id, !Boolean(selectedByOrderId[order.id]), e.shiftKey)}
+                      readOnly
+                    />
+                  </td>
+                  <td>{order.id}</td>
+                  <td>
+                    <Link to={`/orders/${order.id}/edit`} className="order-link">{order.orderNo}</Link>
+                  </td>
+                  <td>{order.customerName}</td>
+                  <td>{order.deliveryDate}</td>
+                  <td>
+                    <span className={`status-badge status-${order.status}`}>{STATUS_LABEL[order.status]}</span>
+                  </td>
+                  <td>{order.items.length}</td>
+                  <td>
+                    {firstItem ? (
+                      <Link to={`/orders/${order.id}/items/${firstItem.id}`}>先頭アイテム</Link>
+                    ) : (
+                      <span>-</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       </div>
     </section>
   );
