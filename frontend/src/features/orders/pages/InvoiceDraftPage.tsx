@@ -17,6 +17,7 @@ export const InvoiceDraftPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftListRow[]>([]);
+  const [editedUnitPriceByItemId, setEditedUnitPriceByItemId] = useState<Record<number, string>>({});
 
   const [customerFilter, setCustomerFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
@@ -100,18 +101,43 @@ export const InvoiceDraftPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
-                  <tr key={row.invoiceItemId}>
-                    <td>{row.customerName}</td>
-                    <td>{row.productName}</td>
-                    <td style={{ textAlign: 'right' }}>{row.billableQty}</td>
-                    <td>{row.billableUom}</td>
-                    <td style={{ textAlign: 'right' }}>{currency.format(row.salesUnitPrice)}</td>
-                    <td style={{ textAlign: 'right' }}>{currency.format(row.lineAmount)}</td>
-                    <td style={{ textAlign: 'right' }}>{formatGrossMargin(row.grossMarginPct)}</td>
-                    <td><Link to={`/invoices/drafts/${row.invoiceId}`}>詳細</Link></td>
-                  </tr>
-                ))}
+                {filtered.map((row) => {
+                  const editedPriceRaw = editedUnitPriceByItemId[row.invoiceItemId];
+                  const editedPrice =
+                    editedPriceRaw != null && editedPriceRaw.trim() !== '' && !Number.isNaN(Number(editedPriceRaw))
+                      ? Number(editedPriceRaw)
+                      : row.salesUnitPrice;
+                  const calculatedAmount = editedPrice * row.billableQty;
+                  const baseCost = row.grossMarginPct != null
+                    ? row.lineAmount * (1 - row.grossMarginPct / 100)
+                    : null;
+                  const calculatedMargin =
+                    baseCost != null && calculatedAmount > 0
+                      ? ((calculatedAmount - baseCost) / calculatedAmount) * 100
+                      : row.grossMarginPct;
+
+                  return (
+                    <tr key={row.invoiceItemId}>
+                      <td>{row.customerName}</td>
+                      <td>{row.productName}</td>
+                      <td style={{ textAlign: 'right' }}>{row.billableQty}</td>
+                      <td>{row.billableUom}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={editedPriceRaw ?? String(row.salesUnitPrice)}
+                          onChange={(e) => setEditedUnitPriceByItemId((prev) => ({ ...prev, [row.invoiceItemId]: e.target.value }))}
+                          style={{ width: 110, textAlign: 'right' }}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{currency.format(calculatedAmount)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatGrossMargin(calculatedMargin ?? undefined)}</td>
+                      <td><Link to={`/invoices/drafts/${row.invoiceId}`}>詳細</Link></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
