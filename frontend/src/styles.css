@@ -556,8 +556,8 @@ button:disabled { opacity: 0.6; }
 }
 
 .purchase-result-table .col-supplier {
-  min-width: 180px;
-  max-width: 260px;
+  min-width: 126px;
+  max-width: 182px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
