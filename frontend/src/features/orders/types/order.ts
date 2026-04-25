@@ -223,3 +223,19 @@ export type InvoiceDraftSummary = {
   grandTotal: number;
   status: InvoiceStatus;
 };
+
+export type InvoiceDraftListRow = {
+  invoiceId: number;
+  invoiceItemId: number;
+  orderNo: string;
+  customerName: string;
+  productName: string;
+  billableQty: number;
+  billableUom: string;
+  salesUnitPrice: number;
+  unitCostBasis?: number;
+  lineAmount: number;
+  grossMarginPct?: number;
+  deliveryDate?: string;
+  status?: InvoiceStatus;
+};

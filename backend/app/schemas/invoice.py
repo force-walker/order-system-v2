@@ -64,11 +64,13 @@ class InvoiceItemResponse(BaseModel):
 class InvoiceDraftListRow(BaseModel):
     invoice_id: int
     invoice_item_id: int
+    order_no: str
     customer_name: str
     product_name: str
     billable_qty: float
     billable_uom: str
     sales_unit_price: float
+    unit_cost_basis: float | None = None
     line_amount: float
     gross_margin_pct: float | None = None
 

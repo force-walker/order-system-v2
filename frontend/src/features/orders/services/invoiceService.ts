@@ -1,6 +1,6 @@
 import { apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload } from 'shared/error';
-import type { InvoiceDraftItem, InvoiceDraftSummary, InvoiceStatus } from 'features/orders/types/order';
+import type { InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceStatus } from 'features/orders/types/order';
 
 const TOKEN_STORAGE_KEY = 'osv2_access_token';
 const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
@@ -29,6 +29,20 @@ type ApiInvoiceItem = {
   sales_unit_price: number;
   line_amount: number;
   tax_amount: number;
+};
+
+type ApiInvoiceDraftListRow = {
+  invoice_id: number;
+  invoice_item_id: number;
+  order_no: string;
+  customer_name: string;
+  product_name: string;
+  billable_qty: number;
+  billable_uom: string;
+  sales_unit_price: number;
+  unit_cost_basis: number | null;
+  line_amount: number;
+  gross_margin_pct: number | null;
 };
 
 const ensureDevToken = async (): Promise<string> => {
@@ -105,6 +119,38 @@ export const getInvoiceDraftItems = async (invoiceId: number): Promise<InvoiceDr
   }));
 };
 
+
+
+export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]> => {
+  const [rowsRes, summaries] = await Promise.all([
+    fetchWithAuth('/api/v1/invoices/draft-list', { method: 'GET' }),
+    listInvoiceDrafts(),
+  ]);
+  if (!rowsRes.ok) throw await parseApiErrorPayload(rowsRes);
+  const rows = (await rowsRes.json()) as ApiInvoiceDraftListRow[];
+
+  const summaryById = new Map<number, InvoiceDraftSummary>();
+  summaries.forEach((s) => summaryById.set(s.id, s));
+
+  return rows.map((r) => {
+    const s = summaryById.get(r.invoice_id);
+    return {
+      invoiceId: r.invoice_id,
+      invoiceItemId: r.invoice_item_id,
+      orderNo: r.order_no,
+      customerName: r.customer_name,
+      productName: r.product_name,
+      billableQty: r.billable_qty,
+      billableUom: r.billable_uom,
+      salesUnitPrice: r.sales_unit_price,
+      unitCostBasis: r.unit_cost_basis ?? undefined,
+      lineAmount: r.line_amount,
+      grossMarginPct: r.gross_margin_pct ?? undefined,
+      deliveryDate: s?.deliveryDate,
+      status: s?.status,
+    };
+  });
+};
 export const finalizeInvoiceDraft = async (invoiceId: number): Promise<void> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/finalize`, { method: 'POST' });
   if (!res.ok) throw await parseApiErrorPayload(res);
