@@ -178,6 +178,7 @@ def test_purchase_result_create_get_list_update_bulk_upsert():
     rid = created.json()["id"]
     assert created.json()["supplier_id"] == 555
     assert float(created.json()["actual_weight_kg"]) == 2.5
+    assert float(created.json()["unit_cost"]) == 100.0
     assert created.json()["recorded_by"] == "tester"
 
     got = client.get(f"/api/v1/purchase-results/{rid}")
@@ -473,3 +474,21 @@ def test_purchase_result_invoice_qty_persists_after_save():
     listed = client.get(f"/api/v1/purchase-results?allocation_id={aid}")
     assert listed.status_code == 200
     assert any(float(r["invoice_qty"]) == 3.0 for r in listed.json() if r["id"] == rid)
+
+
+def test_purchase_result_unit_cost_negative_is_422():
+    aid = _seed_allocation(final_qty=5)
+    client = _client()
+
+    bad = client.post(
+        "/api/v1/purchase-results",
+        json={
+            "allocation_id": aid,
+            "purchased_qty": 1,
+            "purchased_uom": "count",
+            "unit_cost": -1,
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        },
+    )
+    assert bad.status_code == 422
