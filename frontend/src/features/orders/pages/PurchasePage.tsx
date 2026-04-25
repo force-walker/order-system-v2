@@ -9,11 +9,9 @@ import {
 } from 'features/orders/services/orderItemAllocationsService';
 import {
   bulkUpsertPurchaseResults,
-  deferPurchaseResult,
   generateDraftInvoiceFromPurchase,
   listPurchaseResults,
   listPurchaseWorkQueue,
-  undeferPurchaseResult,
 } from 'features/orders/services/purchaseService';
 import type { PurchaseResultItem } from 'features/orders/types/order';
 import { getProductDetail } from 'features/products/services/productsService';
@@ -248,65 +246,12 @@ export const PurchasePage = () => {
 
   const selectedCount = useMemo(() => rows.filter((r) => editByItemId[r.orderItemId]?.selected).length, [rows, editByItemId]);
 
-  const onDefer = async (id: number) => {
-    try {
-      await deferPurchaseResult(id, 'manual defer');
-      setQueueResultMessage((prev) => ({ ...prev, [id]: '後回しに設定しました' }));
-      await load();
-    } catch (e) {
-      setQueueResultMessage((prev) => ({ ...prev, [id]: toActionableMessage(e, '後回し設定に失敗') }));
-    }
-  };
-
-  const onUndefer = async (id: number) => {
-    try {
-      await undeferPurchaseResult(id);
-      setQueueResultMessage((prev) => ({ ...prev, [id]: '後回し解除しました' }));
-      await load();
-    } catch (e) {
-      setQueueResultMessage((prev) => ({ ...prev, [id]: toActionableMessage(e, '後回し解除に失敗') }));
-    }
-  };
-
-  const onGenerateDraft = async (item: PurchaseResultItem) => {
-    const orderId = item.orderId ?? orderIdByAllocationId[item.allocationId] ?? rows.find((r) => r.allocationId === item.allocationId)?.orderId;
-    if (!orderId) {
-      setQueueResultMessage((prev) => ({ ...prev, [item.id]: 'order特定不可のためdraft生成不可' }));
-      return;
-    }
-    const invoiceNo = `DRAFT-${item.id}-${Date.now()}`;
+  const createDraftForOrder = async (orderId: number, markerId: number) => {
+    const invoiceNo = `DRAFT-${markerId}-${Date.now()}`;
     const invoiceDate = new Date().toISOString().slice(0, 10);
-    try {
-      const invoiceId = await generateDraftInvoiceFromPurchase({ invoiceNo, orderId, invoiceDate });
-      setQueueDraftInvoiceId((prev) => ({ ...prev, [item.id]: invoiceId }));
-      setQueueResultMessage((prev) => ({ ...prev, [item.id]: `請求ドラフト作成完了: invoice#${invoiceId}` }));
-      setToast({ type: 'success', message: `請求ドラフトを作成しました（invoice#${invoiceId}）。請求ドラフト詳細へ移動します。` });
-      navigate(`/invoices/drafts/${invoiceId}`);
-    } catch (e) {
-      setQueueResultMessage((prev) => ({ ...prev, [item.id]: toActionableMessage(e, 'draft生成失敗') }));
-    }
-  };
-
-  const onGenerateDraftByAllocation = async (allocationId: number) => {
-    const pr = purchaseResultByAllocationId[allocationId];
-    if (!pr) {
-      setToast({ type: 'error', message: '先に「選択行を保存」で納品確認を保存してください。' });
-      return;
-    }
-    await onGenerateDraft(pr);
-  };
-
-  const onDeferByAllocation = async (allocationId: number) => {
-    const pr = purchaseResultByAllocationId[allocationId];
-    if (!pr) {
-      setToast({ type: 'error', message: 'この行はまだ後回し操作できません（未保存）。' });
-      return;
-    }
-    if (pr.isDeferred) {
-      await onUndefer(pr.id);
-    } else {
-      await onDefer(pr.id);
-    }
+    const invoiceId = await generateDraftInvoiceFromPurchase({ invoiceNo, orderId, invoiceDate });
+    setQueueDraftInvoiceId((prev) => ({ ...prev, [markerId]: invoiceId }));
+    return invoiceId;
   };
 
   const saveBulk = async () => {
@@ -353,7 +298,26 @@ export const PurchasePage = () => {
     setSaving(true);
     try {
       const upserted = await bulkUpsertPurchaseResults(payload.map((p) => p.row));
-      setToast({ type: 'success', message: `納品確認を保存しました（${upserted}件）。` });
+
+      const uniqueOrderIds = Array.from(
+        new Set(
+          selectedRows
+            .map((r) => r.orderId)
+            .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+        ),
+      );
+
+      let draftCreated = 0;
+      for (const oid of uniqueOrderIds) {
+        try {
+          await createDraftForOrder(oid, oid);
+          draftCreated += 1;
+        } catch {
+          // keep partial success: purchase save should remain successful even if draft generation fails for some orders
+        }
+      }
+
+      setToast({ type: 'success', message: `納品確認を保存しました（${upserted}件）。請求ドラフト作成: ${draftCreated}件` });
       await load();
     } catch (e) {
       setToast({ type: 'error', message: toActionableMessage(e, '納品確認の保存に失敗しました。') });
@@ -394,7 +358,6 @@ export const PurchasePage = () => {
                   <th>仕入先</th>
                   <th>受取</th>
                   <th>請求</th>
-                  <th>操作</th>
                   <th>結果</th>
                 </tr>
               </thead>
@@ -407,14 +370,6 @@ export const PurchasePage = () => {
                     <td>{q.supplierName ?? '-'}</td>
                     <td>{q.receivedQty ?? q.purchasedQty} {q.orderUom ?? q.purchasedUom}</td>
                     <td>{q.invoiceQty ?? ''} {q.invoiceUom ?? ''}</td>
-                    <td>
-                      {q.isDeferred ? (
-                        <button type="button" className="secondary" onClick={() => void onUndefer(q.id)}>後回し解除</button>
-                      ) : (
-                        <button type="button" className="secondary" onClick={() => void onDefer(q.id)}>作業キューから後回し</button>
-                      )}
-                      <button type="button" onClick={() => void onGenerateDraft(q)} style={{ marginLeft: 8 }}>請求ドラフト生成</button>
-                    </td>
                     <td>
                       {queueResultMessage[q.id] ?? ''}
                       {queueDraftInvoiceId[q.id] ? (
@@ -465,8 +420,6 @@ export const PurchasePage = () => {
                   <th className="col-supplier" onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
                   <th className="col-ordered">受注数量</th>
                   <th className="col-invoice">請求数量</th>
-                  <th>操作</th>
-                  <th>結果</th>
                 </tr>
               </thead>
               <tbody>
@@ -520,41 +473,6 @@ export const PurchasePage = () => {
                           }}
                           placeholder=""
                         /> {units.invoiceUom}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => void onDeferByAllocation(Number(r.allocationId))}
-                          style={{ marginRight: 8 }}
-                        >
-                          {purchaseResultByAllocationId[Number(r.allocationId)]?.isDeferred ? '後回し解除' : '後回し'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void onGenerateDraftByAllocation(Number(r.allocationId))}
-                        >
-                          請求ドラフト生成
-                        </button>
-                      </td>
-                      <td>
-                        {(() => {
-                          const pr = purchaseResultByAllocationId[Number(r.allocationId)];
-                          if (!pr) return '未保存';
-                          const msg = queueResultMessage[pr.id];
-                          const draftId = queueDraftInvoiceId[pr.id];
-                          return (
-                            <>
-                              {msg ?? ''}
-                              {draftId ? (
-                                <>
-                                  {' '}
-                                  <Link to={`/invoices/drafts/${draftId}`}>確認</Link>
-                                </>
-                              ) : null}
-                            </>
-                          );
-                        })()}
                       </td>
                     </tr>
                   );
