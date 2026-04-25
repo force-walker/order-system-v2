@@ -441,7 +441,7 @@ export const PurchasePage = () => {
                   <th className="col-supplier" onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
                   <th className="col-ordered">受注数量</th>
                   <th className="col-invoice">請求数量</th>
-                  <th>仕入単価</th>
+                  <th className="col-unit-cost">仕入単価</th>
                 </tr>
               </thead>
               <tbody>
@@ -478,16 +478,17 @@ export const PurchasePage = () => {
                           onKeyDown={(e) => {
                             const native = e.nativeEvent as KeyboardEvent;
                             const isComposing = native.isComposing || native.keyCode === 229;
+                            if (isComposing) return;
 
                             const moveDown =
                               e.key === 'ArrowDown' ||
                               (e.key === 'Tab' && !e.shiftKey) ||
-                              (e.key === 'Enter' && !isComposing);
-                            const moveUp = e.key === 'ArrowUp';
+                              e.key === 'Enter';
+                            const moveUp = e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey);
                             if (!moveDown && !moveUp) return;
 
-                            const targetRow = moveUp ? rowIndex - 1 : rowIndex + 1;
-                            const target = document.querySelector<HTMLInputElement>(`input[data-invoice-row="${targetRow}"]`);
+                            const targetRow = moveUp ? rowIndex - 1 : rowIndex;
+                            const target = document.querySelector<HTMLInputElement>(`input[data-unitcost-row="${targetRow}"]`);
                             if (!target) return;
 
                             e.preventDefault();
@@ -496,6 +497,7 @@ export const PurchasePage = () => {
                           placeholder=""
                         />
                         <select
+                          tabIndex={-1}
                           value={edit?.invoiceUom ?? units.invoiceUom}
                           onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], invoiceUom: e.target.value, rowError: undefined } }))}
                           style={{ marginLeft: 8 }}
@@ -505,13 +507,33 @@ export const PurchasePage = () => {
                           ))}
                         </select>
                       </td>
-                      <td>
+                      <td className="col-unit-cost">
                         <input
                           type="number"
                           min={0}
                           step="0.01"
+                          data-unitcost-row={rowIndex}
                           value={edit?.purchaseUnitCost ?? ''}
                           onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], purchaseUnitCost: e.target.value, rowError: undefined } }))}
+                          onKeyDown={(e) => {
+                            const native = e.nativeEvent as KeyboardEvent;
+                            const isComposing = native.isComposing || native.keyCode === 229;
+                            if (isComposing) return;
+
+                            const moveDown =
+                              e.key === 'ArrowDown' ||
+                              (e.key === 'Tab' && !e.shiftKey) ||
+                              e.key === 'Enter';
+                            const moveUp = e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey);
+                            if (!moveDown && !moveUp) return;
+
+                            const targetRow = moveDown ? rowIndex + 1 : rowIndex;
+                            const target = document.querySelector<HTMLInputElement>(`input[data-invoice-row="${targetRow}"]`);
+                            if (!target) return;
+
+                            e.preventDefault();
+                            target.focus();
+                          }}
                           placeholder=""
                         />
                       </td>

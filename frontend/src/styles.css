@@ -546,13 +546,14 @@ button:disabled { opacity: 0.6; }
 }
 
 .purchase-result-table .col-invoice select {
-  max-width: 42px;
+  min-width: 74px;
+  max-width: 74px;
   text-align: center;
 }
 
 .purchase-result-table .col-customer,
 .purchase-result-table .col-product {
-  min-width: 240px;
+  min-width: 300px;
 }
 
 .purchase-result-table .col-supplier {
@@ -563,6 +564,19 @@ button:disabled { opacity: 0.6; }
   white-space: nowrap;
   border-left: 1px solid #e5e7eb;
   border-right: 1px solid #e5e7eb;
+}
+
+.purchase-result-table .col-unit-cost {
+  width: 120px;
+  max-width: 120px;
+  white-space: nowrap;
+}
+
+.purchase-result-table .col-unit-cost input {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .bulk-allocation-table .delivery-warning {
