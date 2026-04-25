@@ -19,7 +19,9 @@ import { toActionableMessage } from 'shared/error';
 
 type RowEdit = {
   selected: boolean;
+  purchaseUnitCost: string;
   invoiceQty: string;
+  invoiceUom: string;
   rowError?: string;
 };
 
@@ -76,9 +78,11 @@ export const PurchasePage = () => {
       setQueueItems(queue.items);
 
       const invoiceQtyByAllocationId = new Map<number, number | undefined>();
+      const unitCostByAllocationId = new Map<number, number | undefined>();
       const persistedByAllocationId: Record<number, PurchaseResultItem> = {};
       persisted.items.forEach((q) => {
         invoiceQtyByAllocationId.set(q.allocationId, q.invoiceQty);
+        unitCostByAllocationId.set(q.allocationId, q.unitCost);
         persistedByAllocationId[q.allocationId] = q;
       });
       queue.items.forEach((q) => {
@@ -123,17 +127,22 @@ export const PurchasePage = () => {
           }
         }),
       );
-      setUnitsByProductId(Object.fromEntries(unitEntries));
+      const unitsByProductIdLocal = Object.fromEntries(unitEntries);
+      setUnitsByProductId(unitsByProductIdLocal);
 
       setEditByItemId((prev) =>
         Object.fromEntries(
           filtered.map((r) => {
             const restoredInvoiceQty = typeof r.allocationId === 'number' ? invoiceQtyByAllocationId.get(r.allocationId) : undefined;
+            const restoredUnitCost = typeof r.allocationId === 'number' ? unitCostByAllocationId.get(r.allocationId) : undefined;
+            const units = unitsByProductIdLocal[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
             return [
               r.orderItemId,
               {
                 selected: prev[r.orderItemId]?.selected ?? false,
+                purchaseUnitCost: prev[r.orderItemId]?.purchaseUnitCost ?? (restoredUnitCost != null ? String(restoredUnitCost) : ''),
                 invoiceQty: prev[r.orderItemId]?.invoiceQty ?? (restoredInvoiceQty != null ? String(restoredInvoiceQty) : ''),
+                invoiceUom: prev[r.orderItemId]?.invoiceUom ?? units.invoiceUom,
                 rowError: undefined,
               },
             ];
@@ -267,6 +276,8 @@ export const PurchasePage = () => {
       const received = Number(r.manualQty ?? r.orderedQty);
       const invoiceText = edit.invoiceQty.trim();
       const invoiced = invoiceText === '' ? undefined : Number(invoiceText);
+      const unitCostText = edit.purchaseUnitCost.trim();
+      const unitCost = unitCostText === '' ? undefined : Number(unitCostText);
       const shortage = Math.max(r.orderedQty - received, 0);
       return {
         orderItemId: r.orderItemId,
@@ -275,6 +286,7 @@ export const PurchasePage = () => {
           supplierId: r.manualSupplierId ?? undefined,
           purchasedQty: received,
           purchasedUom: units.orderUom,
+          unitCost,
           invoiceQty: invoiced,
           shortageQty: shortage > 0 ? shortage : undefined,
           resultStatus: shortage > 0 ? ('partially_filled' as const) : ('filled' as const),
@@ -285,10 +297,19 @@ export const PurchasePage = () => {
 
     const invalid = payload.filter((p) => {
       if (!Number.isFinite(p.row.purchasedQty) || p.row.purchasedQty < 0) return true;
+
+      const unitCostRaw = editByItemId[p.orderItemId]?.purchaseUnitCost ?? '';
+      if (unitCostRaw.trim() !== '') {
+        const parsedUnitCost = Number(unitCostRaw);
+        if (Number.isNaN(parsedUnitCost) || parsedUnitCost < 0) return true;
+      }
+
       const invoiceRaw = editByItemId[p.orderItemId]?.invoiceQty ?? '';
-      if (invoiceRaw.trim() === '') return false;
-      const parsed = Number(invoiceRaw);
-      return Number.isNaN(parsed) || parsed < 0;
+      if (invoiceRaw.trim() !== '') {
+        const parsed = Number(invoiceRaw);
+        if (Number.isNaN(parsed) || parsed < 0) return true;
+      }
+      return false;
     });
     if (invalid.length > 0) {
       setToast({ type: 'error', message: '受取数量/請求数量の数値入力を確認してください。' });
@@ -420,6 +441,7 @@ export const PurchasePage = () => {
                   <th className="col-supplier" onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
                   <th className="col-ordered">受注数量</th>
                   <th className="col-invoice">請求数量</th>
+                  <th>仕入単価</th>
                 </tr>
               </thead>
               <tbody>
@@ -472,7 +494,26 @@ export const PurchasePage = () => {
                             target.focus();
                           }}
                           placeholder=""
-                        /> {units.invoiceUom}
+                        />
+                        <select
+                          value={edit?.invoiceUom ?? units.invoiceUom}
+                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], invoiceUom: e.target.value, rowError: undefined } }))}
+                          style={{ marginLeft: 8 }}
+                        >
+                          {[...new Set([units.invoiceUom, units.orderUom])].map((u) => (
+                            <option key={u} value={u}>{u}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={edit?.purchaseUnitCost ?? ''}
+                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], purchaseUnitCost: e.target.value, rowError: undefined } }))}
+                          placeholder=""
+                        />
                       </td>
                     </tr>
                   );
