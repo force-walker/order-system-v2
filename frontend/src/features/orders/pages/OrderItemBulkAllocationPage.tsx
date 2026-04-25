@@ -168,7 +168,7 @@ export const OrderItemBulkAllocationPage = () => {
     return `${label} ${sort.direction === 'asc' ? '↑' : '↓'}`;
   };
 
-  const applySuggestion = async () => {
+  const applySuggestedSuppliers = async () => {
     const targetIds = sortedItems.map((row) => row.orderItemId);
     if (targetIds.length === 0) return;
 
@@ -182,16 +182,32 @@ export const OrderItemBulkAllocationPage = () => {
           next[s.orderItemId] = {
             ...next[s.orderItemId],
             manualSupplierId: s.suggestedSupplierId,
-            manualQty: s.suggestedQty == null ? '' : String(s.suggestedQty),
             rowError: undefined,
           };
         }
         return next;
       });
-      setToast({ type: 'success', message: `自動提案を反映しました（${map.size}件）。` });
+      setToast({ type: 'success', message: `自動で仕入先選択を反映しました（${map.size}件）。` });
     } catch (e) {
-      setToast({ type: 'error', message: toActionableMessage(e, '自動提案に失敗しました。') });
+      setToast({ type: 'error', message: toActionableMessage(e, '仕入先の自動提案に失敗しました。') });
     }
+  };
+
+  const applyOrderedQtyToAllocation = () => {
+    if (sortedItems.length === 0) return;
+    setEditById((prev) => {
+      const next = { ...prev };
+      for (const row of sortedItems) {
+        if (!next[row.orderItemId]) continue;
+        next[row.orderItemId] = {
+          ...next[row.orderItemId],
+          manualQty: String(row.orderedQty),
+          rowError: undefined,
+        };
+      }
+      return next;
+    });
+    setToast({ type: 'success', message: `割当数へ受注数を自動入力しました（${sortedItems.length}件）。` });
   };
 
   const toggleSelectVisible = (checked: boolean) => {
@@ -326,10 +342,11 @@ export const OrderItemBulkAllocationPage = () => {
         <div className="list-header">
           <div>
             <h2>受注アイテム一括割当</h2>
-            <p className="subtle">自動提案 → 手動修正 → 一括保存</p>
+            <p className="subtle">仕入先自動選択 / 数量自動入力 → 手動修正 → 一括保存</p>
           </div>
           <div className="list-controls">
-            <button type="button" className="secondary" onClick={() => void applySuggestion()}>自動提案を実行</button>
+            <button type="button" className="secondary" onClick={() => void applySuggestedSuppliers()}>自動で仕入先選択</button>
+            <button type="button" className="secondary" onClick={applyOrderedQtyToAllocation}>割当数へ受注数を自動入力</button>
             <button type="button" onClick={() => void saveBulk()}>選択行を一括保存</button>
             <button type="button" className="secondary" onClick={moveToPurchaseResult}>保存済み行を納品確認へ進める</button>
           </div>
