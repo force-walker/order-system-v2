@@ -546,8 +546,8 @@ button:disabled { opacity: 0.6; }
 }
 
 .purchase-result-table .col-invoice select {
-  min-width: 164px;
-  max-width: 164px;
+  min-width: 98px;
+  max-width: 98px;
   text-align: center;
 }
 
