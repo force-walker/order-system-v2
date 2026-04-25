@@ -343,7 +343,11 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
                 billable_uom=pr.purchased_uom,
                 invoice_line_status="uninvoiced",
                 sales_unit_price=float(sales_unit_price),
-                unit_cost_basis=float(pr.final_unit_cost) if pr.final_unit_cost is not None else None,
+                unit_cost_basis=(
+                    float(pr.final_unit_cost)
+                    if pr.final_unit_cost is not None
+                    else (float(pr.unit_cost) if pr.unit_cost is not None else None)
+                ),
                 line_amount=float(line_amount),
                 tax_amount=0,
             )
