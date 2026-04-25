@@ -1,25 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { getShippingReport, type ShippingReportMode, type ShippingReportRow } from 'features/orders/services/shippingReportService';
 import { toActionableMessage } from 'shared/error';
 
-const toYmd = (d: Date) => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-
 export const ShippingReportPage = () => {
-  const [shippedDate, setShippedDate] = useState(toYmd(new Date()));
-  const [mode, setMode] = useState<ShippingReportMode>('supplier_product');
+  const [shippedDate, setShippedDate] = useState('');
+  const [mode, setMode] = useState<ShippingReportMode | ''>('');
   const [rows, setRows] = useState<ShippingReportRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const load = async () => {
-    if (!shippedDate) {
-      setError('出荷日は必須です。');
+    if (!shippedDate || !mode) {
+      setRows(null);
+      setError('');
       return;
     }
 
@@ -36,13 +30,17 @@ export const ShippingReportPage = () => {
     }
   };
 
+  useEffect(() => {
+    void load();
+  }, [shippedDate, mode]);
+
   return (
     <section>
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="list-header">
           <div>
             <h2>帳票作成</h2>
-            <p className="subtle">出荷日と表示モードを指定して帳票リストを表示します。</p>
+            <p className="subtle">出荷日と表示モードを指定すると帳票リストを自動表示します。</p>
           </div>
         </div>
 
@@ -54,13 +52,13 @@ export const ShippingReportPage = () => {
 
           <label className="filter-label">
             表示モード
-            <select value={mode} onChange={(e) => setMode(e.target.value as ShippingReportMode)}>
+            <select value={mode} onChange={(e) => setMode((e.target.value || '') as ShippingReportMode | '')}>
+              <option value="">選択してください</option>
               <option value="supplier_product">仕入先→商品順</option>
               <option value="customer">顧客順</option>
             </select>
           </label>
 
-          <button type="button" onClick={() => void load()}>帳票を表示</button>
         </div>
       </div>
 
@@ -69,7 +67,7 @@ export const ShippingReportPage = () => {
       ) : error ? (
         <ErrorState title="帳票リストの取得に失敗しました" description={error} actionLabel="再試行" onAction={load} />
       ) : rows == null ? (
-        <EmptyState title="未表示" description="出荷日と表示モードを指定して「帳票を表示」を押してください。" />
+        <EmptyState title="未表示" description="出荷日と表示モードを選択すると自動で表示されます。" />
       ) : rows.length === 0 ? (
         <EmptyState title="該当データがありません" description="指定した出荷日・表示モードでは帳票対象が0件です。" actionLabel="再取得" onAction={load} />
       ) : (

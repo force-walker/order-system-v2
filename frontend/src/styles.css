@@ -496,8 +496,8 @@ button:disabled { opacity: 0.6; }
 }
 
 .purchase-result-table .col-order-no {
-  width: 90px;
-  max-width: 90px;
+  width: 72px;
+  max-width: 72px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -514,15 +514,15 @@ button:disabled { opacity: 0.6; }
 
 .purchase-result-table .col-ordered,
 .purchase-result-table .col-invoice {
-  width: 130px;
-  max-width: 130px;
+  width: 118px;
+  max-width: 118px;
   white-space: nowrap;
   box-sizing: border-box;
 }
 
 .purchase-result-table .col-invoice {
-  width: 260px;
-  max-width: 260px;
+  width: 214px;
+  max-width: 214px;
 }
 
 .purchase-result-table .col-ordered {
@@ -537,25 +537,49 @@ button:disabled { opacity: 0.6; }
 }
 
 .purchase-result-table .col-invoice input {
-  width: 180px;
-  max-width: 180px;
+  width: 98px;
+  max-width: 98px;
   box-sizing: border-box;
-  margin-right: 8px;
+  margin-right: 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
-.purchase-result-table .col-customer,
+.purchase-result-table .col-invoice select {
+  min-width: 92px;
+  max-width: 92px;
+  text-align: center;
+}
+
+.purchase-result-table .col-customer {
+  min-width: 150px;
+}
+
 .purchase-result-table .col-product {
-  min-width: 240px;
+  min-width: 260px;
 }
 
 .purchase-result-table .col-supplier {
-  min-width: 180px;
-  max-width: 260px;
+  min-width: 126px;
+  max-width: 182px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   border-left: 1px solid #e5e7eb;
   border-right: 1px solid #e5e7eb;
+}
+
+.purchase-result-table .col-unit-cost {
+  width: 150px;
+  max-width: 150px;
+  white-space: nowrap;
+}
+
+.purchase-result-table .col-unit-cost input {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .bulk-allocation-table .delivery-warning {
