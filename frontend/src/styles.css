@@ -546,14 +546,14 @@ button:disabled { opacity: 0.6; }
 }
 
 .purchase-result-table .col-invoice select {
-  min-width: 148px;
-  max-width: 148px;
+  min-width: 326px;
+  max-width: 326px;
   text-align: center;
 }
 
 .purchase-result-table .col-customer,
 .purchase-result-table .col-product {
-  min-width: 260px;
+  min-width: 220px;
 }
 
 .purchase-result-table .col-supplier {
