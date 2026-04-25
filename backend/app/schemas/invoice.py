@@ -61,6 +61,18 @@ class InvoiceItemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class InvoiceDraftListRow(BaseModel):
+    invoice_id: int
+    invoice_item_id: int
+    customer_name: str
+    product_name: str
+    billable_qty: float
+    billable_uom: str
+    sales_unit_price: float
+    line_amount: float
+    gross_margin_pct: float | None = None
+
+
 class InvoiceFinalizeResponse(BaseModel):
     invoice_id: int
     status: InvoiceStatus

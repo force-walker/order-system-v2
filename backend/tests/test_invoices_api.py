@@ -324,3 +324,36 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
     fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert fin.status_code == 200
     assert fin.json()["status"] == "finalized"
+
+
+def test_invoice_draft_list_rows_include_required_columns():
+    order_id = _seed_order(with_items=True)
+    _seed_purchase_result_for_order(order_id, purchased_qty=2)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-LIST-001",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+        },
+    )
+    assert draft.status_code == 201
+
+    listed = client.get("/api/v1/invoices/draft-list")
+    assert listed.status_code == 200
+    assert len(listed.json()) >= 1
+
+    row = listed.json()[0]
+    assert {
+        "invoice_id",
+        "invoice_item_id",
+        "customer_name",
+        "product_name",
+        "billable_qty",
+        "billable_uom",
+        "sales_unit_price",
+        "line_amount",
+        "gross_margin_pct",
+    }.issubset(row.keys())
