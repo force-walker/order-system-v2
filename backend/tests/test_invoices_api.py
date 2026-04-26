@@ -451,6 +451,31 @@ def test_update_invoice_draft_item_non_negative_validation():
     assert patch.status_code == 422
 
 
+def test_finalize_invoice_item_line_status_transition():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+
+    gen = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-LINE-FIN-1", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    invoice_id = gen.json()["id"]
+    item_id = client.get(f"/api/v1/invoices/{invoice_id}/items").json()[0]["id"]
+
+    fin_line = client.post(f"/api/v1/invoices/{invoice_id}/items/{item_id}/finalize")
+    assert fin_line.status_code == 200
+    assert fin_line.json()["invoice_line_status"] == "invoiced"
+
+    fin_again = client.post(f"/api/v1/invoices/{invoice_id}/items/{item_id}/finalize")
+    assert fin_again.status_code == 409
+    assert fin_again.json()["detail"]["code"] == "INVOICE_ITEM_ALREADY_INVOICED"
+
+    client.post(f"/api/v1/invoices/{invoice_id}/finalize")
+    fin_after_header = client.post(f"/api/v1/invoices/{invoice_id}/items/{item_id}/finalize")
+    assert fin_after_header.status_code == 409
+    assert fin_after_header.json()["detail"]["code"] == "INVOICE_NOT_DRAFT"
+
+
 def test_invoice_report_not_found():
     client = _client()
     res = client.get("/api/v1/invoices/999999/report")

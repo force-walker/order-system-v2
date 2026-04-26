@@ -77,6 +77,8 @@ def test_openapi_error_contracts_for_core_apis():
     assert "404" in _responses("/api/v1/invoices/{invoice_id}/report", "get")
     assert "409" in _responses("/api/v1/invoices/{invoice_id}/items/{invoice_item_id}", "patch")
     assert "422" in _responses("/api/v1/invoices/{invoice_id}/items/{invoice_item_id}", "patch")
+    assert "404" in _responses("/api/v1/invoices/{invoice_id}/items/{invoice_item_id}/finalize", "post")
+    assert "409" in _responses("/api/v1/invoices/{invoice_id}/items/{invoice_item_id}/finalize", "post")
     assert "409" in _responses("/api/v1/invoices/{invoice_id}/finalize", "post")
     assert "422" in _responses("/api/v1/invoices/{invoice_id}/finalize", "post")
     assert "409" in _responses("/api/v1/invoices/{invoice_id}/unlock", "post")
