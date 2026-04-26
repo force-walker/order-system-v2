@@ -24,6 +24,7 @@ class InvoiceDraftFromPurchaseResultsRequest(BaseModel):
     order_id: int = Field(gt=0)
     invoice_date: date
     due_date: date | None = None
+    purchase_result_ids: list[int] = Field(min_length=1)
 
 
 class InvoiceResponse(BaseModel):
@@ -73,6 +74,42 @@ class InvoiceDraftListRow(BaseModel):
     unit_cost_basis: float | None = None
     line_amount: float
     gross_margin_pct: float | None = None
+
+
+class InvoiceItemUpdateRequest(BaseModel):
+    billable_qty: float = Field(ge=0)
+    sales_unit_price: float = Field(ge=0)
+
+
+class InvoiceDraftGenerateResult(BaseModel):
+    invoice_id: int
+    created_count: int
+    target_purchase_result_ids: list[int]
+
+
+class InvoiceReportLine(BaseModel):
+    invoice_item_id: int
+    order_item_id: int
+    billable_qty: float
+    billable_uom: str
+    sales_unit_price: float
+    line_amount: float
+    tax_amount: float
+
+
+class InvoiceReportResponse(BaseModel):
+    invoice_id: int
+    invoice_no: str
+    status: InvoiceStatus
+    customer_id: int
+    customer_name: str
+    invoice_date: date
+    delivery_date: date
+    due_date: date | None
+    subtotal: float
+    tax_total: float
+    grand_total: float
+    items: list[InvoiceReportLine]
 
 
 class InvoiceFinalizeResponse(BaseModel):

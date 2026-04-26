@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -10,10 +10,14 @@ from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
     InvoiceCreateRequest,
     InvoiceDraftFromPurchaseResultsRequest,
+    InvoiceDraftGenerateResult,
+    InvoiceDraftListRow,
     InvoiceFinalizeResponse,
     InvoiceGenerateRequest,
-    InvoiceDraftListRow,
     InvoiceItemResponse,
+    InvoiceItemUpdateRequest,
+    InvoiceReportLine,
+    InvoiceReportResponse,
     InvoiceResetRequest,
     InvoiceResetResponse,
     InvoiceResponse,
@@ -55,6 +59,36 @@ def _get_invoice_or_404(db: Session, invoice_id: int) -> Invoice:
 
 def _amount(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _tax_rate_from_code(tax_rate_code: str | None) -> Decimal:
+    if not tax_rate_code:
+        return Decimal("0")
+    code = tax_rate_code.strip().lower()
+    if code in {"exempt", "non_taxable", "none", "0", "0%"}:
+        return Decimal("0")
+
+    normalized = "".join(ch for ch in code if (ch.isdigit() or ch == "."))
+    if not normalized:
+        return Decimal("0")
+
+    raw = Decimal(normalized)
+    if raw > 1:
+        return raw / Decimal("100")
+    return raw
+
+
+def _recalc_invoice_totals(db: Session, invoice: Invoice) -> None:
+    items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice.id).all()
+    subtotal = Decimal("0")
+    tax_total = Decimal("0")
+    for item in items:
+        subtotal += Decimal(str(item.line_amount))
+        tax_total += Decimal(str(item.tax_amount))
+
+    invoice.subtotal = float(_amount(subtotal))
+    invoice.tax_total = float(_amount(tax_total))
+    invoice.grand_total = float(_amount(subtotal + tax_total))
 
 
 @router.post(
@@ -119,8 +153,6 @@ def list_invoices(
     return [InvoiceResponse.model_validate(row) for row in rows]
 
 
-
-
 @router.get("/draft-list", response_model=list[InvoiceDraftListRow])
 def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftListRow]:
     rows = (
@@ -160,6 +192,8 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
         )
 
     return result
+
+
 @router.get(
     "/{invoice_id}",
     response_model=InvoiceResponse,
@@ -179,6 +213,120 @@ def list_invoice_items(invoice_id: int, db: Session = Depends(get_db)) -> list[I
     _get_invoice_or_404(db, invoice_id)
     rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.id.asc()).all()
     return [InvoiceItemResponse.model_validate(row) for row in rows]
+
+
+@router.get(
+    "/{invoice_id}/report",
+    response_model=InvoiceReportResponse,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceReportResponse:
+    invoice = _get_invoice_or_404(db, invoice_id)
+    customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
+    if customer is None:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+
+    items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.id.asc()).all()
+    return InvoiceReportResponse(
+        invoice_id=invoice.id,
+        invoice_no=invoice.invoice_no,
+        status=invoice.status,
+        customer_id=customer.id,
+        customer_name=customer.name,
+        invoice_date=invoice.invoice_date,
+        delivery_date=invoice.delivery_date,
+        due_date=invoice.due_date,
+        subtotal=float(invoice.subtotal),
+        tax_total=float(invoice.tax_total),
+        grand_total=float(invoice.grand_total),
+        items=[
+            InvoiceReportLine(
+                invoice_item_id=i.id,
+                order_item_id=i.order_item_id,
+                billable_qty=float(i.billable_qty),
+                billable_uom=i.billable_uom,
+                sales_unit_price=float(i.sales_unit_price),
+                line_amount=float(i.line_amount),
+                tax_amount=float(i.tax_amount),
+            )
+            for i in items
+        ],
+    )
+
+
+@router.patch(
+    "/{invoice_id}/items/{invoice_item_id}",
+    response_model=InvoiceItemResponse,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def update_invoice_draft_item(
+    invoice_id: int,
+    invoice_item_id: int,
+    payload: InvoiceItemUpdateRequest,
+    db: Session = Depends(get_db),
+) -> InvoiceItemResponse:
+    invoice = _get_invoice_or_404(db, invoice_id)
+    if invoice.status != InvoiceStatus.draft:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
+
+    item = db.query(InvoiceItem).filter(InvoiceItem.id == invoice_item_id, InvoiceItem.invoice_id == invoice_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail={"code": "INVOICE_ITEM_NOT_FOUND", "message": "invoice item not found"})
+
+    order_item = db.query(OrderItem).filter(OrderItem.id == item.order_item_id).first()
+    if order_item is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_ITEM_NOT_FOUND", "message": "order item not found"})
+
+    product = db.query(Product).filter(Product.id == order_item.product_id).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+
+    before = {
+        "billable_qty": float(item.billable_qty),
+        "sales_unit_price": float(item.sales_unit_price),
+        "line_amount": float(item.line_amount),
+        "tax_amount": float(item.tax_amount),
+    }
+
+    billable_qty = Decimal(str(payload.billable_qty))
+    sales_unit_price = Decimal(str(payload.sales_unit_price))
+    line_amount = _amount(billable_qty * sales_unit_price)
+
+    tax_rate = _tax_rate_from_code(product.tax_rate_code)
+    tax_amount = _amount((line_amount * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_DOWN)) if tax_rate > 0 else Decimal("0")
+
+    item.billable_qty = float(billable_qty)
+    item.sales_unit_price = float(_amount(sales_unit_price))
+    item.line_amount = float(line_amount)
+    item.tax_amount = float(tax_amount)
+
+    _recalc_invoice_totals(db, invoice)
+    db.flush()
+
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        action=AuditAction.UPDATE,
+        before=before,
+        after={
+            "billable_qty": float(item.billable_qty),
+            "sales_unit_price": float(item.sales_unit_price),
+            "line_amount": float(item.line_amount),
+            "tax_amount": float(item.tax_amount),
+            "invoice_subtotal": float(invoice.subtotal),
+            "invoice_tax_total": float(invoice.tax_total),
+            "invoice_grand_total": float(invoice.grand_total),
+        },
+    )
+
+    db.commit()
+    db.refresh(item)
+    return InvoiceItemResponse.model_validate(item)
 
 
 @router.post(
@@ -281,11 +429,9 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
     return InvoiceResponse.model_validate(invoice)
 
 
-
-
 @router.post(
     "/generate-draft-from-purchase-results",
-    response_model=InvoiceResponse,
+    response_model=InvoiceDraftGenerateResult,
     status_code=201,
     responses={
         **INVOICE_COMMON_ERROR_RESPONSES,
@@ -293,20 +439,30 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
         409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
 )
-def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResultsRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
+def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResultsRequest, db: Session = Depends(get_db)) -> InvoiceDraftGenerateResult:
     _validate_due_date(payload.invoice_date, payload.due_date)
     order = _get_order_or_404(db, payload.order_id)
     _ensure_invoice_no_unique(db, payload.invoice_no)
 
     rows = (
-        db.query(PurchaseResult, OrderItem)
+        db.query(PurchaseResult, OrderItem, Product)
         .join(SupplierAllocation, SupplierAllocation.id == PurchaseResult.allocation_id)
         .join(OrderItem, OrderItem.id == SupplierAllocation.order_item_id)
+        .join(Product, Product.id == OrderItem.product_id)
         .filter(OrderItem.order_id == order.id)
+        .filter(PurchaseResult.id.in_(payload.purchase_result_ids))
+        .order_by(PurchaseResult.id.asc())
         .all()
     )
     if not rows:
-        raise HTTPException(status_code=422, detail={"code": "PURCHASE_RESULTS_NOT_FOUND", "message": "order has no purchase results"})
+        raise HTTPException(status_code=422, detail={"code": "PURCHASE_RESULTS_NOT_FOUND", "message": "no target purchase results found"})
+
+    target_ids = [pr.id for pr, _, _ in rows]
+
+    # idempotent: skip purchase results already marked as invoiced
+    rows_to_create = [triple for triple in rows if triple[0].invoice_qty is None]
+    if not rows_to_create:
+        raise HTTPException(status_code=409, detail={"code": "DRAFT_ALREADY_GENERATED", "message": "all target purchase results already invoiced"})
 
     invoice = Invoice(
         invoice_no=payload.invoice_no,
@@ -324,8 +480,9 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     db.flush()
 
     subtotal = Decimal("0")
-    for pr, item in rows:
-        billable_qty = Decimal(str(pr.purchased_qty))
+    tax_total = Decimal("0")
+    for pr, item, product in rows_to_create:
+        billable_qty = Decimal(str(pr.invoice_qty if pr.invoice_qty is not None else pr.purchased_qty))
         sales_unit_price = Decimal("0")
         if item.pricing_basis == PricingBasis.uom_kg and item.unit_price_uom_kg is not None:
             sales_unit_price = _amount(Decimal(str(item.unit_price_uom_kg)))
@@ -333,7 +490,11 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
             sales_unit_price = _amount(Decimal(str(item.unit_price_uom_count)))
 
         line_amount = _amount(billable_qty * sales_unit_price)
+        tax_rate = _tax_rate_from_code(product.tax_rate_code)
+        line_tax = _amount((line_amount * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_DOWN)) if tax_rate > 0 else Decimal("0")
+
         subtotal += line_amount
+        tax_total += line_tax
 
         db.add(
             InvoiceItem(
@@ -349,13 +510,14 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
                     else (float(pr.unit_cost) if pr.unit_cost is not None else None)
                 ),
                 line_amount=float(line_amount),
-                tax_amount=0,
+                tax_amount=float(line_tax),
             )
         )
+        pr.invoice_qty = float(billable_qty)
 
     invoice.subtotal = float(_amount(subtotal))
-    invoice.tax_total = 0
-    invoice.grand_total = float(_amount(subtotal))
+    invoice.tax_total = float(_amount(tax_total))
+    invoice.grand_total = float(_amount(subtotal + tax_total))
 
     write_audit_log(
         db,
@@ -366,15 +528,23 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
             "status": invoice.status.value,
             "is_locked": invoice.is_locked,
             "subtotal": float(invoice.subtotal),
+            "tax_total": float(invoice.tax_total),
             "grand_total": float(invoice.grand_total),
             "source": "purchase_results",
             "source_order_id": order.id,
-            "generated_item_count": len(rows),
+            "generated_item_count": len(rows_to_create),
+            "target_purchase_result_ids": target_ids,
         },
     )
     db.commit()
-    db.refresh(invoice)
-    return InvoiceResponse.model_validate(invoice)
+
+    return InvoiceDraftGenerateResult(
+        invoice_id=invoice.id,
+        created_count=len(rows_to_create),
+        target_purchase_result_ids=target_ids,
+    )
+
+
 @router.post(
     "/{invoice_id}/finalize",
     response_model=InvoiceFinalizeResponse,

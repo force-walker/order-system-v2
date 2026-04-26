@@ -10,7 +10,9 @@ from app.db.session import get_db
 from app.main import app
 from app.models.entities import (
     Customer,
+    Invoice,
     InvoiceItem,
+    InvoiceStatus,
     Order,
     OrderItem,
     OrderStatus,
@@ -69,6 +71,7 @@ def _seed_order(with_items: bool = False, include_kg_without_weight: bool = Fals
             order_uom="count",
             purchase_uom="count",
             invoice_uom="count",
+            tax_rate_code="10",
             is_catch_weight=False,
             weight_capture_required=False,
             pricing_basis_default=PricingBasis.uom_count,
@@ -302,7 +305,7 @@ def test_list_invoice_items_and_invoice_filters():
 
 def test_generate_draft_from_purchase_results_and_finalize_separation():
     order_id = _seed_order(with_items=True)
-    _seed_purchase_result_for_order(order_id, purchased_qty=2)
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
     client = _client()
 
     draft = client.post(
@@ -311,11 +314,13 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
             "invoice_no": "INV-PR-DRAFT-001",
             "order_id": order_id,
             "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
         },
     )
     assert draft.status_code == 201
-    invoice_id = draft.json()["id"]
-    assert draft.json()["status"] == "draft"
+    invoice_id = draft.json()["invoice_id"]
+    assert draft.json()["created_count"] == 1
+    assert draft.json()["target_purchase_result_ids"] == [purchase_result_id]
 
     items = client.get(f"/api/v1/invoices/{invoice_id}/items")
     assert items.status_code == 200
@@ -328,7 +333,7 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
 
 def test_invoice_draft_list_rows_include_required_columns():
     order_id = _seed_order(with_items=True)
-    _seed_purchase_result_for_order(order_id, purchased_qty=2)
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
     client = _client()
 
     draft = client.post(
@@ -337,6 +342,7 @@ def test_invoice_draft_list_rows_include_required_columns():
             "invoice_no": "INV-PR-LIST-001",
             "order_id": order_id,
             "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
         },
     )
     assert draft.status_code == 201
@@ -357,3 +363,116 @@ def test_invoice_draft_list_rows_include_required_columns():
         "line_amount",
         "gross_margin_pct",
     }.issubset(row.keys())
+
+
+def test_draft_generation_from_purchase_results_is_idempotent():
+    order_id = _seed_order(with_items=True)
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
+    client = _client()
+
+    first = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-IDEMP-1",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert first.status_code == 201
+    assert first.json()["created_count"] == 1
+
+    second = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-IDEMP-2",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert second.status_code == 409
+    assert second.json()["detail"]["code"] == "DRAFT_ALREADY_GENERATED"
+
+
+def test_update_invoice_draft_item_recalculates_and_finalized_rejects():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+
+    gen = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-EDIT-001", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    assert gen.status_code == 201
+    invoice_id = gen.json()["id"]
+
+    items = client.get(f"/api/v1/invoices/{invoice_id}/items")
+    invoice_item_id = items.json()[0]["id"]
+
+    patch = client.patch(
+        f"/api/v1/invoices/{invoice_id}/items/{invoice_item_id}",
+        json={"billable_qty": 5, "sales_unit_price": 123.45},
+    )
+    assert patch.status_code == 200
+    assert float(patch.json()["line_amount"]) == 617.25
+    assert float(patch.json()["tax_amount"]) == 61.72
+
+    report = client.get(f"/api/v1/invoices/{invoice_id}/report")
+    assert report.status_code == 200
+    assert report.json()["customer_name"] == "Customer I"
+    assert any(line["invoice_item_id"] == invoice_item_id for line in report.json()["items"])
+
+    fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
+    assert fin.status_code == 200
+
+    patch_after_finalize = client.patch(
+        f"/api/v1/invoices/{invoice_id}/items/{invoice_item_id}",
+        json={"billable_qty": 6, "sales_unit_price": 120},
+    )
+    assert patch_after_finalize.status_code == 409
+    assert patch_after_finalize.json()["detail"]["code"] == "INVOICE_NOT_DRAFT"
+
+
+def test_update_invoice_draft_item_non_negative_validation():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+
+    gen = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-EDIT-NEG-1", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    invoice_id = gen.json()["id"]
+    item_id = client.get(f"/api/v1/invoices/{invoice_id}/items").json()[0]["id"]
+
+    patch = client.patch(
+        f"/api/v1/invoices/{invoice_id}/items/{item_id}",
+        json={"billable_qty": -1, "sales_unit_price": 100},
+    )
+    assert patch.status_code == 422
+
+
+def test_invoice_report_not_found():
+    client = _client()
+    res = client.get("/api/v1/invoices/999999/report")
+    assert res.status_code == 404
+
+
+def test_finalize_locks_invoice_row_state():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+
+    gen = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-LOCK-001", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    invoice_id = gen.json()["id"]
+
+    fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
+    assert fin.status_code == 200
+
+    db = TestingSessionLocal()
+    row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    db.close()
+    assert row is not None
+    assert row.status == InvoiceStatus.finalized
+    assert row.is_locked is True
