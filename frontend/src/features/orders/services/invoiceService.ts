@@ -26,6 +26,7 @@ type ApiInvoiceItem = {
   order_item_id: number;
   billable_qty: number;
   billable_uom: string;
+  invoice_line_status: 'uninvoiced' | 'partially_invoiced' | 'invoiced' | 'cancelled';
   sales_unit_price: number;
   line_amount: number;
   tax_amount: number;
@@ -113,10 +114,27 @@ export const getInvoiceDraftItems = async (invoiceId: number): Promise<InvoiceDr
     orderItemId: r.order_item_id,
     billableQty: r.billable_qty,
     billableUom: r.billable_uom,
+    invoiceLineStatus: r.invoice_line_status,
     salesUnitPrice: r.sales_unit_price,
     lineAmount: r.line_amount,
     taxAmount: r.tax_amount,
   }));
+};
+
+export const finalizeInvoiceItemLine = async (invoiceId: number, invoiceItemId: number): Promise<InvoiceDraftItem> => {
+  const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/items/${invoiceItemId}/finalize`, { method: 'POST' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const r = (await res.json()) as ApiInvoiceItem;
+  return {
+    id: r.id,
+    orderItemId: r.order_item_id,
+    billableQty: r.billable_qty,
+    billableUom: r.billable_uom,
+    invoiceLineStatus: r.invoice_line_status,
+    salesUnitPrice: r.sales_unit_price,
+    lineAmount: r.line_amount,
+    taxAmount: r.tax_amount,
+  };
 };
 
 
