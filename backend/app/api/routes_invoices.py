@@ -57,6 +57,13 @@ def _get_invoice_or_404(db: Session, invoice_id: int) -> Invoice:
     return row
 
 
+def _get_invoice_item_or_404(db: Session, invoice_id: int, invoice_item_id: int) -> InvoiceItem:
+    item = db.query(InvoiceItem).filter(InvoiceItem.id == invoice_item_id, InvoiceItem.invoice_id == invoice_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail={"code": "INVOICE_ITEM_NOT_FOUND", "message": "invoice item not found"})
+    return item
+
+
 def _amount(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -273,9 +280,7 @@ def update_invoice_draft_item(
     if invoice.status != InvoiceStatus.draft:
         raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
 
-    item = db.query(InvoiceItem).filter(InvoiceItem.id == invoice_item_id, InvoiceItem.invoice_id == invoice_id).first()
-    if item is None:
-        raise HTTPException(status_code=404, detail={"code": "INVOICE_ITEM_NOT_FOUND", "message": "invoice item not found"})
+    item = _get_invoice_item_or_404(db, invoice_id, invoice_item_id)
 
     order_item = db.query(OrderItem).filter(OrderItem.id == item.order_item_id).first()
     if order_item is None:
@@ -322,6 +327,41 @@ def update_invoice_draft_item(
             "invoice_tax_total": float(invoice.tax_total),
             "invoice_grand_total": float(invoice.grand_total),
         },
+    )
+
+    db.commit()
+    db.refresh(item)
+    return InvoiceItemResponse.model_validate(item)
+
+
+@router.post(
+    "/{invoice_id}/items/{invoice_item_id}/finalize",
+    response_model=InvoiceItemResponse,
+    responses={
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def finalize_invoice_item_line(invoice_id: int, invoice_item_id: int, db: Session = Depends(get_db)) -> InvoiceItemResponse:
+    invoice = _get_invoice_or_404(db, invoice_id)
+    if invoice.status != InvoiceStatus.draft:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
+
+    item = _get_invoice_item_or_404(db, invoice_id, invoice_item_id)
+    if item.invoice_line_status == "invoiced":
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_ITEM_ALREADY_INVOICED", "message": "invoice item already invoiced"})
+
+    before = {"invoice_line_status": item.invoice_line_status}
+    item.invoice_line_status = "invoiced"
+    db.flush()
+
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        action=AuditAction.UPDATE,
+        before=before,
+        after={"invoice_line_status": item.invoice_line_status, "invoice_item_id": item.id},
     )
 
     db.commit()
