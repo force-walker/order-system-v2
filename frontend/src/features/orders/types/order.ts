@@ -206,6 +206,7 @@ export type InvoiceDraftItem = {
   orderItemId: number;
   billableQty: number;
   billableUom: string;
+  invoiceLineStatus: 'uninvoiced' | 'partially_invoiced' | 'invoiced' | 'cancelled';
   salesUnitPrice: number;
   lineAmount: number;
   taxAmount: number;

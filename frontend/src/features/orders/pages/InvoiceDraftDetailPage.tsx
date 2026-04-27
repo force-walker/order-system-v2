@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { finalizeInvoiceDraft, getInvoiceDraftItems } from 'features/orders/services/invoiceService';
+import { finalizeInvoiceDraft, finalizeInvoiceItemLine, getInvoiceDraftItems } from 'features/orders/services/invoiceService';
 import type { InvoiceDraftItem } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 
@@ -12,21 +12,23 @@ export const InvoiceDraftDetailPage = () => {
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftItem[]>([]);
   const [finalizing, setFinalizing] = useState(false);
+  const [finalizingRowId, setFinalizingRowId] = useState<number | null>(null);
+
+  const load = async () => {
+    if (!invoiceId) return;
+    setLoading(true);
+    setError('');
+    try {
+      const items = await getInvoiceDraftItems(Number(invoiceId));
+      setRows(items);
+    } catch (e) {
+      setError(toActionableMessage(e, '請求ドラフト明細の取得に失敗しました。'));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      if (!invoiceId) return;
-      setLoading(true);
-      setError('');
-      try {
-        const items = await getInvoiceDraftItems(Number(invoiceId));
-        setRows(items);
-      } catch (e) {
-        setError(toActionableMessage(e, '請求ドラフト明細の取得に失敗しました。'));
-      } finally {
-        setLoading(false);
-      }
-    };
     void load();
   }, [invoiceId]);
 
@@ -40,6 +42,20 @@ export const InvoiceDraftDetailPage = () => {
       setError(toActionableMessage(e, '請求確定に失敗しました。'));
     } finally {
       setFinalizing(false);
+    }
+  };
+
+  const onFinalizeLine = async (invoiceItemId: number) => {
+    if (!invoiceId) return;
+    setFinalizingRowId(invoiceItemId);
+    setError('');
+    try {
+      const updated = await finalizeInvoiceItemLine(Number(invoiceId), invoiceItemId);
+      setRows((prev) => prev.map((r) => (r.id === invoiceItemId ? updated : r)));
+    } catch (e) {
+      setError(toActionableMessage(e, '明細行の確定に失敗しました。'));
+    } finally {
+      setFinalizingRowId(null);
     }
   };
 
@@ -73,19 +89,35 @@ export const InvoiceDraftDetailPage = () => {
                   <th>単価</th>
                   <th>金額</th>
                   <th>税額</th>
+                  <th>行ステータス</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id}>
-                    <td><Link to={`/orders/item-allocations`}>{r.orderItemId}</Link></td>
-                    <td>{r.billableQty}</td>
-                    <td>{r.billableUom}</td>
-                    <td>{r.salesUnitPrice}</td>
-                    <td>{r.lineAmount}</td>
-                    <td>{r.taxAmount}</td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const isInvoiced = r.invoiceLineStatus === 'invoiced';
+                  return (
+                    <tr key={r.id}>
+                      <td><Link to={`/orders/item-allocations`}>{r.orderItemId}</Link></td>
+                      <td>{r.billableQty}</td>
+                      <td>{r.billableUom}</td>
+                      <td>{r.salesUnitPrice}</td>
+                      <td>{r.lineAmount}</td>
+                      <td>{r.taxAmount}</td>
+                      <td>{r.invoiceLineStatus}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={isInvoiced || finalizingRowId === r.id}
+                          onClick={() => void onFinalizeLine(r.id)}
+                        >
+                          {finalizingRowId === r.id ? '行確定中...' : isInvoiced ? '確定済み' : '行を確定'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
