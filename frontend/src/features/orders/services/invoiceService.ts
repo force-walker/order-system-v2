@@ -169,6 +169,17 @@ export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]>
     };
   });
 };
+export const updateInvoiceDraftItem = async (invoiceId: number, invoiceItemId: number, payload: { billableQty: number; salesUnitPrice: number }): Promise<void> => {
+  const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/items/${invoiceItemId}`, {
+    method: 'PATCH',
+    body: {
+      billable_qty: payload.billableQty,
+      sales_unit_price: payload.salesUnitPrice,
+    },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+};
+
 export const finalizeInvoiceDraft = async (invoiceId: number): Promise<void> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/finalize`, { method: 'POST' });
   if (!res.ok) throw await parseApiErrorPayload(res);

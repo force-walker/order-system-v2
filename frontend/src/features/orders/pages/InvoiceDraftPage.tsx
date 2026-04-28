@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
-import { listInvoiceDraftListRows } from 'features/orders/services/invoiceService';
+import { listInvoiceDraftListRows, updateInvoiceDraftItem } from 'features/orders/services/invoiceService';
 import type { InvoiceDraftListRow, InvoiceStatus } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 
@@ -19,6 +19,7 @@ export const InvoiceDraftPage = () => {
   const [rows, setRows] = useState<InvoiceDraftListRow[]>([]);
   const [editedUnitPriceByItemId, setEditedUnitPriceByItemId] = useState<Record<number, string>>({});
   const [unitPriceErrorByItemId, setUnitPriceErrorByItemId] = useState<Record<number, string>>({});
+  const [savingItemId, setSavingItemId] = useState<number | null>(null);
 
   const [customerFilter, setCustomerFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
@@ -137,13 +138,39 @@ export const InvoiceDraftPage = () => {
                             setEditedUnitPriceByItemId((prev) => ({ ...prev, [row.invoiceItemId]: e.target.value }));
                             setUnitPriceErrorByItemId((prev) => ({ ...prev, [row.invoiceItemId]: '' }));
                           }}
-                          onBlur={(e) => {
+                          onBlur={async (e) => {
                             const v = e.target.value.trim();
-                            if (v === '') return;
+                            if (v === '') {
+                              setEditedUnitPriceByItemId((prev) => ({ ...prev, [row.invoiceItemId]: String(row.salesUnitPrice) }));
+                              return;
+                            }
                             if (!/^\d+(\.\d+)?$/.test(v)) {
                               setUnitPriceErrorByItemId((prev) => ({ ...prev, [row.invoiceItemId]: '半角数値で入力してください' }));
+                              return;
+                            }
+
+                            const nextPrice = Number(v);
+                            if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+                              setUnitPriceErrorByItemId((prev) => ({ ...prev, [row.invoiceItemId]: '0以上の数値を入力してください' }));
+                              return;
+                            }
+                            if (Math.abs(nextPrice - row.salesUnitPrice) < 0.000001) return;
+
+                            setSavingItemId(row.invoiceItemId);
+                            try {
+                              await updateInvoiceDraftItem(row.invoiceId, row.invoiceItemId, {
+                                billableQty: row.billableQty,
+                                salesUnitPrice: nextPrice,
+                              });
+                              const updatedRows = await listInvoiceDraftListRows();
+                              setRows(updatedRows);
+                            } catch (err) {
+                              setError(toActionableMessage(err, '請求単価の更新に失敗しました。'));
+                            } finally {
+                              setSavingItemId(null);
                             }
                           }}
+                          disabled={savingItemId === row.invoiceItemId || row.status === 'finalized'}
                           style={{ width: 110, textAlign: 'right', borderColor: hasError ? '#dc2626' : undefined }}
                         />
                         {hasError ? <div className="field-error">{unitPriceErrorByItemId[row.invoiceItemId]}</div> : null}
