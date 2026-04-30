@@ -240,3 +240,38 @@ export type InvoiceDraftListRow = {
   deliveryDate?: string;
   status?: InvoiceStatus;
 };
+
+export type InvoiceSummaryRow = {
+  invoiceId: number;
+  invoiceNo: string;
+  customerName: string;
+  invoiceDate: string;
+  deliveryDate: string;
+  status: InvoiceStatus;
+  subtotal: number;
+  taxTotal: number;
+  grandTotal: number;
+  itemCount: number;
+};
+
+export type InvoiceDetailLine = {
+  invoiceItemId: number;
+  productName: string;
+  billableQty: number;
+  billableUom: string;
+  salesUnitPrice: number;
+  lineAmount: number;
+};
+
+export type InvoiceDetailView = {
+  invoiceId: number;
+  invoiceNo: string;
+  customerName: string;
+  invoiceDate: string;
+  deliveryDate: string;
+  status: InvoiceStatus;
+  subtotal: number;
+  taxTotal: number;
+  grandTotal: number;
+  items: InvoiceDetailLine[];
+};

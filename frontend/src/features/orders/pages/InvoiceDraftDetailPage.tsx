@@ -37,7 +37,7 @@ export const InvoiceDraftDetailPage = () => {
     setFinalizing(true);
     try {
       await finalizeInvoiceDraft(Number(invoiceId));
-      navigate('/invoices/drafts');
+      navigate('/invoices');
     } catch (e) {
       setError(toActionableMessage(e, '請求確定に失敗しました。'));
     } finally {

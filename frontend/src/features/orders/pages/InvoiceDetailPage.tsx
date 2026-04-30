@@ -1,0 +1,87 @@
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
+import { getInvoiceDetailView } from 'features/orders/services/invoiceService';
+import type { InvoiceDetailView } from 'features/orders/types/order';
+import { toActionableMessage } from 'shared/error';
+
+const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
+
+export const InvoiceDetailPage = () => {
+  const { invoiceId } = useParams();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [data, setData] = useState<InvoiceDetailView | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!invoiceId) return;
+      setLoading(true);
+      setError('');
+      try {
+        setData(await getInvoiceDetailView(Number(invoiceId)));
+      } catch (e) {
+        setError(toActionableMessage(e, '請求書詳細の取得に失敗しました。'));
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, [invoiceId]);
+
+  if (error) return <ErrorState title="請求書詳細の取得に失敗しました" description={error} />;
+  if (loading) return <LoadingState title="請求書詳細を読み込み中" description="しばらくお待ちください。" />;
+  if (!data) return <EmptyState title="請求書がありません" description="対象データが見つかりません。" />;
+
+  return (
+    <section>
+      <div className="card form-grid">
+        <div className="list-header">
+          <div>
+            <h2>請求書詳細 #{data.invoiceNo}</h2>
+            <p className="subtle">ステータス: {data.status}</p>
+          </div>
+          <Link to="/invoices" className="order-link">← 請求書一覧へ</Link>
+        </div>
+
+        <div className="form-grid two-col">
+          <div>
+            <p><strong>取引先:</strong> {data.customerName}</p>
+            <p><strong>請求日:</strong> {data.invoiceDate}</p>
+            <p><strong>納品日:</strong> {data.deliveryDate}</p>
+          </div>
+          <div>
+            <p><strong>小計:</strong> {currency.format(data.subtotal)}</p>
+            <p><strong>税額:</strong> {currency.format(data.taxTotal)}</p>
+            <p><strong>合計:</strong> {currency.format(data.grandTotal)}</p>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>商品名</th>
+                <th style={{ textAlign: 'right' }}>請求数量</th>
+                <th>請求単位</th>
+                <th style={{ textAlign: 'right' }}>請求単価</th>
+                <th style={{ textAlign: 'right' }}>請求金額</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((row) => (
+                <tr key={row.invoiceItemId}>
+                  <td>{row.productName}</td>
+                  <td style={{ textAlign: 'right' }}>{row.billableQty}</td>
+                  <td>{row.billableUom}</td>
+                  <td style={{ textAlign: 'right' }}>{currency.format(row.salesUnitPrice)}</td>
+                  <td style={{ textAlign: 'right' }}>{currency.format(row.lineAmount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+};

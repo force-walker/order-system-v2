@@ -1,6 +1,6 @@
 import { apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload } from 'shared/error';
-import type { InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceStatus } from 'features/orders/types/order';
+import type { InvoiceDetailView, InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceStatus, InvoiceSummaryRow } from 'features/orders/types/order';
 
 const TOKEN_STORAGE_KEY = 'osv2_access_token';
 const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
@@ -46,6 +46,31 @@ type ApiInvoiceDraftListRow = {
   gross_margin_pct: number | null;
 };
 
+type ApiInvoiceReportLine = {
+  invoice_item_id: number;
+  order_item_id: number;
+  billable_qty: number;
+  billable_uom: string;
+  sales_unit_price: number;
+  line_amount: number;
+  tax_amount: number;
+};
+
+type ApiInvoiceReport = {
+  invoice_id: number;
+  invoice_no: string;
+  status: InvoiceStatus;
+  customer_id: number;
+  customer_name: string;
+  invoice_date: string;
+  delivery_date: string;
+  due_date: string | null;
+  subtotal: number;
+  tax_total: number;
+  grand_total: number;
+  items: ApiInvoiceReportLine[];
+};
+
 const ensureDevToken = async (): Promise<string> => {
   const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
   if (cached) return cached;
@@ -72,6 +97,37 @@ const fetchWithAuth = async (path: string, init?: { method?: string; body?: unkn
 
   if (res.status === 401) localStorage.removeItem(TOKEN_STORAGE_KEY);
   return res;
+};
+
+const listInvoicesByStatus = async (status: InvoiceStatus): Promise<InvoiceDraftSummary[]> => {
+  const res = await fetchWithAuth(`/api/v1/invoices?status=${status}`, { method: 'GET' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const data = (await res.json()) as ApiInvoiceSummary[];
+
+  const itemCounts = await Promise.all(
+    data.map(async (r) => {
+      try {
+        const items = await getInvoiceDraftItems(r.id);
+        return [r.id, items.length] as const;
+      } catch {
+        return [r.id, 0] as const;
+      }
+    }),
+  );
+  const countMap = new Map<number, number>(itemCounts);
+
+  return data.map((r) => ({
+    id: r.id,
+    invoiceNo: r.invoice_no,
+    customerId: r.customer_id,
+    invoiceDate: r.invoice_date,
+    deliveryDate: r.delivery_date,
+    itemCount: countMap.get(r.id) ?? 0,
+    subtotal: r.subtotal,
+    taxTotal: r.tax_total,
+    grandTotal: r.grand_total,
+    status: r.status,
+  }));
 };
 
 export const listInvoiceDrafts = async (): Promise<InvoiceDraftSummary[]> => {
@@ -183,4 +239,55 @@ export const updateInvoiceDraftItem = async (invoiceId: number, invoiceItemId: n
 export const finalizeInvoiceDraft = async (invoiceId: number): Promise<void> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/finalize`, { method: 'POST' });
   if (!res.ok) throw await parseApiErrorPayload(res);
+};
+
+export const listInvoiceSummaries = async (): Promise<InvoiceSummaryRow[]> => {
+  const [drafts, finalized] = await Promise.all([
+    listInvoicesByStatus('draft'),
+    listInvoicesByStatus('finalized'),
+  ]);
+  const all = [...drafts, ...finalized];
+  return all.map((r) => ({
+    invoiceId: r.id,
+    invoiceNo: r.invoiceNo,
+    customerName: `customer#${r.customerId}`,
+    invoiceDate: r.invoiceDate,
+    deliveryDate: r.deliveryDate,
+    status: r.status,
+    subtotal: r.subtotal,
+    taxTotal: r.taxTotal,
+    grandTotal: r.grandTotal,
+    itemCount: r.itemCount,
+  }));
+};
+
+export const getInvoiceDetailView = async (invoiceId: number): Promise<InvoiceDetailView> => {
+  const reportRes = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/report`, { method: 'GET' });
+  if (!reportRes.ok) throw await parseApiErrorPayload(reportRes);
+  const report = (await reportRes.json()) as ApiInvoiceReport;
+
+  const rowsRes = await fetchWithAuth('/api/v1/invoices/draft-list', { method: 'GET' });
+  if (!rowsRes.ok) throw await parseApiErrorPayload(rowsRes);
+  const draftRows = (await rowsRes.json()) as ApiInvoiceDraftListRow[];
+  const productNameByItemId = new Map<number, string>(draftRows.map((r) => [r.invoice_item_id, r.product_name]));
+
+  return {
+    invoiceId: report.invoice_id,
+    invoiceNo: report.invoice_no,
+    customerName: report.customer_name,
+    invoiceDate: report.invoice_date,
+    deliveryDate: report.delivery_date,
+    status: report.status,
+    subtotal: report.subtotal,
+    taxTotal: report.tax_total,
+    grandTotal: report.grand_total,
+    items: report.items.map((i) => ({
+      invoiceItemId: i.invoice_item_id,
+      productName: productNameByItemId.get(i.invoice_item_id) ?? `item#${i.order_item_id}`,
+      billableQty: i.billable_qty,
+      billableUom: i.billable_uom,
+      salesUnitPrice: i.sales_unit_price,
+      lineAmount: i.line_amount,
+    })),
+  };
 };
