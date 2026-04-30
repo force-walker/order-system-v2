@@ -16,6 +16,7 @@ from app.schemas.invoice import (
     InvoiceGenerateRequest,
     InvoiceItemResponse,
     InvoiceItemUpdateRequest,
+    InvoiceNeighborsResponse,
     InvoiceReportLine,
     InvoiceReportResponse,
     InvoiceResetRequest,
@@ -220,6 +221,26 @@ def list_invoice_items(invoice_id: int, db: Session = Depends(get_db)) -> list[I
     _get_invoice_or_404(db, invoice_id)
     rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.id.asc()).all()
     return [InvoiceItemResponse.model_validate(row) for row in rows]
+
+
+@router.get(
+    "/{invoice_id}/neighbors",
+    response_model=InvoiceNeighborsResponse,
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def get_invoice_neighbors(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceNeighborsResponse:
+    _get_invoice_or_404(db, invoice_id)
+    ordered_ids = [row_id for (row_id,) in db.query(Invoice.id).order_by(Invoice.id.desc()).all()]
+    idx = ordered_ids.index(invoice_id)
+
+    prev_invoice_id = ordered_ids[idx - 1] if idx > 0 else None
+    next_invoice_id = ordered_ids[idx + 1] if idx < len(ordered_ids) - 1 else None
+
+    return InvoiceNeighborsResponse(
+        invoice_id=invoice_id,
+        prev_invoice_id=prev_invoice_id,
+        next_invoice_id=next_invoice_id,
+    )
 
 
 @router.get(

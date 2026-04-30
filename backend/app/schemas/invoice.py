@@ -129,6 +129,12 @@ class InvoiceSummaryRow(BaseModel):
     item_count: int
 
 
+class InvoiceNeighborsResponse(BaseModel):
+    invoice_id: int
+    prev_invoice_id: int | None
+    next_invoice_id: int | None
+
+
 class InvoiceFinalizeResponse(BaseModel):
     invoice_id: int
     status: InvoiceStatus

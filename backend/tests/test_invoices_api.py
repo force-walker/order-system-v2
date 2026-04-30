@@ -482,6 +482,43 @@ def test_invoice_report_not_found():
     assert res.status_code == 404
 
 
+def test_invoice_neighbors_follow_invoice_list_order():
+    order_id = _seed_order(with_items=False)
+    client = _client()
+
+    created_ids: list[int] = []
+    for no in ["INV-NB-001", "INV-NB-002", "INV-NB-003"]:
+        res = client.post(
+            "/api/v1/invoices",
+            json={"invoice_no": no, "order_id": order_id, "invoice_date": str(date.today())},
+        )
+        assert res.status_code == 201
+        created_ids.append(res.json()["id"])
+
+    listed = client.get("/api/v1/invoices")
+    assert listed.status_code == 200
+    listed_ids = [row["id"] for row in listed.json()]
+
+    assert listed_ids[0] == created_ids[2]
+    assert listed_ids[1] == created_ids[1]
+    assert listed_ids[2] == created_ids[0]
+
+    head = client.get(f"/api/v1/invoices/{listed_ids[0]}/neighbors")
+    assert head.status_code == 200
+    assert head.json()["prev_invoice_id"] is None
+    assert head.json()["next_invoice_id"] == listed_ids[1]
+
+    middle = client.get(f"/api/v1/invoices/{listed_ids[1]}/neighbors")
+    assert middle.status_code == 200
+    assert middle.json()["prev_invoice_id"] == listed_ids[0]
+    assert middle.json()["next_invoice_id"] == listed_ids[2]
+
+    tail = client.get(f"/api/v1/invoices/{listed_ids[2]}/neighbors")
+    assert tail.status_code == 200
+    assert tail.json()["prev_invoice_id"] == listed_ids[1]
+    assert tail.json()["next_invoice_id"] is None
+
+
 def test_finalize_locks_invoice_row_state():
     order_id = _seed_order(with_items=True)
     client = _client()
