@@ -86,6 +86,14 @@ def _tax_rate_from_code(tax_rate_code: str | None) -> Decimal:
     return raw
 
 
+def _compute_auto_sales_unit_price(purchase_unit_cost: Decimal | None) -> tuple[Decimal, str | None]:
+    if purchase_unit_cost is None:
+        return Decimal("0.00"), "仕入単価が未設定のため自動計算できません"
+    # sales_unit_price = (purchase_unit_cost / 20 + 50) / 0.75
+    price = ((purchase_unit_cost / Decimal("20")) + Decimal("50")) / Decimal("0.75")
+    return _amount(price), None
+
+
 def _recalc_invoice_totals(db: Session, invoice: Invoice) -> None:
     items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice.id).all()
     subtotal = Decimal("0")
@@ -183,6 +191,7 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
             cost_total = float(item.unit_cost_basis) * float(item.billable_qty)
             gross_margin_pct = round(((line_amount - cost_total) / line_amount) * 100, 2)
 
+        unit_cost_basis = float(item.unit_cost_basis) if item.unit_cost_basis is not None else None
         result.append(
             InvoiceDraftListRow(
                 invoice_id=inv.id,
@@ -193,7 +202,8 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
                 billable_qty=float(item.billable_qty),
                 billable_uom=item.billable_uom,
                 sales_unit_price=float(item.sales_unit_price),
-                unit_cost_basis=float(item.unit_cost_basis) if item.unit_cost_basis is not None else None,
+                unit_cost_basis=unit_cost_basis,
+                auto_price_error=("仕入単価が未設定のため自動計算できません" if unit_cost_basis is None else None),
                 line_amount=line_amount,
                 gross_margin_pct=gross_margin_pct,
             )
@@ -220,7 +230,24 @@ def get_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceRespon
 def list_invoice_items(invoice_id: int, db: Session = Depends(get_db)) -> list[InvoiceItemResponse]:
     _get_invoice_or_404(db, invoice_id)
     rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.id.asc()).all()
-    return [InvoiceItemResponse.model_validate(row) for row in rows]
+    return [
+        InvoiceItemResponse(
+            id=row.id,
+            invoice_id=row.invoice_id,
+            order_item_id=row.order_item_id,
+            billable_qty=float(row.billable_qty),
+            billable_uom=row.billable_uom,
+            invoice_line_status=row.invoice_line_status,
+            sales_unit_price=float(row.sales_unit_price),
+            unit_cost_basis=(float(row.unit_cost_basis) if row.unit_cost_basis is not None else None),
+            auto_price_error=("仕入単価が未設定のため自動計算できません" if row.unit_cost_basis is None else None),
+            line_amount=float(row.line_amount),
+            tax_amount=float(row.tax_amount),
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+        for row in rows
+    ]
 
 
 @router.get(
@@ -558,11 +585,8 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     tax_total = Decimal("0")
     for pr, item, product in rows_to_create:
         billable_qty = Decimal(str(pr.invoice_qty if pr.invoice_qty is not None else pr.purchased_qty))
-        sales_unit_price = Decimal("0")
-        if item.pricing_basis == PricingBasis.uom_kg and item.unit_price_uom_kg is not None:
-            sales_unit_price = _amount(Decimal(str(item.unit_price_uom_kg)))
-        elif item.unit_price_uom_count is not None:
-            sales_unit_price = _amount(Decimal(str(item.unit_price_uom_count)))
+        purchase_unit_cost = Decimal(str(pr.final_unit_cost if pr.final_unit_cost is not None else pr.unit_cost)) if (pr.final_unit_cost is not None or pr.unit_cost is not None) else None
+        sales_unit_price, _ = _compute_auto_sales_unit_price(purchase_unit_cost)
 
         line_amount = _amount(billable_qty * sales_unit_price)
         tax_rate = _tax_rate_from_code(product.tax_rate_code)
