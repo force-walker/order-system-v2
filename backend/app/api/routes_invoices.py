@@ -234,6 +234,16 @@ def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> Invoic
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
 
     items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.id.asc()).all()
+    product_name_by_order_item_id = {
+        oi.id: name
+        for oi, name in (
+            db.query(OrderItem, Product.name)
+            .join(Product, Product.id == OrderItem.product_id)
+            .filter(OrderItem.id.in_([i.order_item_id for i in items]))
+            .all()
+        )
+    }
+
     return InvoiceReportResponse(
         invoice_id=invoice.id,
         invoice_no=invoice.invoice_no,
@@ -250,6 +260,7 @@ def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> Invoic
             InvoiceReportLine(
                 invoice_item_id=i.id,
                 order_item_id=i.order_item_id,
+                product_name=product_name_by_order_item_id.get(i.order_item_id, "-"),
                 billable_qty=float(i.billable_qty),
                 billable_uom=i.billable_uom,
                 sales_unit_price=float(i.sales_unit_price),
@@ -504,25 +515,8 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     # idempotent: skip purchase results already marked as invoiced
     rows_to_create = [triple for triple in rows if triple[0].invoice_qty is None]
     if not rows_to_create:
-        # idempotent hit: no new rows required for selected purchase results
-        latest_draft = (
-            db.query(Invoice)
-            .filter(
-                Invoice.customer_id == order.customer_id,
-                Invoice.delivery_date == order.delivery_date,
-                Invoice.status == InvoiceStatus.draft,
-            )
-            .order_by(Invoice.id.desc())
-            .first()
-        )
-        if latest_draft is None:
-            raise HTTPException(status_code=409, detail={"code": "DRAFT_ALREADY_GENERATED", "message": "all target purchase results already invoiced"})
-        return InvoiceDraftGenerateResult(
-            invoice_id=latest_draft.id,
-            created_count=0,
-            target_purchase_result_ids=target_ids,
-            idempotent_hit=True,
-        )
+        # keep existing contract: duplicated generation request returns 409
+        raise HTTPException(status_code=409, detail={"code": "DRAFT_ALREADY_GENERATED", "message": "all target purchase results already invoiced"})
 
     invoice = Invoice(
         invoice_no=payload.invoice_no,
