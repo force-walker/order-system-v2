@@ -22,6 +22,7 @@ export const AppLayout = () => {
           <NavLink to="/reports/shipping" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>帳票</NavLink>
           <NavLink to="/purchases" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>納品確認</NavLink>
           <NavLink to="/invoices/drafts" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>請求ドラフト</NavLink>
+          <NavLink to="/invoices" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>請求書</NavLink>
           <NavLink to="/products" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>商品</NavLink>
           <NavLink to="/customers" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>顧客</NavLink>
           <NavLink to="/suppliers" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>仕入先</NavLink>
