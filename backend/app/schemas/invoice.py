@@ -78,6 +78,7 @@ class InvoiceDraftListRow(BaseModel):
 
 class InvoiceItemUpdateRequest(BaseModel):
     billable_qty: float = Field(ge=0)
+    billable_uom: str | None = Field(default=None, min_length=1, max_length=32)
     sales_unit_price: float = Field(ge=0)
 
 
@@ -85,11 +86,13 @@ class InvoiceDraftGenerateResult(BaseModel):
     invoice_id: int
     created_count: int
     target_purchase_result_ids: list[int]
+    idempotent_hit: bool
 
 
 class InvoiceReportLine(BaseModel):
     invoice_item_id: int
     order_item_id: int
+    product_name: str
     billable_qty: float
     billable_uom: str
     sales_unit_price: float
@@ -110,6 +113,20 @@ class InvoiceReportResponse(BaseModel):
     tax_total: float
     grand_total: float
     items: list[InvoiceReportLine]
+
+
+class InvoiceSummaryRow(BaseModel):
+    invoice_id: int
+    invoice_no: str
+    customer_name: str
+    invoice_date: date
+    delivery_date: date
+    due_date: date | None
+    status: InvoiceStatus
+    subtotal: float
+    tax_total: float
+    grand_total: float
+    item_count: int
 
 
 class InvoiceFinalizeResponse(BaseModel):
