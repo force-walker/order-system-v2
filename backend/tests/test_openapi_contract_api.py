@@ -74,6 +74,7 @@ def test_openapi_error_contracts_for_core_apis():
     assert "422" in _responses("/api/v1/invoices/generate", "post")
     assert "404" in _responses("/api/v1/invoices/{invoice_id}", "get")
     assert "404" in _responses("/api/v1/invoices/{invoice_id}/items", "get")
+    assert "404" in _responses("/api/v1/invoices/{invoice_id}/neighbors", "get")
     assert "404" in _responses("/api/v1/invoices/{invoice_id}/report", "get")
     assert "409" in _responses("/api/v1/invoices/{invoice_id}/items/{invoice_item_id}", "patch")
     assert "422" in _responses("/api/v1/invoices/{invoice_id}/items/{invoice_item_id}", "patch")
