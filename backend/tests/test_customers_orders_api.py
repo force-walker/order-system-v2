@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 from app.api.routes_orders import HK_TZ, _default_delivery_date_by_hk_time, _stale_cutoff_delivery_date
@@ -476,9 +476,10 @@ def test_list_orders_stale_filter():
     client = _client()
 
     today = date.today()
-    old_id = _seed_order_with_status_and_delivery(OrderStatus.confirmed, today.replace(day=max(1, today.day - 1)))
+    yesterday = today - timedelta(days=1)
+    old_id = _seed_order_with_status_and_delivery(OrderStatus.confirmed, yesterday)
     today_id = _seed_order_with_status_and_delivery(OrderStatus.confirmed, today)
-    shipped_old_id = _seed_order_with_status_and_delivery(OrderStatus.shipped, today.replace(day=max(1, today.day - 1)))
+    shipped_old_id = _seed_order_with_status_and_delivery(OrderStatus.shipped, yesterday)
 
     stale = client.get("/api/v1/orders?stale_delivery_only=true")
     assert stale.status_code == 200

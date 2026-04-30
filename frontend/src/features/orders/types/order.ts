@@ -208,6 +208,7 @@ export type InvoiceDraftItem = {
   billableUom: string;
   invoiceLineStatus: 'uninvoiced' | 'partially_invoiced' | 'invoiced' | 'cancelled';
   salesUnitPrice: number;
+  autoPriceError?: string;
   lineAmount: number;
   taxAmount: number;
 };
@@ -235,6 +236,7 @@ export type InvoiceDraftListRow = {
   billableUom: string;
   salesUnitPrice: number;
   unitCostBasis?: number;
+  autoPriceError?: string;
   lineAmount: number;
   grossMarginPct?: number;
   deliveryDate?: string;

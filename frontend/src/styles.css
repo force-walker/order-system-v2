@@ -600,6 +600,12 @@ button:disabled { opacity: 0.6; }
   vertical-align: bottom;
 }
 
+.nav-link-disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
 .loading { border-left: 4px solid #2563eb; }
 .empty { border-left: 4px solid #6b7280; }
 .error { border-left: 4px solid #dc2626; }

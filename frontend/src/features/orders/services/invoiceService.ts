@@ -28,6 +28,7 @@ type ApiInvoiceItem = {
   billable_uom: string;
   invoice_line_status: 'uninvoiced' | 'partially_invoiced' | 'invoiced' | 'cancelled';
   sales_unit_price: number;
+  auto_price_error?: string | null;
   line_amount: number;
   tax_amount: number;
 };
@@ -42,6 +43,7 @@ type ApiInvoiceDraftListRow = {
   billable_uom: string;
   sales_unit_price: number;
   unit_cost_basis: number | null;
+  auto_price_error?: string | null;
   line_amount: number;
   gross_margin_pct: number | null;
 };
@@ -172,6 +174,7 @@ export const getInvoiceDraftItems = async (invoiceId: number): Promise<InvoiceDr
     billableUom: r.billable_uom,
     invoiceLineStatus: r.invoice_line_status,
     salesUnitPrice: r.sales_unit_price,
+    autoPriceError: r.auto_price_error ?? undefined,
     lineAmount: r.line_amount,
     taxAmount: r.tax_amount,
   }));
@@ -188,6 +191,7 @@ export const finalizeInvoiceItemLine = async (invoiceId: number, invoiceItemId: 
     billableUom: r.billable_uom,
     invoiceLineStatus: r.invoice_line_status,
     salesUnitPrice: r.sales_unit_price,
+    autoPriceError: r.auto_price_error ?? undefined,
     lineAmount: r.line_amount,
     taxAmount: r.tax_amount,
   };
@@ -218,6 +222,7 @@ export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]>
       billableUom: r.billable_uom,
       salesUnitPrice: r.sales_unit_price,
       unitCostBasis: r.unit_cost_basis ?? undefined,
+      autoPriceError: r.auto_price_error ?? undefined,
       lineAmount: r.line_amount,
       grossMarginPct: r.gross_margin_pct ?? undefined,
       deliveryDate: s?.deliveryDate,

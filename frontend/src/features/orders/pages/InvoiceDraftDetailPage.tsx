@@ -101,7 +101,11 @@ export const InvoiceDraftDetailPage = () => {
                       <td><Link to={`/orders/item-allocations`}>{r.orderItemId}</Link></td>
                       <td>{r.billableQty}</td>
                       <td>{r.billableUom}</td>
-                      <td>{r.salesUnitPrice}</td>
+                      <td>
+                        {r.salesUnitPrice}
+                        <div className="subtle" style={{ fontSize: 12 }}>自動計算値（仕入単価ベース）</div>
+                        {r.autoPriceError ? <div className="field-error">{r.autoPriceError}</div> : null}
+                      </td>
                       <td>{r.lineAmount}</td>
                       <td>{r.taxAmount}</td>
                       <td>{r.invoiceLineStatus}</td>

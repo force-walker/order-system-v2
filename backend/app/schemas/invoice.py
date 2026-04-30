@@ -54,6 +54,7 @@ class InvoiceItemResponse(BaseModel):
     invoice_line_status: str
     sales_unit_price: float
     unit_cost_basis: float | None
+    auto_price_error: str | None = None
     line_amount: float
     tax_amount: float
     created_at: datetime
@@ -72,6 +73,7 @@ class InvoiceDraftListRow(BaseModel):
     billable_uom: str
     sales_unit_price: float
     unit_cost_basis: float | None = None
+    auto_price_error: str | None = None
     line_amount: float
     gross_margin_pct: float | None = None
 

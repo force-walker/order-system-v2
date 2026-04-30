@@ -121,7 +121,7 @@ def _seed_order(with_items: bool = False, include_kg_without_weight: bool = Fals
     return oid
 
 
-def _seed_purchase_result_for_order(order_id: int, purchased_qty: float = 2) -> int:
+def _seed_purchase_result_for_order(order_id: int, purchased_qty: float = 2, unit_cost: float | None = None, final_unit_cost: float | None = None) -> int:
     db = TestingSessionLocal()
     item = db.query(OrderItem).filter(OrderItem.order_id == order_id).first()
     assert item is not None
@@ -142,6 +142,8 @@ def _seed_purchase_result_for_order(order_id: int, purchased_qty: float = 2) -> 
         supplier_id=101,
         purchased_qty=float(purchased_qty),
         purchased_uom="count",
+        unit_cost=unit_cost,
+        final_unit_cost=final_unit_cost,
         result_status=PurchaseResultStatus.filled,
         invoiceable_flag=True,
     )
@@ -305,7 +307,7 @@ def test_list_invoice_items_and_invoice_filters():
 
 def test_generate_draft_from_purchase_results_and_finalize_separation():
     order_id = _seed_order(with_items=True)
-    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
     client = _client()
 
     draft = client.post(
@@ -325,10 +327,35 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
     items = client.get(f"/api/v1/invoices/{invoice_id}/items")
     assert items.status_code == 200
     assert len(items.json()) >= 1
+    # (1000/20 + 50) / 0.75 = 133.333... => 133.33
+    assert float(items.json()[0]["sales_unit_price"]) == 133.33
 
     fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert fin.status_code == 200
     assert fin.json()["status"] == "finalized"
+
+
+def test_draft_generation_price_auto_calc_missing_cost_sets_zero_and_error():
+    order_id = _seed_order(with_items=True)
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-AUTO-MISS-001",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert draft.status_code == 201
+    invoice_id = draft.json()["invoice_id"]
+
+    items = client.get(f"/api/v1/invoices/{invoice_id}/items")
+    assert items.status_code == 200
+    assert float(items.json()[0]["sales_unit_price"]) == 0.0
+    assert items.json()[0]["auto_price_error"] is not None
 
 
 def test_invoice_draft_list_rows_include_required_columns():

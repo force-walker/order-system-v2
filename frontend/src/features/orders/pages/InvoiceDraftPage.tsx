@@ -174,6 +174,10 @@ export const InvoiceDraftPage = () => {
                           style={{ width: 110, textAlign: 'right', borderColor: hasError ? '#dc2626' : undefined }}
                         />
                         {hasError ? <div className="field-error">{unitPriceErrorByItemId[row.invoiceItemId]}</div> : null}
+                        <div className="subtle" style={{ fontSize: 12 }}>
+                          自動計算値（仕入単価ベース）: {(row.unitCostBasis != null) ? `${Math.round((((row.unitCostBasis / 20 + 50) / 0.75) * 100)) / 100}` : '計算不可'}
+                        </div>
+                        {row.autoPriceError ? <div className="field-error">{row.autoPriceError}</div> : null}
                       </td>
                       <td style={{ textAlign: 'right' }}>{currency.format(calculatedAmount)}</td>
                       <td style={{ textAlign: 'right' }}>{formatGrossMargin(calculatedMargin)}</td>
