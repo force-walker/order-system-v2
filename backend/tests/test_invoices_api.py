@@ -499,24 +499,45 @@ def test_invoice_neighbors_follow_invoice_list_order():
     assert listed.status_code == 200
     listed_ids = [row["id"] for row in listed.json()]
 
-    assert listed_ids[0] == created_ids[2]
-    assert listed_ids[1] == created_ids[1]
-    assert listed_ids[2] == created_ids[0]
+    # 一覧全体に既存データが混在しても、今回作成した3件の相対順は維持される
+    created_positions = [listed_ids.index(invoice_id) for invoice_id in created_ids]
+    assert created_positions[2] < created_positions[1] < created_positions[0]
 
-    head = client.get(f"/api/v1/invoices/{listed_ids[0]}/neighbors")
+    newest_created_id = created_ids[2]
+    middle_created_id = created_ids[1]
+    oldest_created_id = created_ids[0]
+
+    head = client.get(f"/api/v1/invoices/{newest_created_id}/neighbors")
     assert head.status_code == 200
-    assert head.json()["prev_invoice_id"] is None
-    assert head.json()["next_invoice_id"] == listed_ids[1]
+    # 新規3件のうち先頭なので、nextは中間を指す
+    assert head.json()["next_invoice_id"] == middle_created_id
 
-    middle = client.get(f"/api/v1/invoices/{listed_ids[1]}/neighbors")
+    middle = client.get(f"/api/v1/invoices/{middle_created_id}/neighbors")
     assert middle.status_code == 200
-    assert middle.json()["prev_invoice_id"] == listed_ids[0]
-    assert middle.json()["next_invoice_id"] == listed_ids[2]
+    assert middle.json()["prev_invoice_id"] == newest_created_id
+    assert middle.json()["next_invoice_id"] == oldest_created_id
 
-    tail = client.get(f"/api/v1/invoices/{listed_ids[2]}/neighbors")
+    tail = client.get(f"/api/v1/invoices/{oldest_created_id}/neighbors")
     assert tail.status_code == 200
-    assert tail.json()["prev_invoice_id"] == listed_ids[1]
-    assert tail.json()["next_invoice_id"] is None
+    assert tail.json()["prev_invoice_id"] == middle_created_id
+
+
+def test_invoice_neighbors_top_and_bottom_boundaries():
+    client = _client()
+    listed = client.get("/api/v1/invoices")
+    assert listed.status_code == 200
+    rows = listed.json()
+    assert len(rows) >= 1
+
+    top_id = rows[0]["id"]
+    top_neighbors = client.get(f"/api/v1/invoices/{top_id}/neighbors")
+    assert top_neighbors.status_code == 200
+    assert top_neighbors.json()["prev_invoice_id"] is None
+
+    bottom_id = rows[-1]["id"]
+    bottom_neighbors = client.get(f"/api/v1/invoices/{bottom_id}/neighbors")
+    assert bottom_neighbors.status_code == 200
+    assert bottom_neighbors.json()["next_invoice_id"] is None
 
 
 def test_finalize_locks_invoice_row_state():
