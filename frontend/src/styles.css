@@ -277,6 +277,18 @@ input, select, textarea, button {
   border: 1px solid #d1d5db;
 }
 
+/* Disable browser number steppers: direct numeric input only */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 button {
   width: fit-content;
   background: #2563eb;

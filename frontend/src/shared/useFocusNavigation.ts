@@ -50,6 +50,10 @@ export const useFocusNavigation = ({ containerRef }: Options = {}) => {
       : 0;
     if (!direction) return;
 
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.target instanceof HTMLInputElement && e.target.type === 'number') {
+      e.preventDefault();
+    }
+
     if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && shouldKeepHorizontalCaret(e)) return;
 
     const active = e.target as HTMLElement;
