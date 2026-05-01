@@ -96,6 +96,7 @@ export const InvoiceDraftPage = () => {
                   <th style={{ textAlign: 'right' }}>請求数量</th>
                   <th>請求単位</th>
                   <th style={{ textAlign: 'right' }}>請求単価</th>
+                  <th style={{ textAlign: 'right' }}>仕入単価</th>
                   <th style={{ textAlign: 'right' }}>請求金額</th>
                   <th style={{ textAlign: 'right' }}>粗利％</th>
                   <th>詳細</th>
@@ -104,7 +105,7 @@ export const InvoiceDraftPage = () => {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="subtle">条件に合う請求ドラフトがありません。</td>
+                    <td colSpan={9} className="subtle">条件に合う請求ドラフトがありません。</td>
                   </tr>
                 ) : filtered.map((row) => {
                   const editedPriceRaw = editedUnitPriceByItemId[row.invoiceItemId];
@@ -179,6 +180,7 @@ export const InvoiceDraftPage = () => {
                         </div>
                         {row.autoPriceError ? <div className="field-error">{row.autoPriceError}</div> : null}
                       </td>
+                      <td style={{ textAlign: 'right' }}>{row.unitCostBasis != null ? currency.format(row.unitCostBasis) : '-'}</td>
                       <td style={{ textAlign: 'right' }}>{currency.format(calculatedAmount)}</td>
                       <td style={{ textAlign: 'right' }}>{formatGrossMargin(calculatedMargin)}</td>
                       <td><Link to={`/invoices/drafts/${row.invoiceId}`}>詳細</Link></td>
