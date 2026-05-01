@@ -4,6 +4,7 @@ import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { bulkCancelOrders, listOrders } from 'features/orders/services/ordersService';
 import type { OrderStatus, OrderSummary } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
+import { useFocusNavigation } from 'shared/useFocusNavigation';
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   new: '新規',
@@ -33,6 +34,7 @@ export const OrderListPage = () => {
   const [selectedByOrderId, setSelectedByOrderId] = useState<RowSelect>({});
   const [lastSelectedOrderId, setLastSelectedOrderId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
   const load = async () => {
     try {
@@ -164,7 +166,7 @@ export const OrderListPage = () => {
   return (
     <section>
       {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
-      <div className="card">
+      <div ref={focusNavRef as any} onKeyDownCapture={onFocusNavKeyDownCapture} className="card">
       <div className="list-header">
         <div>
           <h2>注文一覧</h2>

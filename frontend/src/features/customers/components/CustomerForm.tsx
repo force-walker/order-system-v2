@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { CustomerCreateRequest, CustomerDetail } from 'features/customers/types/customer';
 import { toActionableMessage } from 'shared/error';
+import { useFocusNavigation } from 'shared/useFocusNavigation';
 
 type Props = {
   initialValue?: CustomerDetail;
@@ -22,6 +23,7 @@ export const CustomerForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
   const [form, setForm] = useState<FormState>(toInitialState(initialValue));
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
   useEffect(() => {
     setForm(toInitialState(initialValue));
@@ -48,7 +50,7 @@ export const CustomerForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
   };
 
   return (
-    <form onSubmit={submit} className="card form-grid two-col">
+    <form ref={focusNavRef as any} onKeyDownCapture={onFocusNavKeyDownCapture} onSubmit={submit} className="card form-grid two-col">
       <h2>{submitLabel}</h2>
       {error ? <p className="form-error">{error}</p> : null}
 

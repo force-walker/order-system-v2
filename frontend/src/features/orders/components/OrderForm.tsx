@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
+import { useFocusNavigation } from 'shared/useFocusNavigation';
 
 type Props = {
   onSubmit: (payload: CreateOrderRequest) => Promise<void>;
@@ -178,6 +179,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
   const [submitError, setSubmitError] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [openDetailByRowKey, setOpenDetailByRowKey] = useState<Record<string, boolean>>({});
+  const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
   useEffect(() => {
     setForm(toInitialForm(initialValue));
@@ -349,7 +351,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
   };
 
   return (
-    <form onSubmit={submit} className="card order-form">
+    <form ref={focusNavRef as any} onKeyDownCapture={onFocusNavKeyDownCapture} onSubmit={submit} className="card order-form">
       <div className="form-header">
         <h2>注文作成 / 編集（ヘッダー + 明細）</h2>
         <p>ヘッダー情報と明細行を同一画面で管理します。</p>

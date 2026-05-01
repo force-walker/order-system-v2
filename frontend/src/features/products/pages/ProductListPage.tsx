@@ -4,6 +4,7 @@ import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveProduct, deleteProduct, listProducts, unarchiveProduct } from 'features/products/services/productsService';
 import type { ProductOption } from 'features/products/types/product';
 import { toActionableMessage } from 'shared/error';
+import { useFocusNavigation } from 'shared/useFocusNavigation';
 
 type ToastPayload = {
   type: 'success' | 'error';
@@ -20,6 +21,7 @@ export const ProductListPage = () => {
   const [showArchived, setShowArchived] = useState(false);
   const [pricingFilter, setPricingFilter] = useState<'all' | 'uom_count' | 'uom_kg'>('all');
   const [sortMode, setSortMode] = useState<'idAsc' | 'idDesc' | 'createdAsc' | 'createdDesc' | 'updatedAsc' | 'updatedDesc'>('idAsc');
+  const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
   const load = async () => {
     setError('');
@@ -85,7 +87,7 @@ export const ProductListPage = () => {
   return (
     <section>
       {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
-      <div className="card">
+      <div ref={focusNavRef as any} onKeyDownCapture={onFocusNavKeyDownCapture} className="card">
         <div className="list-header">
           <div>
             <h2>商品マスタ</h2>
