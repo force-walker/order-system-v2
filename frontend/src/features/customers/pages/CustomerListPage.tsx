@@ -4,6 +4,7 @@ import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveCustomer, deleteCustomer, listCustomers, unarchiveCustomer } from 'features/customers/services/customersService';
 import type { CustomerOption } from 'features/customers/types/customer';
 import { toActionableMessage } from 'shared/error';
+import { useFocusNavigation } from 'shared/useFocusNavigation';
 
 type ToastPayload = {
   type: 'success' | 'error';
@@ -19,6 +20,7 @@ export const CustomerListPage = () => {
   const [keyword, setKeyword] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [sortMode, setSortMode] = useState<'idAsc' | 'idDesc' | 'createdAsc' | 'createdDesc' | 'updatedAsc' | 'updatedDesc'>('idAsc');
+  const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
   const load = async () => {
     setError('');
@@ -83,7 +85,7 @@ export const CustomerListPage = () => {
   return (
     <section>
       {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
-      <div className="card">
+      <div ref={focusNavRef as any} onKeyDownCapture={onFocusNavKeyDownCapture} className="card">
         <div className="list-header">
           <div>
             <h2>顧客マスタ</h2>

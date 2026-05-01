@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
 import { OrderCreatePage } from 'features/orders/pages/OrderCreatePage';
@@ -26,6 +27,19 @@ import { SupplierEditPage } from 'features/suppliers/pages/SupplierEditPage';
 import { SupplierDetailPage } from 'features/suppliers/pages/SupplierDetailPage';
 
 export const App = () => {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement)) return;
+      if (t.type !== 'number') return;
+      e.preventDefault();
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/orders/new" replace />} />

@@ -4,6 +4,7 @@ import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { archiveSupplier, deleteSupplier, listSuppliers, unarchiveSupplier } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
 import { toActionableMessage } from 'shared/error';
+import { useFocusNavigation } from 'shared/useFocusNavigation';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -22,6 +23,7 @@ export const SupplierListPage = () => {
   const [limit, setLimit] = useState(20);
   const [offset, setOffset] = useState(0);
   const [hasNext, setHasNext] = useState(false);
+  const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
   const load = async () => {
     setLoading(true);
@@ -90,7 +92,7 @@ export const SupplierListPage = () => {
   return (
     <section>
       {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
-      <div className="card">
+      <div ref={focusNavRef as any} onKeyDownCapture={onFocusNavKeyDownCapture} className="card">
         <div className="list-header">
           <div>
             <h2>仕入先一覧</h2>
