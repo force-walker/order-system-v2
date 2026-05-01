@@ -117,10 +117,10 @@ export const InvoiceDraftPage = () => {
                       ? Number(raw)
                       : row.salesUnitPrice;
                   const calculatedAmount = editedPrice * row.billableQty;
-                  const unitCostPerUnit = row.unitCostBasis != null ? row.unitCostBasis / row.billableQty : null;
+                  const purchaseUnitPrice = row.unitCostBasis;
                   const calculatedMargin =
-                    unitCostPerUnit != null && editedPrice > 0
-                      ? ((editedPrice - unitCostPerUnit / 20) / editedPrice) * 100
+                    purchaseUnitPrice != null && editedPrice > 0
+                      ? ((editedPrice - (purchaseUnitPrice / 20 + 50)) / editedPrice) * 100
                       : undefined;
 
                   return (
