@@ -374,16 +374,18 @@ def test_invoice_draft_list_margin_formula_and_edge_cases():
     )
     assert draft.status_code == 201
 
+    invoice_id = draft.json()["invoice_id"]
+
     listed = client.get("/api/v1/invoices/draft-list")
     assert listed.status_code == 200
-    row = listed.json()[0]
+    row = next(r for r in listed.json() if r["invoice_id"] == invoice_id)
 
     # sales=133.33, baseline=(1000/20+50)=100.00 => margin=(133.33-100)/133.33=0.24999... => 25.00%
+    assert row["gross_margin_pct"] is not None
     assert float(row["gross_margin_pct"]) == 25.0
     assert row["gross_margin_unavailable"] is False
 
     # 請求単価=0 は計算不可
-    invoice_id = row["invoice_id"]
     invoice_item_id = row["invoice_item_id"]
     patched = client.patch(
         f"/api/v1/invoices/{invoice_id}/items/{invoice_item_id}",
