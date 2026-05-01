@@ -185,12 +185,19 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
 
     result: list[InvoiceDraftListRow] = []
     for inv, item, customer, product, order in rows:
-        line_amount = float(item.line_amount)
+        # 粗利率 = {請求単価 - (仕入単価/20 + 50)} / 請求単価
+        # 請求単価=0 または 仕入単価未設定は計算不可として null + flag
         gross_margin_pct = None
-        if line_amount > 0 and item.unit_cost_basis is not None:
-            cost_total = float(item.unit_cost_basis) * float(item.billable_qty)
-            gross_margin_pct = round(((line_amount - cost_total) / line_amount) * 100, 2)
+        gross_margin_unavailable = False
+        sales_unit_price = Decimal(str(item.sales_unit_price))
+        unit_cost_basis_dec = Decimal(str(item.unit_cost_basis)) if item.unit_cost_basis is not None else None
+        if sales_unit_price == 0 or unit_cost_basis_dec is None:
+            gross_margin_unavailable = True
+        else:
+            numerator = sales_unit_price - ((unit_cost_basis_dec / Decimal("20")) + Decimal("50"))
+            gross_margin_pct = float(_amount((numerator / sales_unit_price) * Decimal("100")))
 
+        line_amount = float(item.line_amount)
         unit_cost_basis = float(item.unit_cost_basis) if item.unit_cost_basis is not None else None
         result.append(
             InvoiceDraftListRow(
@@ -206,6 +213,7 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
                 auto_price_error=("仕入単価が未設定のため自動計算できません" if unit_cost_basis is None else None),
                 line_amount=line_amount,
                 gross_margin_pct=gross_margin_pct,
+                gross_margin_unavailable=gross_margin_unavailable,
             )
         )
 

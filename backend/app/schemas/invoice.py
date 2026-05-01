@@ -76,6 +76,7 @@ class InvoiceDraftListRow(BaseModel):
     auto_price_error: str | None = None
     line_amount: float
     gross_margin_pct: float | None = None
+    gross_margin_unavailable: bool = False
 
 
 class InvoiceItemUpdateRequest(BaseModel):

@@ -358,6 +358,45 @@ def test_draft_generation_price_auto_calc_missing_cost_sets_zero_and_error():
     assert items.json()[0]["auto_price_error"] is not None
 
 
+def test_invoice_draft_list_margin_formula_and_edge_cases():
+    order_id = _seed_order(with_items=True)
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-MARGIN-001",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert draft.status_code == 201
+
+    listed = client.get("/api/v1/invoices/draft-list")
+    assert listed.status_code == 200
+    row = listed.json()[0]
+
+    # sales=133.33, baseline=(1000/20+50)=100.00 => margin=(133.33-100)/133.33=0.24999... => 25.00%
+    assert float(row["gross_margin_pct"]) == 25.0
+    assert row["gross_margin_unavailable"] is False
+
+    # 請求単価=0 は計算不可
+    invoice_id = row["invoice_id"]
+    invoice_item_id = row["invoice_item_id"]
+    patched = client.patch(
+        f"/api/v1/invoices/{invoice_id}/items/{invoice_item_id}",
+        json={"billable_qty": row["billable_qty"], "sales_unit_price": 0},
+    )
+    assert patched.status_code == 200
+
+    listed2 = client.get("/api/v1/invoices/draft-list")
+    row2 = listed2.json()[0]
+    assert row2["gross_margin_pct"] is None
+    assert row2["gross_margin_unavailable"] is True
+
+
 def test_invoice_draft_list_rows_include_required_columns():
     order_id = _seed_order(with_items=True)
     purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
@@ -389,6 +428,7 @@ def test_invoice_draft_list_rows_include_required_columns():
         "sales_unit_price",
         "line_amount",
         "gross_margin_pct",
+        "gross_margin_unavailable",
     }.issubset(row.keys())
 
 
