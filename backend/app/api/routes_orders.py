@@ -312,6 +312,7 @@ def generate_order_item_labels_pdf(payload: OrderItemLabelPdfRequest, db: Sessio
     for oid in payload.order_item_ids:
         oi, order, customer, product = by_id[oid]
         pages.append([
+            f"地域: {customer.region or '-'}",
             f"取引先: {customer.name}",
             f"商品名: {product.name}",
             f"数量: {float(oi.ordered_qty)}",
