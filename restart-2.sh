@@ -26,8 +26,11 @@ for i in {1..60}; do
   fi
 done
 
-log "3) start api"
-docker-compose up -d api
+log "3) start api (no-reload mode for stability)"
+# Avoid --reload process instability during restart recovery.
+# Run uvicorn directly in the api service container.
+docker-compose run -d --service-ports --name order_system_v2_api_1 \
+  api uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 log "4) wait api health"
 ok=0
