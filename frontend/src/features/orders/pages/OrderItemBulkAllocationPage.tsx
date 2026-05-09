@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   bulkSaveOrderItemAllocations,
+  generateOrderItemLabelsPdf,
   listOrderItemAllocationWorkItems,
   listSupplierFilterOptions,
   suggestOrderItemAllocations,
@@ -47,6 +48,7 @@ export const OrderItemBulkAllocationPage = () => {
   const [sort, setSort] = useState<SortState>({ key: 'deliveryDate', direction: 'asc' });
   const [filterUnassignedSupplierOnly, setFilterUnassignedSupplierOnly] = useState(false);
   const [filterNonZeroDiffOnly, setFilterNonZeroDiffOnly] = useState(false);
+  const [labelGenerating, setLabelGenerating] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -314,6 +316,31 @@ export const OrderItemBulkAllocationPage = () => {
     }
   };
 
+  const selectedOrderItemIds = useMemo(
+    () => sortedItems.filter((row) => editById[row.orderItemId]?.selected).map((row) => row.orderItemId),
+    [sortedItems, editById],
+  );
+
+  const generateLabelPdf = async () => {
+    if (selectedOrderItemIds.length === 0) {
+      setToast({ type: 'error', message: 'ラベルPDF生成対象がありません。明細を選択してください。' });
+      return;
+    }
+
+    setLabelGenerating(true);
+    try {
+      const blob = await generateOrderItemLabelsPdf(selectedOrderItemIds);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setToast({ type: 'success', message: `ラベルPDFを生成しました（${selectedOrderItemIds.length}件 / サイズ: 90mm×130mm）。` });
+    } catch (e) {
+      setToast({ type: 'error', message: toActionableMessage(e, 'ラベルPDF生成に失敗しました。') });
+    } finally {
+      setLabelGenerating(false);
+    }
+  };
+
   const moveToPurchaseResult = () => {
     const selectedAllocationIds = sortedItems
       .filter((row) => editById[row.orderItemId]?.selected)
@@ -359,11 +386,22 @@ export const OrderItemBulkAllocationPage = () => {
           <div>
             <h2>受注アイテム一括割当</h2>
             <p className="subtle">仕入先自動選択 / 数量自動入力 → 手動修正 → 一括保存</p>
+            <p className="subtle">ラベルサイズ: 横9cm × 縦13cm（90mm × 130mm）</p>
+            <p className="subtle">ラベルPDF生成対象: {selectedOrderItemIds.length}件</p>
           </div>
           <div className="list-controls">
             <button type="button" className="secondary" onClick={() => void applySuggestedSuppliers()}>自動で仕入先選択</button>
             <button type="button" className="secondary" onClick={applyOrderedQtyToAllocation}>割当数へ受注数を自動入力</button>
             <button type="button" onClick={() => void saveBulk()}>選択行を一括保存</button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void generateLabelPdf()}
+              disabled={selectedOrderItemIds.length === 0 || labelGenerating}
+              title={selectedOrderItemIds.length === 0 ? '明細を選択してください' : undefined}
+            >
+              {labelGenerating ? 'ラベルPDF生成中...' : 'ラベルPDF生成'}
+            </button>
             <button type="button" className="secondary" onClick={moveToPurchaseResult}>保存済み行を納品確認へ進める</button>
           </div>
         </div>

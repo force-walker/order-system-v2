@@ -180,6 +180,15 @@ export const suggestOrderItemAllocations = async (orderItemIds: number[]): Promi
   }));
 };
 
+export const generateOrderItemLabelsPdf = async (orderItemIds: number[]): Promise<Blob> => {
+  const res = await fetchWithAuth('/api/v1/orders/item-labels/pdf', {
+    method: 'POST',
+    body: { order_item_ids: orderItemIds },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  return await res.blob();
+};
+
 export const bulkSaveOrderItemAllocations = async (items: BulkSaveAllocationItem[]): Promise<BulkSaveAllocationResponse> => {
   const res = await fetchWithAuth('/api/v1/order-item-allocations/bulk-save', {
     method: 'POST',
