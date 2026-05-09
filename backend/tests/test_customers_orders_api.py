@@ -472,6 +472,55 @@ def test_stale_cutoff_boundary_hk_tz():
     assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 23, 59, tzinfo=HK_TZ)) == date(2026, 4, 15)
 
 
+def _seed_order_item_for_label() -> int:
+    db = TestingSessionLocal()
+    customer = Customer(customer_code=f"CUST-LABEL-{uuid4().hex[:6]}", name="Label Customer", active=True)
+    db.add(customer)
+    db.flush()
+
+    product = Product(
+        sku=f"SKU-LABEL-{uuid4().hex[:6]}",
+        name="Label Product",
+        order_uom="count",
+        purchase_uom="count",
+        invoice_uom="count",
+        pricing_basis_default=PricingBasis.uom_count,
+        is_catch_weight=False,
+        weight_capture_required=False,
+        active=True,
+    )
+    db.add(product)
+    db.flush()
+
+    order = Order(
+        order_no=f"ORD-LABEL-{uuid4().hex[:6]}",
+        customer_id=customer.id,
+        order_datetime=datetime.now(UTC),
+        delivery_date=date.today(),
+        shipped_date=date.today(),
+        status=OrderStatus.confirmed,
+        note="label note",
+    )
+    db.add(order)
+    db.flush()
+
+    item = OrderItem(
+        order_id=order.id,
+        product_id=product.id,
+        ordered_qty=3,
+        pricing_basis=PricingBasis.uom_count,
+        order_uom_type=PricingBasis.uom_count,
+        unit_price_uom_count=100,
+        unit_price_uom_kg=None,
+        note="item memo",
+    )
+    db.add(item)
+    db.commit()
+    iid = item.id
+    db.close()
+    return iid
+
+
 def test_list_orders_stale_filter():
     client = _client()
 
@@ -522,6 +571,32 @@ def test_bulk_cancel_orders_success_and_partial_failure():
     detail = client.get(f"/api/v1/orders/{ok_order}")
     assert detail.status_code == 200
     assert detail.json()["status"] == "cancelled"
+
+
+def test_order_item_labels_pdf_single_and_multi_and_size():
+    client = _client()
+    i1 = _seed_order_item_for_label()
+    i2 = _seed_order_item_for_label()
+
+    single = client.post("/api/v1/orders/item-labels/pdf", json={"order_item_ids": [i1]})
+    assert single.status_code == 200
+    assert single.headers["content-type"].startswith("application/pdf")
+    body = single.content
+    assert b"%PDF-1.4" in body
+    assert b"/MediaBox [0 0 255.12 368.50]" in body
+
+    multi = client.post("/api/v1/orders/item-labels/pdf", json={"order_item_ids": [i2, i1]})
+    assert multi.status_code == 200
+    assert multi.content.count(b"/Type /Page") >= 2
+
+
+def test_order_item_labels_pdf_404_and_422():
+    client = _client()
+    nf = client.post("/api/v1/orders/item-labels/pdf", json={"order_item_ids": [999999]})
+    assert nf.status_code == 404
+
+    bad = client.post("/api/v1/orders/item-labels/pdf", json={"order_item_ids": []})
+    assert bad.status_code == 422
 
 
 def test_bulk_cancel_orders_all_failed_returns_409():

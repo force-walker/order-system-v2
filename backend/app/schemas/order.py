@@ -137,3 +137,7 @@ class OrderItemsBulkCreateResponse(BaseModel):
     success: int
     failed: int
     errors: list[dict] = Field(default_factory=list)
+
+
+class OrderItemLabelPdfRequest(BaseModel):
+    order_item_ids: list[int] = Field(min_length=1, max_length=500)
