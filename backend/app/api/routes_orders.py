@@ -2,8 +2,16 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from io import BytesIO
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from reportlab.lib.pagesizes import portrait
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
@@ -51,53 +59,45 @@ LABEL_PAGE_WIDTH_PT = 255.12  # 90mm
 LABEL_PAGE_HEIGHT_PT = 368.50  # 130mm
 
 
-def _escape_pdf_text(s: str) -> str:
-    return s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+def _pick_label_font() -> str:
+    candidates = [
+        ("NotoSansCJKjp", Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")),
+        ("NotoSansCJKjp", Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc")),
+        ("IPAexGothic", Path("/usr/share/fonts/truetype/ipaexg/ipaexg.ttf")),
+        ("IPAexGothic", Path("/usr/share/fonts/ipaexfont-gothic/ipaexg.ttf")),
+    ]
+    for name, path in candidates:
+        if not path.exists():
+            continue
+        try:
+            if name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont(name, str(path), subfontIndex=0))
+            return name
+        except Exception:
+            continue
+
+    # Fallback (CJK capable but not embedded)
+    fallback = "HeiseiKakuGo-W5"
+    if fallback not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(UnicodeCIDFont(fallback))
+    return fallback
 
 
 def _build_label_pdf(pages: list[list[str]]) -> bytes:
-    objects: list[bytes] = []
-    kids_refs: list[int] = []
-
-    # placeholder for /Pages object at index 2
-    objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
-    objects.append(b"")
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=portrait((LABEL_PAGE_WIDTH_PT, LABEL_PAGE_HEIGHT_PT)), pageCompression=1)
+    font_name = _pick_label_font()
 
     for lines in pages:
-        content_lines = [b"BT", b"/F1 12 Tf"]
-        y = 340
+        y = LABEL_PAGE_HEIGHT_PT - 28
+        c.setFont(font_name, 11)
         for line in lines:
-            content_lines.append(f"1 0 0 1 20 {y} Tm ({_escape_pdf_text(line)}) Tj".encode())
-            y -= 18
-        content_lines.append(b"ET")
-        stream = b"\n".join(content_lines)
-        content_obj = f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
-        objects.append(content_obj)
-        content_ref = len(objects)
+            c.drawString(18, y, line)
+            y -= 16
+        c.showPage()
 
-        page_obj = (
-            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {LABEL_PAGE_WIDTH_PT:.2f} {LABEL_PAGE_HEIGHT_PT:.2f}] "
-            f"/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents {content_ref} 0 R >>"
-        ).encode()
-        objects.append(page_obj)
-        kids_refs.append(len(objects))
-
-    kids = " ".join(f"{k} 0 R" for k in kids_refs)
-    objects[1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(kids_refs)} >>".encode()
-
-    pdf = b"%PDF-1.4\n"
-    offsets = [0]
-    for idx, obj in enumerate(objects, start=1):
-        offsets.append(len(pdf))
-        pdf += f"{idx} 0 obj\n".encode() + obj + b"\nendobj\n"
-
-    xref_start = len(pdf)
-    pdf += f"xref\n0 {len(objects)+1}\n".encode()
-    pdf += b"0000000000 65535 f \n"
-    for i in range(1, len(objects) + 1):
-        pdf += f"{offsets[i]:010d} 00000 n \n".encode()
-    pdf += f"trailer\n<< /Size {len(objects)+1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF\n".encode()
-    return pdf
+    c.save()
+    return buf.getvalue()
 
 
 def _stale_cutoff_delivery_date(now_hk: datetime) -> datetime.date:

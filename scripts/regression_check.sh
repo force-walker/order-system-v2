@@ -38,6 +38,13 @@ for i in {1..30}; do
   fi
   sleep 2
 done
+# APIイメージ再ビルド（依存更新の取りこぼし防止）
+# SKIP_API_BUILD=1 でスキップ可
+if [[ "${SKIP_API_BUILD:-0}" != "1" ]]; then
+  echo "[info] API image rebuild: docker-compose build --no-cache api"
+  docker-compose build --no-cache api
+fi
+
 # APIコンテナ内で migration 実行
 docker-compose run --rm api alembic upgrade head
 docker-compose run --rm api alembic current
