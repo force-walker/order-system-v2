@@ -66,9 +66,10 @@ def test_list_customers():
 def test_create_customer_auto_code_and_manual_code_rejected():
     client = _client()
 
-    created = client.post("/api/v1/customers", json={"name": "New Customer", "active": True})
+    created = client.post("/api/v1/customers", json={"region": "HK", "name": "New Customer", "active": True})
     assert created.status_code == 201
     assert created.json()["customer_code"].startswith("CUST-")
+    assert created.json()["region"] == "HK"
 
     manual = client.post("/api/v1/customers", json={"customer_code": "CUST-MANUAL", "name": "Manual", "active": True})
     assert manual.status_code == 422
@@ -474,7 +475,7 @@ def test_stale_cutoff_boundary_hk_tz():
 
 def _seed_order_item_for_label() -> int:
     db = TestingSessionLocal()
-    customer = Customer(customer_code=f"CUST-LABEL-{uuid4().hex[:6]}", name="Label Customer", active=True)
+    customer = Customer(customer_code=f"CUST-LABEL-{uuid4().hex[:6]}", region="HK", name="Label Customer", active=True)
     db.add(customer)
     db.flush()
 
@@ -584,6 +585,7 @@ def test_order_item_labels_pdf_single_and_multi_and_size():
     body = single.content
     assert b"%PDF-1.4" in body
     assert b"/MediaBox [0 0 255.12 368.50]" in body
+    assert "地域: HK".encode() in body
 
     multi = client.post("/api/v1/orders/item-labels/pdf", json={"order_item_ids": [i2, i1]})
     assert multi.status_code == 200

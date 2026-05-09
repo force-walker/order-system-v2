@@ -43,6 +43,7 @@ class Customer(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     customer_code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    region: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(255), index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
