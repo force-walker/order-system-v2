@@ -83,17 +83,94 @@ def _pick_label_font() -> str:
     return fallback
 
 
-def _build_label_pdf(pages: list[list[str]]) -> bytes:
+def _truncate_with_ellipsis(c: canvas.Canvas, text: str, font: str, size: float, max_w: float) -> str:
+    if c.stringWidth(text, font, size) <= max_w:
+        return text
+    s = text
+    while s and c.stringWidth(s + "...", font, size) > max_w:
+        s = s[:-1]
+    return (s + "...") if s else "..."
+
+
+def _wrap_text(c: canvas.Canvas, text: str, font: str, size: float, max_w: float, max_lines: int) -> list[str]:
+    lines: list[str] = []
+    rest = text
+    for _ in range(max_lines):
+        if not rest:
+            break
+        cur = rest
+        while cur and c.stringWidth(cur, font, size) > max_w:
+            cur = cur[:-1]
+        if not cur:
+            break
+        lines.append(cur)
+        rest = rest[len(cur):]
+    if rest and lines:
+        lines[-1] = _truncate_with_ellipsis(c, lines[-1] + rest, font, size, max_w)
+    return lines or [""]
+
+
+def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
+    mm = 72 / 25.4
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=portrait((LABEL_PAGE_WIDTH_PT, LABEL_PAGE_HEIGHT_PT)), pageCompression=1)
-    font_name = _pick_label_font()
+    font = _pick_label_font()
 
-    for lines in pages:
-        y = LABEL_PAGE_HEIGHT_PT - 28
-        c.setFont(font_name, 11)
-        for line in lines:
-            c.drawString(18, y, line)
-            y -= 16
+    for p in pages:
+        # blocks
+        c.setLineWidth(0.85)
+        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - (4 + 36) * mm, 82 * mm, 36 * mm)
+        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - (42 + 34) * mm, 82 * mm, 34 * mm)
+        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - (78 + 48) * mm, 82 * mm, 48 * mm)
+        c.line(4 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm, 86 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm)
+
+        # header
+        c.setFont(font, 7)
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 7 * mm, "取引先")
+        c.setFont(font, 10)
+        c.drawString(20 * mm, LABEL_PAGE_HEIGHT_PT - 7 * mm, _truncate_with_ellipsis(c, p["customer"], font, 10, 64 * mm))
+
+        c.setFont(font, 7)
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 17 * mm, "商品名")
+        name_size = 12
+        lines = _wrap_text(c, p["product"], font, name_size, 64 * mm, 2)
+        if len(lines) == 2 and c.stringWidth(lines[1], font, 12) > 64 * mm:
+            name_size = 9
+            lines = _wrap_text(c, p["product"], font, name_size, 64 * mm, 2)
+        c.setFont(font, name_size)
+        c.drawString(20 * mm, LABEL_PAGE_HEIGHT_PT - 17 * mm, lines[0])
+        if len(lines) > 1:
+            c.drawString(20 * mm, LABEL_PAGE_HEIGHT_PT - 23 * mm, lines[1])
+
+        # quantity area
+        c.setFont(font, 7)
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 46 * mm, "数量")
+        c.drawString(50 * mm, LABEL_PAGE_HEIGHT_PT - 46 * mm, "単位")
+        c.setFont(font, 18)
+        qty = p["qty"]
+        c.drawRightString(46 * mm, LABEL_PAGE_HEIGHT_PT - 45 * mm, qty)
+        c.setFont(font, 12)
+        c.drawString(62 * mm, LABEL_PAGE_HEIGHT_PT - 45 * mm, _truncate_with_ellipsis(c, p["uom"], font, 12, 22 * mm))
+
+        c.setFont(font, 7)
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 62 * mm, "日付")
+        c.setFont(font, 10)
+        c.drawString(18 * mm, LABEL_PAGE_HEIGHT_PT - 61 * mm, p["date"])
+
+        # footer
+        c.setFont(font, 9)
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 82 * mm, "注文番号")
+        c.drawString(24 * mm, LABEL_PAGE_HEIGHT_PT - 82 * mm, _truncate_with_ellipsis(c, p["order_no"], font, 9, 60 * mm))
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 91 * mm, "明細ID")
+        c.drawString(24 * mm, LABEL_PAGE_HEIGHT_PT - 91 * mm, p["item_id"])
+
+        c.setFont(font, 8)
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 100 * mm, "備考")
+        note_lines = _wrap_text(c, p["note"], font, 8, 78 * mm, 2)
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 106 * mm, note_lines[0])
+        if len(note_lines) > 1:
+            c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 112 * mm, note_lines[1])
+
         c.showPage()
 
     c.save()
@@ -308,21 +385,22 @@ def generate_order_item_labels_pdf(payload: OrderItemLabelPdfRequest, db: Sessio
     if missing:
         raise HTTPException(status_code=404, detail={"code": "ORDER_ITEM_NOT_FOUND", "message": f"order item not found: {missing[0]}"})
 
-    pages: list[list[str]] = []
+    pages: list[dict[str, str]] = []
     for oid in payload.order_item_ids:
         oi, order, customer, product = by_id[oid]
-        pages.append([
-            f"地域: {customer.region or '-'}",
-            f"取引先: {customer.name}",
-            f"商品名: {product.name}",
-            f"数量: {float(oi.ordered_qty)}",
-            f"単位: {product.order_uom}",
-            f"納品日: {order.delivery_date}",
-            f"出荷日: {order.shipped_date or '-'}",
-            f"注文番号: {order.order_no}",
-            f"明細ID: {oi.id}",
-            f"備考: {(oi.note or '')[:60]}",
-        ])
+        qty = f"{float(oi.ordered_qty):.3f}".rstrip("0").rstrip(".")
+        pages.append(
+            {
+                "customer": customer.name or "-",
+                "product": product.name or "-",
+                "qty": qty,
+                "uom": product.order_uom or "-",
+                "date": str(order.shipped_date or order.delivery_date),
+                "order_no": order.order_no or "-",
+                "item_id": str(oi.id),
+                "note": (oi.note or "-")[:200],
+            }
+        )
 
     pdf_bytes = _build_label_pdf(pages)
     return Response(content=pdf_bytes, media_type="application/pdf")
