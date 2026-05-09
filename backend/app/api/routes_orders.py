@@ -3,6 +3,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
@@ -20,6 +21,7 @@ from app.schemas.order import (
     OrderItemResponse,
     OrderItemsBulkCreateRequest,
     OrderItemsBulkCreateResponse,
+    OrderItemLabelPdfRequest,
     OrderItemUpdateRequest,
     OrderResponse,
 )
@@ -43,6 +45,59 @@ def _default_delivery_date_by_hk_time(now_hk: datetime) -> datetime.date:
 ORDER_COMMON_ERROR_RESPONSES = {
     422: {"model": ApiErrorResponse, "description": "Validation Error"},
 }
+
+
+LABEL_PAGE_WIDTH_PT = 255.12  # 90mm
+LABEL_PAGE_HEIGHT_PT = 368.50  # 130mm
+
+
+def _escape_pdf_text(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _build_label_pdf(pages: list[list[str]]) -> bytes:
+    objects: list[bytes] = []
+    kids_refs: list[int] = []
+
+    # placeholder for /Pages object at index 2
+    objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
+    objects.append(b"")
+
+    for lines in pages:
+        content_lines = [b"BT", b"/F1 12 Tf"]
+        y = 340
+        for line in lines:
+            content_lines.append(f"1 0 0 1 20 {y} Tm ({_escape_pdf_text(line)}) Tj".encode())
+            y -= 18
+        content_lines.append(b"ET")
+        stream = b"\n".join(content_lines)
+        content_obj = f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
+        objects.append(content_obj)
+        content_ref = len(objects)
+
+        page_obj = (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {LABEL_PAGE_WIDTH_PT:.2f} {LABEL_PAGE_HEIGHT_PT:.2f}] "
+            f"/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents {content_ref} 0 R >>"
+        ).encode()
+        objects.append(page_obj)
+        kids_refs.append(len(objects))
+
+    kids = " ".join(f"{k} 0 R" for k in kids_refs)
+    objects[1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(kids_refs)} >>".encode()
+
+    pdf = b"%PDF-1.4\n"
+    offsets = [0]
+    for idx, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf += f"{idx} 0 obj\n".encode() + obj + b"\nendobj\n"
+
+    xref_start = len(pdf)
+    pdf += f"xref\n0 {len(objects)+1}\n".encode()
+    pdf += b"0000000000 65535 f \n"
+    for i in range(1, len(objects) + 1):
+        pdf += f"{offsets[i]:010d} 00000 n \n".encode()
+    pdf += f"trailer\n<< /Size {len(objects)+1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF\n".encode()
+    return pdf
 
 
 def _stale_cutoff_delivery_date(now_hk: datetime) -> datetime.date:
@@ -235,6 +290,41 @@ def bulk_cancel_orders(payload: OrderBulkCancelRequest, db: Session = Depends(ge
         )
 
     return OrderBulkCancelResponse(total=len(payload.order_ids), succeeded=succeeded, failed=failed, errors=errors)
+
+
+@router.post(
+    "/item-labels/pdf",
+    responses={
+        **ORDER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        200: {"content": {"application/pdf": {}}},
+    },
+)
+def generate_order_item_labels_pdf(payload: OrderItemLabelPdfRequest, db: Session = Depends(get_db)) -> Response:
+    order_items = db.query(OrderItem, Order, Customer, Product).join(Order, Order.id == OrderItem.order_id).join(Customer, Customer.id == Order.customer_id).join(Product, Product.id == OrderItem.product_id).filter(OrderItem.id.in_(payload.order_item_ids)).all()
+    by_id = {oi.id: (oi, o, c, p) for oi, o, c, p in order_items}
+
+    missing = [oid for oid in payload.order_item_ids if oid not in by_id]
+    if missing:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_ITEM_NOT_FOUND", "message": f"order item not found: {missing[0]}"})
+
+    pages: list[list[str]] = []
+    for oid in payload.order_item_ids:
+        oi, order, customer, product = by_id[oid]
+        pages.append([
+            f"取引先: {customer.name}",
+            f"商品名: {product.name}",
+            f"数量: {float(oi.ordered_qty)}",
+            f"単位: {product.order_uom}",
+            f"納品日: {order.delivery_date}",
+            f"出荷日: {order.shipped_date or '-'}",
+            f"注文番号: {order.order_no}",
+            f"明細ID: {oi.id}",
+            f"備考: {(oi.note or '')[:60]}",
+        ])
+
+    pdf_bytes = _build_label_pdf(pages)
+    return Response(content=pdf_bytes, media_type="application/pdf")
 
 
 @router.post(
