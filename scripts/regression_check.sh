@@ -38,11 +38,19 @@ for i in {1..30}; do
   fi
   sleep 2
 done
-# APIイメージ再ビルド（依存更新の取りこぼし防止）
-# SKIP_API_BUILD=1 でスキップ可
+# APIイメージ再ビルド
+# 既定: キャッシュ利用（高速）
+# 明示指定: API_BUILD_MODE=no-cache でフル再ビルド
+# スキップ: SKIP_API_BUILD=1
 if [[ "${SKIP_API_BUILD:-0}" != "1" ]]; then
-  echo "[info] API image rebuild: docker-compose build --no-cache api"
-  docker-compose build --no-cache api
+  BUILD_MODE="${API_BUILD_MODE:-cache}"
+  if [[ "$BUILD_MODE" == "no-cache" ]]; then
+    echo "[info] API image rebuild mode: no-cache"
+    docker-compose build --no-cache api
+  else
+    echo "[info] API image rebuild mode: cache (default)"
+    docker-compose build api
+  fi
 fi
 
 # APIコンテナ内で migration 実行
