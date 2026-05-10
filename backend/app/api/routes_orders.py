@@ -131,7 +131,7 @@ def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
         c.drawString(20 * mm, LABEL_PAGE_HEIGHT_PT - 7 * mm, _truncate_with_ellipsis(c, p["customer"], font, 10, 64 * mm))
 
         c.setFont(font, 7)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 17 * mm, "商品名")
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 17 * mm, "商品")
         name_size = 12
         lines = _wrap_text(c, p["product"], font, name_size, 64 * mm, 2)
         if len(lines) == 2 and c.stringWidth(lines[1], font, 12) > 64 * mm:
