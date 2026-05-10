@@ -92,7 +92,7 @@ def _truncate_with_ellipsis(c: canvas.Canvas, text: str, font: str, size: float,
     return (s + "...") if s else "..."
 
 
-def _wrap_text(c: canvas.Canvas, text: str, font: str, size: float, max_w: float, max_lines: int) -> list[str]:
+def _wrap_text(c: canvas.Canvas, text: str, font: str, size: float, max_w: float, max_lines: int) -> tuple[list[str], bool]:
     lines: list[str] = []
     rest = text
     for _ in range(max_lines):
@@ -105,9 +105,10 @@ def _wrap_text(c: canvas.Canvas, text: str, font: str, size: float, max_w: float
             break
         lines.append(cur)
         rest = rest[len(cur):]
+    overflow = bool(rest)
     if rest and lines:
         lines[-1] = _truncate_with_ellipsis(c, lines[-1] + rest, font, size, max_w)
-    return lines or [""]
+    return (lines or [""], overflow)
 
 
 def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
@@ -124,52 +125,40 @@ def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
         c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - (78 + 48) * mm, 82 * mm, 48 * mm)
         c.line(4 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm, 86 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm)
 
-        # header
-        c.setFont(font, 7)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 7 * mm, "取引先")
+        # header (label text removed, pptx-like)
         c.setFont(font, 10)
-        c.drawString(20 * mm, LABEL_PAGE_HEIGHT_PT - 7 * mm, _truncate_with_ellipsis(c, p["customer"], font, 10, 64 * mm))
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 10 * mm, _truncate_with_ellipsis(c, p["customer"], font, 10, 78 * mm))
 
-        c.setFont(font, 7)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 17 * mm, "商品")
         name_size = 12
-        lines = _wrap_text(c, p["product"], font, name_size, 64 * mm, 2)
-        if len(lines) == 2 and c.stringWidth(lines[1], font, 12) > 64 * mm:
-            name_size = 9
-            lines = _wrap_text(c, p["product"], font, name_size, 64 * mm, 2)
+        lines, overflow = _wrap_text(c, p["product"], font, name_size, 78 * mm, 2)
+        if overflow:
+            name_size = 10
+            lines, _ = _wrap_text(c, p["product"], font, name_size, 78 * mm, 2)
         c.setFont(font, name_size)
-        c.drawString(20 * mm, LABEL_PAGE_HEIGHT_PT - 17 * mm, lines[0])
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 21 * mm, lines[0])
         if len(lines) > 1:
-            c.drawString(20 * mm, LABEL_PAGE_HEIGHT_PT - 23 * mm, lines[1])
+            c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 27 * mm, lines[1])
 
         # quantity area
-        c.setFont(font, 7)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 46 * mm, "数量")
-        c.drawString(50 * mm, LABEL_PAGE_HEIGHT_PT - 46 * mm, "単位")
         c.setFont(font, 18)
         qty = p["qty"]
-        c.drawRightString(46 * mm, LABEL_PAGE_HEIGHT_PT - 45 * mm, qty)
+        c.drawRightString(46 * mm, LABEL_PAGE_HEIGHT_PT - 49 * mm, qty)
         c.setFont(font, 12)
-        c.drawString(62 * mm, LABEL_PAGE_HEIGHT_PT - 45 * mm, _truncate_with_ellipsis(c, p["uom"], font, 12, 22 * mm))
+        c.drawString(52 * mm, LABEL_PAGE_HEIGHT_PT - 49 * mm, _truncate_with_ellipsis(c, p["uom"], font, 12, 30 * mm))
 
-        c.setFont(font, 7)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 62 * mm, "日付")
         c.setFont(font, 10)
-        c.drawString(18 * mm, LABEL_PAGE_HEIGHT_PT - 61 * mm, p["date"])
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 63 * mm, p["date"])
 
         # footer
         c.setFont(font, 9)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 82 * mm, "注文番号")
-        c.drawString(24 * mm, LABEL_PAGE_HEIGHT_PT - 82 * mm, _truncate_with_ellipsis(c, p["order_no"], font, 9, 60 * mm))
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 91 * mm, "明細ID")
-        c.drawString(24 * mm, LABEL_PAGE_HEIGHT_PT - 91 * mm, p["item_id"])
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 84 * mm, _truncate_with_ellipsis(c, p["order_no"], font, 9, 78 * mm))
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 93 * mm, p["item_id"])
 
         c.setFont(font, 8)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 100 * mm, "備考")
-        note_lines = _wrap_text(c, p["note"], font, 8, 78 * mm, 2)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 106 * mm, note_lines[0])
+        note_lines, _ = _wrap_text(c, p["note"], font, 8, 78 * mm, 2)
+        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 105 * mm, note_lines[0])
         if len(note_lines) > 1:
-            c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 112 * mm, note_lines[1])
+            c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 111 * mm, note_lines[1])
 
         c.showPage()
 
