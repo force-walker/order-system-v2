@@ -34,6 +34,27 @@ from app.schemas.order import (
     OrderResponse,
 )
 
+from collections import defaultdict
+
+def _add_line_numbers(pages: list[dict[str, str]]) -> list[dict[str, str]]:
+    totals = defaultdict(int)
+    counters = defaultdict(int)
+
+    for p in pages:
+        totals[p.get("order_no", "")] += 1
+
+    result = []
+    for p in pages:
+        order_no = p.get("order_no", "")
+        counters[order_no] += 1
+
+        row = dict(p)
+        row["line_no"] = str(counters[order_no])
+        row["line_total"] = str(totals[order_no])
+        result.append(row)
+
+    return result
+
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
 HK_TZ = ZoneInfo("Asia/Hong_Kong")
@@ -114,57 +135,160 @@ def _wrap_text(c: canvas.Canvas, text: str, font: str, size: float, max_w: float
 def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
     mm = 72 / 25.4
     buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=portrait((LABEL_PAGE_WIDTH_PT, LABEL_PAGE_HEIGHT_PT)), pageCompression=1)
+
+    c = canvas.Canvas(
+        buf,
+        pagesize=portrait((LABEL_PAGE_WIDTH_PT, LABEL_PAGE_HEIGHT_PT)),
+        pageCompression=1,
+    )
     font = _pick_label_font()
 
-    for p in pages:
-        # blocks
+    required_keys = (
+        "customer",
+        "product",
+        "qty",
+        "uom",
+        "date",
+        "order_no",
+        "note",
+        "region",
+        "line_no",
+        "line_total",
+    )
+
+    def v(p: dict[str, str], key: str) -> str:
+        return str(p.get(key, "") or "")
+
+    for raw in pages:
+        p = {k: v(raw, k) for k in required_keys}
+
+        # optional guide blocks / outer layout
         c.setLineWidth(0.85)
-        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - (4 + 36) * mm, 82 * mm, 36 * mm)
-        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - (42 + 34) * mm, 82 * mm, 34 * mm)
-        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - (78 + 48) * mm, 82 * mm, 48 * mm)
+        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - 40 * mm, 82 * mm, 36 * mm)
+        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - 76 * mm, 82 * mm, 34 * mm)
+        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - 126 * mm, 82 * mm, 48 * mm)
         c.line(4 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm, 86 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm)
 
-        # header (label text removed, pptx-like)
-        c.setFont(font, 10)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 10 * mm, _truncate_with_ellipsis(c, p["customer"], font, 10, 78 * mm))
+        # --- positions based on PPTX right-label visual ---
+        # y values are measured from top of label in mm.
 
-        name_size = 12
-        lines, overflow = _wrap_text(c, p["product"], font, name_size, 78 * mm, 2)
+        # date
+        c.setFont(font, 10)
+        c.drawString(
+            10 * mm,
+            LABEL_PAGE_HEIGHT_PT - 8 * mm,
+            _truncate_with_ellipsis(c, p["date"], font, 10, 28 * mm),
+        )
+
+        # customer
+        c.setFont(font, 22)
+        c.drawCentredString(
+            45 * mm,
+            LABEL_PAGE_HEIGHT_PT - 18 * mm,
+            _truncate_with_ellipsis(c, p["customer"], font, 22, 70 * mm),
+        )
+
+        # product, up to 2 lines
+        product_size = 14
+        product_lines, overflow = _wrap_text(c, p["product"], font, product_size, 74 * mm, 2)
         if overflow:
-            name_size = 10
-            lines, _ = _wrap_text(c, p["product"], font, name_size, 78 * mm, 2)
-        c.setFont(font, name_size)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 21 * mm, lines[0])
-        if len(lines) > 1:
-            c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 27 * mm, lines[1])
+            product_size = 12
+            product_lines, _ = _wrap_text(c, p["product"], font, product_size, 74 * mm, 2)
 
-        # quantity area
+        product_lines = product_lines or [""]
+
+        c.setFont(font, product_size)
+        if len(product_lines) == 1:
+            c.drawCentredString(
+                45 * mm,
+                LABEL_PAGE_HEIGHT_PT - 42 * mm,
+                product_lines[0],
+            )
+        else:
+            c.drawCentredString(
+                45 * mm,
+                LABEL_PAGE_HEIGHT_PT - 38 * mm,
+                product_lines[0],
+            )
+            c.drawCentredString(
+                45 * mm,
+                LABEL_PAGE_HEIGHT_PT - 45 * mm,
+                product_lines[1],
+            )
+
+        # qty / uom
+        c.setFont(font, 22)
+        c.drawRightString(
+            43 * mm,
+            LABEL_PAGE_HEIGHT_PT - 60 * mm,
+            p["qty"],
+        )
+
         c.setFont(font, 18)
-        qty = p["qty"]
-        c.drawRightString(46 * mm, LABEL_PAGE_HEIGHT_PT - 49 * mm, qty)
-        c.setFont(font, 12)
-        c.drawString(52 * mm, LABEL_PAGE_HEIGHT_PT - 49 * mm, _truncate_with_ellipsis(c, p["uom"], font, 12, 30 * mm))
+        c.drawString(
+            46 * mm,
+            LABEL_PAGE_HEIGHT_PT - 60 * mm,
+            _truncate_with_ellipsis(c, p["uom"], font, 18, 36 * mm),
+        )
+
+        # note
+        c.setFont(font, 10)
+        note_lines, _ = _wrap_text(c, p["note"], font, 10, 74 * mm, 2)
+        note_lines = note_lines or [""]
+
+        c.drawString(
+            10 * mm,
+            LABEL_PAGE_HEIGHT_PT - 72 * mm,
+            note_lines[0],
+        )
+        if len(note_lines) > 1:
+            c.drawString(
+                10 * mm,
+                LABEL_PAGE_HEIGHT_PT - 78 * mm,
+                note_lines[1],
+            )
+
+        # order no
+        c.setFont(font, 8)
+        c.drawString(10 * mm, LABEL_PAGE_HEIGHT_PT - 90 * mm, "受注No")
 
         c.setFont(font, 10)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 63 * mm, p["date"])
+        order_lines, _ = _wrap_text(c, p["order_no"], font, 10, 32 * mm, 3)
+        order_lines = order_lines or [""]
 
-        # footer
-        c.setFont(font, 9)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 84 * mm, _truncate_with_ellipsis(c, p["order_no"], font, 9, 78 * mm))
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 93 * mm, p["item_id"])
+        for i, line in enumerate(order_lines[:3]):
+            c.drawString(
+                10 * mm,
+                LABEL_PAGE_HEIGHT_PT - (97 + i * 6) * mm,
+                line,
+            )
 
-        c.setFont(font, 8)
-        note_lines, _ = _wrap_text(c, p["note"], font, 8, 78 * mm, 2)
-        c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 105 * mm, note_lines[0])
-        if len(note_lines) > 1:
-            c.drawString(6 * mm, LABEL_PAGE_HEIGHT_PT - 111 * mm, note_lines[1])
+        # item id / line number
+        # region
+        c.setFont(font, 12)
+        c.drawString(
+            52 * mm,
+            LABEL_PAGE_HEIGHT_PT - 96 * mm,
+            _truncate_with_ellipsis(c, p["region"], font, 12, 28 * mm),
+        )
+
+        # same-order detail line number / total
+        c.setFont(font, 10)
+        line_info = ""
+        if p["line_no"] or p["line_total"]:
+            line_info = f'{p["line_no"]}/{p["line_total"]}'
+
+        c.drawRightString(
+            82 * mm,
+            LABEL_PAGE_HEIGHT_PT - 116 * mm,
+            line_info,
+        )
+
 
         c.showPage()
 
     c.save()
     return buf.getvalue()
-
 
 def _stale_cutoff_delivery_date(now_hk: datetime) -> datetime.date:
     return _default_delivery_date_by_hk_time(now_hk)
@@ -391,6 +515,7 @@ def generate_order_item_labels_pdf(payload: OrderItemLabelPdfRequest, db: Sessio
             }
         )
 
+    pages = _add_line_numbers(pages)
     pdf_bytes = _build_label_pdf(pages)
     return Response(content=pdf_bytes, media_type="application/pdf")
 
