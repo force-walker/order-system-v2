@@ -177,21 +177,22 @@ def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
         )
 
         # region (above customer)
-        c.setFont(font, 12)
+        region_size = 18
+        c.setFont(font, region_size)
         c.drawCentredString(
             45 * mm,
             LABEL_PAGE_HEIGHT_PT - 14 * mm,
-            _truncate_with_ellipsis(c, (p["region"] or "-"), font, 12, 70 * mm),
+            _truncate_with_ellipsis(c, (p["region"] or "-"), font, region_size, 70 * mm),
         )
 
         # customer
-        c.setFont(font, 14)
+        customer_size = 14
+        c.setFont(font, customer_size)
         c.drawCentredString(
             45 * mm,
-            LABEL_PAGE_HEIGHT_PT - 22 * mm,
-            _truncate_with_ellipsis(c, p["customer"], font, 14, 70 * mm),
+            LABEL_PAGE_HEIGHT_PT - 23 * mm,
+            _truncate_with_ellipsis(c, p["customer"], font, customer_size, 70 * mm),
         )
-
         # product, up to 2 lines (larger than customer)
         product_size = 22
         product_lines, overflow = _wrap_text(c, p["product"], font, product_size, 74 * mm, 2)
@@ -211,12 +212,12 @@ def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
         else:
             c.drawCentredString(
                 45 * mm,
-                LABEL_PAGE_HEIGHT_PT - 38 * mm,
+                LABEL_PAGE_HEIGHT_PT - 40 * mm,
                 product_lines[0],
             )
             c.drawCentredString(
                 45 * mm,
-                LABEL_PAGE_HEIGHT_PT - 45 * mm,
+                LABEL_PAGE_HEIGHT_PT - 47 * mm,
                 product_lines[1],
             )
 
