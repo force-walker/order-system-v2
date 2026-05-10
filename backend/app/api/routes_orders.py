@@ -176,19 +176,27 @@ def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
             _truncate_with_ellipsis(c, p["date"], font, 10, 28 * mm),
         )
 
-        # customer
-        c.setFont(font, 22)
+        # region (above customer)
+        c.setFont(font, 12)
         c.drawCentredString(
             45 * mm,
-            LABEL_PAGE_HEIGHT_PT - 18 * mm,
-            _truncate_with_ellipsis(c, p["customer"], font, 22, 70 * mm),
+            LABEL_PAGE_HEIGHT_PT - 14 * mm,
+            _truncate_with_ellipsis(c, (p["region"] or "-"), font, 12, 70 * mm),
         )
 
-        # product, up to 2 lines
-        product_size = 14
+        # customer
+        c.setFont(font, 14)
+        c.drawCentredString(
+            45 * mm,
+            LABEL_PAGE_HEIGHT_PT - 22 * mm,
+            _truncate_with_ellipsis(c, p["customer"], font, 14, 70 * mm),
+        )
+
+        # product, up to 2 lines (larger than customer)
+        product_size = 22
         product_lines, overflow = _wrap_text(c, p["product"], font, product_size, 74 * mm, 2)
         if overflow:
-            product_size = 12
+            product_size = 18
             product_lines, _ = _wrap_text(c, p["product"], font, product_size, 74 * mm, 2)
 
         product_lines = product_lines or [""]
@@ -260,14 +268,6 @@ def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
             )
 
         # item id / line number
-        # region
-        c.setFont(font, 12)
-        c.drawString(
-            52 * mm,
-            LABEL_PAGE_HEIGHT_PT - 96 * mm,
-            _truncate_with_ellipsis(c, p["region"], font, 12, 28 * mm),
-        )
-
         # same-order detail line number / total
         c.setFont(font, 10)
         line_info = ""
