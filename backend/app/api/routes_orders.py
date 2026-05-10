@@ -34,6 +34,27 @@ from app.schemas.order import (
     OrderResponse,
 )
 
+from collections import defaultdict
+
+def _add_line_numbers(pages: list[dict[str, str]]) -> list[dict[str, str]]:
+    totals = defaultdict(int)
+    counters = defaultdict(int)
+
+    for p in pages:
+        totals[p.get("order_no", "")] += 1
+
+    result = []
+    for p in pages:
+        order_no = p.get("order_no", "")
+        counters[order_no] += 1
+
+        row = dict(p)
+        row["line_no"] = str(counters[order_no])
+        row["line_total"] = str(totals[order_no])
+        result.append(row)
+
+    return result
+
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
 HK_TZ = ZoneInfo("Asia/Hong_Kong")
@@ -83,22 +104,191 @@ def _pick_label_font() -> str:
     return fallback
 
 
-def _build_label_pdf(pages: list[list[str]]) -> bytes:
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=portrait((LABEL_PAGE_WIDTH_PT, LABEL_PAGE_HEIGHT_PT)), pageCompression=1)
-    font_name = _pick_label_font()
+def _truncate_with_ellipsis(c: canvas.Canvas, text: str, font: str, size: float, max_w: float) -> str:
+    if c.stringWidth(text, font, size) <= max_w:
+        return text
+    s = text
+    while s and c.stringWidth(s + "...", font, size) > max_w:
+        s = s[:-1]
+    return (s + "...") if s else "..."
 
-    for lines in pages:
-        y = LABEL_PAGE_HEIGHT_PT - 28
-        c.setFont(font_name, 11)
-        for line in lines:
-            c.drawString(18, y, line)
-            y -= 16
+
+def _wrap_text(c: canvas.Canvas, text: str, font: str, size: float, max_w: float, max_lines: int) -> tuple[list[str], bool]:
+    lines: list[str] = []
+    rest = text
+    for _ in range(max_lines):
+        if not rest:
+            break
+        cur = rest
+        while cur and c.stringWidth(cur, font, size) > max_w:
+            cur = cur[:-1]
+        if not cur:
+            break
+        lines.append(cur)
+        rest = rest[len(cur):]
+    overflow = bool(rest)
+    if rest and lines:
+        lines[-1] = _truncate_with_ellipsis(c, lines[-1] + rest, font, size, max_w)
+    return (lines or [""], overflow)
+
+
+def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
+    mm = 72 / 25.4
+    buf = BytesIO()
+
+    c = canvas.Canvas(
+        buf,
+        pagesize=portrait((LABEL_PAGE_WIDTH_PT, LABEL_PAGE_HEIGHT_PT)),
+        pageCompression=1,
+    )
+    font = _pick_label_font()
+
+    required_keys = (
+        "customer",
+        "product",
+        "qty",
+        "uom",
+        "date",
+        "order_no",
+        "note",
+        "region",
+        "line_no",
+        "line_total",
+    )
+
+    def v(p: dict[str, str], key: str) -> str:
+        return str(p.get(key, "") or "")
+
+    for raw in pages:
+        p = {k: v(raw, k) for k in required_keys}
+
+        # optional guide blocks / outer layout
+        c.setLineWidth(0.85)
+        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - 40 * mm, 82 * mm, 36 * mm)
+        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - 76 * mm, 82 * mm, 34 * mm)
+        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - 126 * mm, 82 * mm, 48 * mm)
+        c.line(4 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm, 86 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm)
+
+        # --- positions based on PPTX right-label visual ---
+        # y values are measured from top of label in mm.
+
+        # date
+        c.setFont(font, 10)
+        c.drawString(
+            10 * mm,
+            LABEL_PAGE_HEIGHT_PT - 8 * mm,
+            _truncate_with_ellipsis(c, p["date"], font, 10, 28 * mm),
+        )
+
+        # customer
+        c.setFont(font, 22)
+        c.drawCentredString(
+            45 * mm,
+            LABEL_PAGE_HEIGHT_PT - 18 * mm,
+            _truncate_with_ellipsis(c, p["customer"], font, 22, 70 * mm),
+        )
+
+        # product, up to 2 lines
+        product_size = 14
+        product_lines, overflow = _wrap_text(c, p["product"], font, product_size, 74 * mm, 2)
+        if overflow:
+            product_size = 12
+            product_lines, _ = _wrap_text(c, p["product"], font, product_size, 74 * mm, 2)
+
+        product_lines = product_lines or [""]
+
+        c.setFont(font, product_size)
+        if len(product_lines) == 1:
+            c.drawCentredString(
+                45 * mm,
+                LABEL_PAGE_HEIGHT_PT - 42 * mm,
+                product_lines[0],
+            )
+        else:
+            c.drawCentredString(
+                45 * mm,
+                LABEL_PAGE_HEIGHT_PT - 38 * mm,
+                product_lines[0],
+            )
+            c.drawCentredString(
+                45 * mm,
+                LABEL_PAGE_HEIGHT_PT - 45 * mm,
+                product_lines[1],
+            )
+
+        # qty / uom
+        c.setFont(font, 22)
+        c.drawRightString(
+            43 * mm,
+            LABEL_PAGE_HEIGHT_PT - 60 * mm,
+            p["qty"],
+        )
+
+        c.setFont(font, 18)
+        c.drawString(
+            46 * mm,
+            LABEL_PAGE_HEIGHT_PT - 60 * mm,
+            _truncate_with_ellipsis(c, p["uom"], font, 18, 36 * mm),
+        )
+
+        # note
+        c.setFont(font, 10)
+        note_lines, _ = _wrap_text(c, p["note"], font, 10, 74 * mm, 2)
+        note_lines = note_lines or [""]
+
+        c.drawString(
+            10 * mm,
+            LABEL_PAGE_HEIGHT_PT - 72 * mm,
+            note_lines[0],
+        )
+        if len(note_lines) > 1:
+            c.drawString(
+                10 * mm,
+                LABEL_PAGE_HEIGHT_PT - 78 * mm,
+                note_lines[1],
+            )
+
+        # order no
+        c.setFont(font, 8)
+        c.drawString(10 * mm, LABEL_PAGE_HEIGHT_PT - 90 * mm, "受注No")
+
+        c.setFont(font, 10)
+        order_lines, _ = _wrap_text(c, p["order_no"], font, 10, 32 * mm, 3)
+        order_lines = order_lines or [""]
+
+        for i, line in enumerate(order_lines[:3]):
+            c.drawString(
+                10 * mm,
+                LABEL_PAGE_HEIGHT_PT - (97 + i * 6) * mm,
+                line,
+            )
+
+        # item id / line number
+        # region
+        c.setFont(font, 12)
+        c.drawString(
+            52 * mm,
+            LABEL_PAGE_HEIGHT_PT - 96 * mm,
+            _truncate_with_ellipsis(c, p["region"], font, 12, 28 * mm),
+        )
+
+        # same-order detail line number / total
+        c.setFont(font, 10)
+        line_info = ""
+        if p["line_no"] or p["line_total"]:
+            line_info = f'{p["line_no"]}/{p["line_total"]}'
+
+        c.drawRightString(
+            82 * mm,
+            LABEL_PAGE_HEIGHT_PT - 116 * mm,
+            line_info,
+        )
+
+
         c.showPage()
 
     c.save()
     return buf.getvalue()
-
 
 def _stale_cutoff_delivery_date(now_hk: datetime) -> datetime.date:
     return _default_delivery_date_by_hk_time(now_hk)
@@ -308,22 +498,24 @@ def generate_order_item_labels_pdf(payload: OrderItemLabelPdfRequest, db: Sessio
     if missing:
         raise HTTPException(status_code=404, detail={"code": "ORDER_ITEM_NOT_FOUND", "message": f"order item not found: {missing[0]}"})
 
-    pages: list[list[str]] = []
+    pages: list[dict[str, str]] = []
     for oid in payload.order_item_ids:
         oi, order, customer, product = by_id[oid]
-        pages.append([
-            f"地域: {customer.region or '-'}",
-            f"取引先: {customer.name}",
-            f"商品名: {product.name}",
-            f"数量: {float(oi.ordered_qty)}",
-            f"単位: {product.order_uom}",
-            f"納品日: {order.delivery_date}",
-            f"出荷日: {order.shipped_date or '-'}",
-            f"注文番号: {order.order_no}",
-            f"明細ID: {oi.id}",
-            f"備考: {(oi.note or '')[:60]}",
-        ])
+        qty = f"{float(oi.ordered_qty):.3f}".rstrip("0").rstrip(".")
+        pages.append(
+            {
+                "customer": customer.name or "-",
+                "product": product.name or "-",
+                "qty": qty,
+                "uom": product.order_uom or "-",
+                "date": str(order.shipped_date or order.delivery_date),
+                "order_no": order.order_no or "-",
+                "item_id": str(oi.id),
+                "note": (oi.note or "-")[:200],
+            }
+        )
 
+    pages = _add_line_numbers(pages)
     pdf_bytes = _build_label_pdf(pages)
     return Response(content=pdf_bytes, media_type="application/pdf")
 
