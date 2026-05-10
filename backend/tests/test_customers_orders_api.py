@@ -591,6 +591,28 @@ def test_order_item_labels_pdf_single_and_multi_and_size():
     assert b"/Type /Page" in multi.content
 
 
+def test_order_item_labels_pdf_includes_customer_region_in_payload(monkeypatch):
+    captured = {}
+
+    from app.api import routes_orders as ro
+
+    def fake_build_label_pdf(pages):
+        captured["pages"] = pages
+        return b"%PDF-1.4\n%mock\n"
+
+    monkeypatch.setattr(ro, "_build_label_pdf", fake_build_label_pdf)
+
+    client = _client()
+    item_id = _seed_order_item_for_label()
+
+    res = client.post("/api/v1/orders/item-labels/pdf", json={"order_item_ids": [item_id]})
+    assert res.status_code == 200
+
+    pages = captured.get("pages")
+    assert pages is not None and len(pages) == 1
+    assert pages[0]["region"] == "HK"
+
+
 def test_order_item_labels_pdf_404_and_422():
     client = _client()
     nf = client.post("/api/v1/orders/item-labels/pdf", json={"order_item_ids": [999999]})

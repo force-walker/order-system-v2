@@ -508,6 +508,7 @@ def generate_order_item_labels_pdf(payload: OrderItemLabelPdfRequest, db: Sessio
                 "order_no": order.order_no or "-",
                 "item_id": str(oi.id),
                 "note": (oi.note or "-")[:200],
+                "region": (customer.region or "-")[:64],
             }
         )
 
