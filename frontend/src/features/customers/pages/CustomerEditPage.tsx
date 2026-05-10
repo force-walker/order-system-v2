@@ -26,7 +26,7 @@ export const CustomerEditPage = () => {
   }, [customerIdNum]);
 
   const handleSubmit = async (payload: Parameters<typeof updateCustomer>[1]) => {
-    const updated = await updateCustomer(customerIdNum, { name: payload.name, active: payload.active });
+    const updated = await updateCustomer(customerIdNum, { name: payload.name, region: payload.region, active: payload.active });
     sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `顧客を更新しました（ID: ${updated.id}）` }));
     navigate('/customers');
   };
