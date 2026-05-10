@@ -163,11 +163,7 @@ def _build_label_pdf(pages: list[dict[str, str]]) -> bytes:
         p = {k: v(raw, k) for k in required_keys}
 
         # optional guide blocks / outer layout
-        c.setLineWidth(0.85)
-        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - 40 * mm, 82 * mm, 36 * mm)
-        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - 76 * mm, 82 * mm, 34 * mm)
-        c.rect(4 * mm, LABEL_PAGE_HEIGHT_PT - 126 * mm, 82 * mm, 48 * mm)
-        c.line(4 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm, 86 * mm, LABEL_PAGE_HEIGHT_PT - 60 * mm)
+        # border/frame lines removed by request
 
         # --- positions based on PPTX right-label visual ---
         # y values are measured from top of label in mm.
