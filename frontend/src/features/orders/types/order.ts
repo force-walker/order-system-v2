@@ -76,6 +76,7 @@ export type CustomerDetail = {
   id: number;
   customerCode: string;
   name: string;
+  region?: string;
   active: boolean;
 };
 

@@ -53,6 +53,7 @@ export const CustomerDetailPage = () => {
         <div><dt>ID</dt><dd>{customer.id}</dd></div>
         <div><dt>顧客コード</dt><dd>{customer.customerCode}</dd></div>
         <div><dt>顧客名</dt><dd>{customer.name}</dd></div>
+        <div><dt>地域</dt><dd>{customer.region?.trim() ? customer.region : '-'}</dd></div>
         <div><dt>状態</dt><dd>{customer.active ? '有効' : '無効'}</dd></div>
       </dl>
       <div className="detail-actions">
