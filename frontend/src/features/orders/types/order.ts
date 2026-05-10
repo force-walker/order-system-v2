@@ -76,16 +76,19 @@ export type CustomerDetail = {
   id: number;
   customerCode: string;
   name: string;
+  region?: string;
   active: boolean;
 };
 
 export type CustomerCreateRequest = {
   name: string;
+  region?: string;
   active: boolean;
 };
 
 export type CustomerUpdateRequest = {
   name?: string;
+  region?: string;
   active?: boolean;
 };
 

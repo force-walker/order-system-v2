@@ -11,11 +11,13 @@ type Props = {
 
 type FormState = {
   name: string;
+  region: string;
   active: boolean;
 };
 
 const toInitialState = (initial?: CustomerDetail): FormState => ({
   name: initial?.name ?? '',
+  region: initial?.region ?? '',
   active: initial?.active ?? true,
 });
 
@@ -41,7 +43,7 @@ export const CustomerForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
     setError('');
     setSubmitting(true);
     try {
-      await onSubmit({ name: form.name.trim(), active: form.active });
+      await onSubmit({ name: form.name.trim(), region: form.region.trim() || undefined, active: form.active });
     } catch (e) {
       setError(toActionableMessage(e, '顧客の保存に失敗しました'));
     } finally {
@@ -63,6 +65,11 @@ export const CustomerForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
       <label>
         顧客名 *
         <input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+      </label>
+
+      <label>
+        地域
+        <input value={form.region} onChange={(e) => setForm((p) => ({ ...p, region: e.target.value }))} placeholder="未設定" />
       </label>
 
       <label>

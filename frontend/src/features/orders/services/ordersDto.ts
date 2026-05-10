@@ -23,13 +23,15 @@ export type ApiLoginRequest = components['schemas']['LoginRequest'];
 
 export const toApiCustomerCreate = (payload: CustomerCreateRequest): ApiCustomerCreateRequest => ({
   name: payload.name,
+  region: payload.region,
   active: payload.active,
 } as unknown as ApiCustomerCreateRequest);
 
 export const toApiCustomerUpdate = (payload: CustomerUpdateRequest): ApiCustomerUpdateRequest => ({
   name: payload.name,
+  region: payload.region,
   active: payload.active,
-});
+} as unknown as ApiCustomerUpdateRequest);
 
 export const toApiProductCreate = (payload: ProductCreateRequest): ApiProductCreateRequest => ({
   name: payload.name,
@@ -86,6 +88,7 @@ export const toCustomerDetail = (row: ApiCustomerResponse): CustomerDetail => ({
   id: row.id,
   customerCode: resolveCustomerCode(row),
   name: row.name,
+  region: (row as unknown as { region?: string | null }).region ?? undefined,
   active: row.active,
 });
 
