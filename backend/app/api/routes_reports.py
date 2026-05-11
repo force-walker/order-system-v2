@@ -129,7 +129,11 @@ def purchase_confirmation_pdf(payload: PurchaseConfirmationPdfRequest, db: Sessi
 
     for item, _order, customer, product, supplier, final_qty in rows:
         if y < 36:
-            c.showPage(); y = A4_H - 28; header(y); y -= 18; c.setFont(font, 8)
+            c.showPage()
+            y = A4_H - 28
+            header(y)
+            y -= 18
+            c.setFont(font, 8)
         vals = [
             supplier.name if supplier else "",
             customer.region or "",
