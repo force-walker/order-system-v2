@@ -11,6 +11,7 @@ export const ShippingReportPage = () => {
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [error, setError] = useState('');
+  const [pdfError, setPdfError] = useState('');
 
   const load = async () => {
     if (!shippedDate || !mode) {
@@ -21,6 +22,7 @@ export const ShippingReportPage = () => {
 
     setLoading(true);
     setError('');
+    setPdfError('');
     try {
       const result = await getShippingReport(shippedDate, mode);
       setRows(result);
@@ -51,14 +53,20 @@ export const ShippingReportPage = () => {
   };
 
   const generatePdf = async () => {
-    if (selectedIds.length === 0) return;
+    const normalizedIds = selectedIds.filter((id) => Number.isFinite(id) && id > 0);
+    if (normalizedIds.length === 0) {
+      setPdfError('PDF生成対象がありません。行を選択してください。');
+      return;
+    }
+
     setPdfGenerating(true);
+    setPdfError('');
     try {
-      const blob = await generatePurchaseConfirmationPdf(selectedIds);
+      const blob = await generatePurchaseConfirmationPdf(normalizedIds);
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
-      setError(toActionableMessage(e, 'PDF生成に失敗しました。'));
+      setPdfError(toActionableMessage(e, 'PDF生成に失敗しました。'));
     } finally {
       setPdfGenerating(false);
     }
@@ -97,6 +105,12 @@ export const ShippingReportPage = () => {
           </div>
         </div>
       </div>
+
+      {pdfError ? (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <p className="field-error">{pdfError}</p>
+        </div>
+      ) : null}
 
       {loading ? (
         <LoadingState title="帳票リストを読み込み中" description="しばらくお待ちください。" />

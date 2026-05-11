@@ -185,6 +185,7 @@ def shipping_report(
         qty = float(final_qty) if final_qty is not None else float(item.ordered_qty)
         result.append(
             ShippingReportRow(
+                order_item_id=item.id,
                 shipped_date=item.shipped_date,
                 supplier_name=(supplier.name if supplier is not None else None),
                 customer_name=customer.name,
