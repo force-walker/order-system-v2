@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product
+from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.order import (
     OrderBulkCancelRequest,
@@ -32,6 +32,7 @@ from app.schemas.order import (
     OrderItemLabelPdfRequest,
     OrderItemUpdateRequest,
     OrderResponse,
+    PurchaseConfirmationPdfRequest,
 )
 
 from collections import defaultdict
@@ -477,6 +478,84 @@ def bulk_cancel_orders(payload: OrderBulkCancelRequest, db: Session = Depends(ge
         )
 
     return OrderBulkCancelResponse(total=len(payload.order_ids), succeeded=succeeded, failed=failed, errors=errors)
+
+
+@router.post(
+    "/{order_id}/purchase-confirmation.pdf",
+    responses={
+        **ORDER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        200: {"content": {"application/pdf": {}}},
+    },
+)
+def generate_purchase_confirmation_pdf(order_id: int, payload: PurchaseConfirmationPdfRequest, db: Session = Depends(get_db)) -> Response:
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+
+    rows = (
+        db.query(OrderItem, Customer, Product, Supplier)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(Customer, Customer.id == Order.customer_id)
+        .join(Product, Product.id == OrderItem.product_id)
+        .outerjoin(SupplierAllocation, SupplierAllocation.order_item_id == OrderItem.id)
+        .outerjoin(Supplier, Supplier.id == SupplierAllocation.final_supplier_id)
+        .filter(OrderItem.order_id == order_id)
+        .order_by(Product.name.desc(), OrderItem.id.desc())
+        .all()
+    )
+
+    if not rows:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_ITEMS_NOT_FOUND", "message": "order items not found"})
+
+    A4_W, A4_H = portrait((595.27, 841.89))
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=(A4_W, A4_H), pageCompression=1)
+    font = _pick_label_font()
+    headers = ["仕入先名", "得意先分類名", "得意先名", "商品名", "数量", "単位名", "備考1", "備考2", "単価"]
+    col_w = [70, 70, 70, 110, 45, 45, 70, 70, 45]
+
+    def draw_header(y: float):
+        x = 24
+        c.setFont(font, 9)
+        for h, w in zip(headers, col_w):
+            c.rect(x, y - 14, w, 16)
+            c.drawString(x + 2, y - 10, h)
+            x += w
+
+    y = A4_H - 36
+    draw_header(y)
+    y -= 18
+    c.setFont(font, 8)
+
+    for item, customer, product, supplier in rows:
+        if y < 40:
+            c.showPage()
+            y = A4_H - 36
+            draw_header(y)
+            y -= 18
+            c.setFont(font, 8)
+
+        vals = [
+            supplier.name if supplier else "",
+            customer.region or "",
+            customer.name or "",
+            product.name or "",
+            f"{float(item.ordered_qty):.3f}".rstrip("0").rstrip("."),
+            product.order_uom or "",
+            (item.note or "")[:20],
+            (item.comment or "")[:20],
+            str(item.unit_price_uom_count or item.unit_price_uom_kg or ""),
+        ]
+        x = 24
+        for v, w in zip(vals, col_w):
+            c.rect(x, y - 12, w, 14)
+            c.drawString(x + 2, y - 9, _truncate_with_ellipsis(c, v, font, 8, w - 4))
+            x += w
+        y -= 14
+
+    c.save()
+    return Response(content=buf.getvalue(), media_type="application/pdf")
 
 
 @router.post(
