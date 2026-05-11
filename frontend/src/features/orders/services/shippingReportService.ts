@@ -38,6 +38,7 @@ const fetchWithAuth = async (path: string, init?: { method?: string; body?: unkn
 export type ShippingReportMode = 'supplier_product' | 'customer';
 
 export type ShippingReportRow = {
+  orderItemId: number;
   shippedDate: string;
   supplierName: string;
   customerName: string;
@@ -47,6 +48,7 @@ export type ShippingReportRow = {
 };
 
 type ApiShippingReportRow = {
+  order_item_id: number;
   shipped_date: string;
   supplier_name: string;
   customer_name: string;
@@ -62,6 +64,7 @@ export const getShippingReport = async (shippedDate: string, mode: ShippingRepor
 
   const data = (await res.json()) as ApiShippingReportRow[];
   return data.map((r) => ({
+    orderItemId: r.order_item_id,
     shippedDate: r.shipped_date,
     supplierName: r.supplier_name,
     customerName: r.customer_name,
@@ -69,4 +72,13 @@ export const getShippingReport = async (shippedDate: string, mode: ShippingRepor
     quantity: r.quantity,
     unit: r.unit,
   }));
+};
+
+export const generatePurchaseConfirmationPdf = async (selectedIds: number[]): Promise<Blob> => {
+  const res = await fetchWithAuth('/api/v1/reports/purchase-confirmation/pdf', {
+    method: 'POST',
+    body: { selected_ids: selectedIds, sort: 'product_desc' },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  return await res.blob();
 };
