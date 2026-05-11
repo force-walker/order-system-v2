@@ -139,5 +139,9 @@ class OrderItemsBulkCreateResponse(BaseModel):
     errors: list[dict] = Field(default_factory=list)
 
 
+class PurchaseConfirmationPdfRequest(BaseModel):
+    output_date: date | None = None
+
+
 class OrderItemLabelPdfRequest(BaseModel):
     order_item_ids: list[int] = Field(min_length=1, max_length=500)
