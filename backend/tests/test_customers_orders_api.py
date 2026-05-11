@@ -616,18 +616,19 @@ def test_order_item_labels_pdf_includes_customer_region_in_payload(monkeypatch):
 def test_purchase_confirmation_pdf_sort_and_404():
     client = _client()
     item_id = _seed_order_item_for_label()
-    db = TestingSessionLocal()
-    oi = db.query(OrderItem).filter(OrderItem.id == item_id).first()
-    assert oi is not None
-    order_id = oi.order_id
-    db.close()
 
-    ok = client.post(f"/api/v1/orders/{order_id}/purchase-confirmation.pdf", json={})
+    ok = client.post("/api/v1/reports/purchase-confirmation/pdf", json={"selected_ids": [item_id]})
     assert ok.status_code == 200
     assert ok.headers["content-type"].startswith("application/pdf")
 
-    nf = client.post("/api/v1/orders/999999/purchase-confirmation.pdf", json={})
+    nf = client.post("/api/v1/reports/purchase-confirmation/pdf", json={"selected_ids": [999999]})
     assert nf.status_code == 404
+
+
+def test_purchase_confirmation_pdf_zero_selection_is_422():
+    client = _client()
+    bad = client.post("/api/v1/reports/purchase-confirmation/pdf", json={"selected_ids": []})
+    assert bad.status_code == 422
 
 
 def test_order_item_labels_pdf_404_and_422():
