@@ -112,14 +112,15 @@ def purchase_confirmation_pdf(payload: PurchaseConfirmationPdfRequest, db: Sessi
     c = canvas.Canvas(cbuf, pagesize=(A4_W, A4_H), pageCompression=1)
     font = _pick_font()
     headers = ["仕入先名", "得意先分類名", "得意先名", "商品名", "数量", "単位名", "備考1", "備考2", "単価"]
-    col_w = [72, 72, 72, 108, 44, 44, 62, 62, 40]
+    col_w = [72, 36, 72, 108, 44, 44, 62, 62, 40]  # 得意先分類名を半分幅へ
 
     def header(y):
         x = 20
-        c.setFont(font, 8)
-        for h, w in zip(headers, col_w):
+        for idx, (h, w) in enumerate(zip(headers, col_w)):
             c.rect(x, y - 14, w, 16)
-            c.drawString(x + 2, y - 10, h)
+            col_font_size = 4 if idx == 1 else 8  # 得意先分類名のみフォント半分
+            c.setFont(font, col_font_size)
+            c.drawString(x + 2, y - 10, _ellipsis(c, h, font, col_font_size, w - 4))
             x += w
 
     y = A4_H - 28
@@ -146,9 +147,11 @@ def purchase_confirmation_pdf(payload: PurchaseConfirmationPdfRequest, db: Sessi
             str(item.unit_price_uom_count or item.unit_price_uom_kg or ""),
         ]
         x = 20
-        for v, w in zip(vals, col_w):
+        for idx, (v, w) in enumerate(zip(vals, col_w)):
             c.rect(x, y - 12, w, 14)
-            c.drawString(x + 2, y - 9, _ellipsis(c, str(v), font, 8, w - 4))
+            col_font_size = 4 if idx == 1 else 8
+            c.setFont(font, col_font_size)
+            c.drawString(x + 2, y - 9, _ellipsis(c, str(v), font, col_font_size, w - 4))
             x += w
         y -= 14
 
@@ -185,6 +188,7 @@ def shipping_report(
         qty = float(final_qty) if final_qty is not None else float(item.ordered_qty)
         result.append(
             ShippingReportRow(
+                order_item_id=item.id,
                 shipped_date=item.shipped_date,
                 supplier_name=(supplier.name if supplier is not None else None),
                 customer_name=customer.name,

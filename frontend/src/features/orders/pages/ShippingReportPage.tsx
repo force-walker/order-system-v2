@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { getShippingReport, type ShippingReportMode, type ShippingReportRow } from 'features/orders/services/shippingReportService';
+import { generatePurchaseConfirmationPdf, getShippingReport, type ShippingReportMode, type ShippingReportRow } from 'features/orders/services/shippingReportService';
 import { toActionableMessage } from 'shared/error';
 
 export const ShippingReportPage = () => {
@@ -8,7 +8,10 @@ export const ShippingReportPage = () => {
   const [mode, setMode] = useState<ShippingReportMode | ''>('');
   const [rows, setRows] = useState<ShippingReportRow[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [error, setError] = useState('');
+  const [pdfError, setPdfError] = useState('');
 
   const load = async () => {
     if (!shippedDate || !mode) {
@@ -19,9 +22,11 @@ export const ShippingReportPage = () => {
 
     setLoading(true);
     setError('');
+    setPdfError('');
     try {
       const result = await getShippingReport(shippedDate, mode);
       setRows(result);
+      setSelectedIds([]);
     } catch (e) {
       setError(toActionableMessage(e, '帳票リストの取得に失敗しました。'));
       setRows(null);
@@ -33,6 +38,39 @@ export const ShippingReportPage = () => {
   useEffect(() => {
     void load();
   }, [shippedDate, mode]);
+
+  const selectedCount = selectedIds.length;
+  const selectableIds = useMemo(() => (rows ?? []).map((r) => r.orderItemId), [rows]);
+  const allVisibleSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) setSelectedIds(selectableIds);
+    else setSelectedIds([]);
+  };
+
+  const toggleOne = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => (checked ? Array.from(new Set([...prev, id])) : prev.filter((x) => x !== id)));
+  };
+
+  const generatePdf = async () => {
+    const normalizedIds = selectedIds.filter((id) => Number.isFinite(id) && id > 0);
+    if (normalizedIds.length === 0) {
+      setPdfError('PDF生成対象がありません。行を選択してください。');
+      return;
+    }
+
+    setPdfGenerating(true);
+    setPdfError('');
+    try {
+      const blob = await generatePurchaseConfirmationPdf(normalizedIds);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      setPdfError(toActionableMessage(e, 'PDF生成に失敗しました。'));
+    } finally {
+      setPdfGenerating(false);
+    }
+  };
 
   return (
     <section>
@@ -59,8 +97,20 @@ export const ShippingReportPage = () => {
             </select>
           </label>
 
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="subtle">{selectedCount}件選択中</span>
+            <button type="button" className="btn secondary" disabled={selectedCount === 0 || pdfGenerating} onClick={() => void generatePdf()}>
+              {pdfGenerating ? 'PDF生成中...' : 'PDF作成'}
+            </button>
+          </div>
         </div>
       </div>
+
+      {pdfError ? (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <p className="field-error">{pdfError}</p>
+        </div>
+      ) : null}
 
       {loading ? (
         <LoadingState title="帳票リストを読み込み中" description="しばらくお待ちください。" />
@@ -74,6 +124,7 @@ export const ShippingReportPage = () => {
             <table>
               <thead>
                 <tr>
+                  <th><input type="checkbox" checked={allVisibleSelected} onChange={(e) => toggleSelectAll(e.target.checked)} /></th>
                   <th>出荷日</th>
                   <th>仕入先</th>
                   <th>顧客</th>
@@ -85,10 +136,17 @@ export const ShippingReportPage = () => {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="subtle">指定した出荷日・表示モードでは帳票対象が0件です。</td>
+                    <td colSpan={7} className="subtle">指定した出荷日・表示モードでは帳票対象が0件です。</td>
                   </tr>
                 ) : rows.map((r, idx) => (
-                  <tr key={`${r.shippedDate}-${r.supplierName}-${r.customerName}-${r.productName}-${idx}`}>
+                  <tr key={`${r.orderItemId}-${r.shippedDate}-${idx}`}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(r.orderItemId)}
+                        onChange={(e) => toggleOne(r.orderItemId, e.target.checked)}
+                      />
+                    </td>
                     <td>{r.shippedDate}</td>
                     <td>{r.supplierName}</td>
                     <td>{r.customerName}</td>
