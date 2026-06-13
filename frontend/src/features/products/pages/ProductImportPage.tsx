@@ -2,7 +2,7 @@ import {
   MasterImportPage,
   type PreflightErrorRow,
 } from 'features/imports/components/MasterImportPage';
-import { importProductsUpsert } from 'features/products/services/productsService';
+import { getProductImportFormat, importProductsUpsert } from 'features/products/services/productsService';
 
 const SAMPLE_JSON = `[
   {
@@ -111,6 +111,7 @@ export const ProductImportPage = () => (
     backLabel="商品一覧へ戻る"
     sampleJson={SAMPLE_JSON}
     importAction={importProductsUpsert}
+    fetchImportFormat={getProductImportFormat}
     normalizeItemsBeforeSubmit={normalizeItemsBeforeSubmit}
   />
 );

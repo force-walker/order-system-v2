@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { ErrorState } from 'components/common/AsyncState';
+import { ImportFormatTable } from 'features/imports/components/ImportFormatTable';
+import type { ImportFormat } from 'features/imports/types/importFormat';
 import { toActionableMessage } from 'shared/error';
 
 export type ImportErrorRow = {
@@ -43,6 +45,7 @@ type MasterImportPageProps = {
   sampleJson: string;
   sampleCsv?: string;
   importAction: (payload: ImportUpsertRequest) => Promise<ImportUpsertResult>;
+  fetchImportFormat: () => Promise<ImportFormat>;
   normalizeItemsBeforeSubmit: (items: Record<string, unknown>[]) => NormalizeItemsResult;
 };
 
@@ -140,6 +143,7 @@ export const MasterImportPage = ({
   sampleJson,
   sampleCsv,
   importAction,
+  fetchImportFormat,
   normalizeItemsBeforeSubmit,
 }: MasterImportPageProps) => {
   const [jsonText, setJsonText] = useState('');
@@ -149,9 +153,36 @@ export const MasterImportPage = ({
   const [apiError, setApiError] = useState('');
   const [preflightErrors, setPreflightErrors] = useState<PreflightErrorRow[]>([]);
   const [result, setResult] = useState<ImportUpsertResult | null>(null);
+  const [format, setFormat] = useState<ImportFormat | null>(null);
+  const [formatError, setFormatError] = useState('');
+  const [formatLoading, setFormatLoading] = useState(true);
 
   const visibleErrors = useMemo(() => result?.errors.slice(0, MAX_ERROR_ROWS) ?? [], [result]);
   const visiblePreflightErrors = useMemo(() => preflightErrors.slice(0, MAX_ERROR_ROWS), [preflightErrors]);
+
+  useEffect(() => {
+    let alive = true;
+
+    const loadImportFormat = async () => {
+      setFormatLoading(true);
+      setFormatError('');
+      try {
+        const data = await fetchImportFormat();
+        if (!alive) return;
+        setFormat(data);
+      } catch (e) {
+        if (!alive) return;
+        setFormatError(toActionableMessage(e, 'ImportFormat の取得に失敗しました。'));
+      } finally {
+        if (alive) setFormatLoading(false);
+      }
+    };
+
+    void loadImportFormat();
+    return () => {
+      alive = false;
+    };
+  }, [fetchImportFormat]);
 
   const onSubmit = async () => {
     setFormError('');
@@ -238,6 +269,39 @@ export const MasterImportPage = ({
           <Link to={backTo} className="order-link">← {backLabel}</Link>
         </div>
 
+        <div className="import-format-grid">
+          <section className="card import-format-card">
+            <div className="section-row">
+              <div>
+                <h3>ImportFormat</h3>
+                <p className="subtle">CSV / Excel のヘッダー名と必須列を確認できます</p>
+              </div>
+            </div>
+            {formatLoading ? <p className="subtle">ImportFormat を読み込み中...</p> : null}
+            {!formatLoading && formatError ? <p className="form-error">{formatError}</p> : null}
+            {!formatLoading && format ? <ImportFormatTable format={format} /> : null}
+          </section>
+
+          <section className="card import-format-card">
+            <div className="section-row">
+              <div>
+                <h3>サンプル</h3>
+                <p className="subtle">列名の確認やテンプレート作成に使えます</p>
+              </div>
+            </div>
+            {sampleCsv ? (
+              <details open>
+                <summary className="subtle">CSVサンプル</summary>
+                <pre>{sampleCsv}</pre>
+              </details>
+            ) : null}
+            <details open>
+              <summary className="subtle">JSONサンプル</summary>
+              <pre>{sampleJson}</pre>
+            </details>
+          </section>
+        </div>
+
         <div className="form-grid two-col">
           <label>
             入力方式 A（JSON貼り付け）
@@ -265,18 +329,6 @@ export const MasterImportPage = ({
             )}
           </label>
         </div>
-
-        <details>
-          <summary className="subtle">JSONサンプルを表示</summary>
-          <pre>{sampleJson}</pre>
-        </details>
-
-        {sampleCsv ? (
-          <details>
-            <summary className="subtle">CSVサンプルを表示</summary>
-            <pre>{sampleCsv}</pre>
-          </details>
-        ) : null}
 
         {formError ? <p className="form-error">{formError}</p> : null}
 

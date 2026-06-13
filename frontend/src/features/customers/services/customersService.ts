@@ -8,6 +8,7 @@ export {
   unarchiveCustomer,
   deleteCustomer,
   importCustomersUpsert,
+  getCustomerImportFormat,
   type CustomerImportUpsertRequest,
   type CustomerImportUpsertResult,
 } from 'features/orders/services/ordersService';

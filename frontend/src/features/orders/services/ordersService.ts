@@ -1,4 +1,5 @@
 import { mockOrders } from 'features/orders/mocks/orders';
+import type { ImportFormat } from 'features/imports/types/importFormat';
 import type {
   CreateOrderRequest,
   CustomerCreateRequest,
@@ -56,6 +57,20 @@ type ApiOrderItemResponse = {
   comment: string | null;
 };
 
+type ApiImportFormatField = {
+  name: string;
+  label: string;
+  required: boolean;
+  required_scope: 'always' | 'create' | 'never';
+  description?: string | null;
+  example?: unknown;
+};
+
+type ApiImportFormatResponse = {
+  entity: string;
+  fields: ApiImportFormatField[];
+};
+
 const apiOrderCache = new Map<number, OrderDetail>();
 const customerNameCache = new Map<number, string>();
 const productCache = new Map<number, ProductOption>();
@@ -79,6 +94,18 @@ const readOrders = (): OrderDetail[] => {
 const writeOrders = (orders: OrderDetail[]) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
 };
+
+const toImportFormat = (row: ApiImportFormatResponse): ImportFormat => ({
+  entity: row.entity,
+  fields: row.fields.map((field) => ({
+    name: field.name,
+    label: field.label,
+    required: field.required,
+    requiredScope: field.required_scope,
+    description: field.description,
+    example: field.example,
+  })),
+});
 
 const toListItem = (o: OrderDetail): OrderSummary => ({
   id: o.id,
@@ -698,6 +725,28 @@ export type ProductImportUpsertResult = {
   }>;
 };
 
+const PRODUCT_IMPORT_FORMAT_MOCK: ImportFormat = {
+  entity: 'products',
+  fields: [
+    { name: 'import_key', label: 'Import Key', required: false, requiredScope: 'never', description: '更新時の照合キー', example: 'prod-001' },
+    { name: 'name', label: 'Name', required: true, requiredScope: 'create', description: '商品名', example: 'Imported Product' },
+    { name: 'order_uom', label: 'Order UOM', required: true, requiredScope: 'create', description: '受注単位', example: 'count' },
+    { name: 'purchase_uom', label: 'Purchase UOM', required: true, requiredScope: 'create', description: '仕入単位', example: 'count' },
+    { name: 'invoice_uom', label: 'Invoice UOM', required: true, requiredScope: 'create', description: '請求単位', example: 'count' },
+    { name: 'active', label: 'Active', required: false, requiredScope: 'never', description: '有効フラグ', example: true },
+  ],
+};
+
+const CUSTOMER_IMPORT_FORMAT_MOCK: ImportFormat = {
+  entity: 'customers',
+  fields: [
+    { name: 'import_key', label: 'Import Key', required: false, requiredScope: 'never', description: '更新時の照合キー', example: 'cust-001' },
+    { name: 'region', label: 'Region', required: false, requiredScope: 'never', description: '地域', example: 'kanto' },
+    { name: 'name', label: 'Name', required: true, requiredScope: 'create', description: '顧客名', example: 'テスト顧客' },
+    { name: 'active', label: 'Active', required: false, requiredScope: 'never', description: '有効フラグ', example: true },
+  ],
+};
+
 export const importProductsUpsert = async (payload: ProductImportUpsertRequest): Promise<ProductImportUpsertResult> => {
   if (USE_MOCK) {
     return {
@@ -716,6 +765,13 @@ export const importProductsUpsert = async (payload: ProductImportUpsertRequest):
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   return (await res.json()) as ProductImportUpsertResult;
+};
+
+export const getProductImportFormat = async (): Promise<ImportFormat> => {
+  if (USE_MOCK) return PRODUCT_IMPORT_FORMAT_MOCK;
+  const res = await fetchWithAuth('/api/v1/products/import-format', { method: 'GET' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  return toImportFormat((await res.json()) as ApiImportFormatResponse);
 };
 
 export type CustomerImportUpsertRequest = {
@@ -744,6 +800,13 @@ export const importCustomersUpsert = async (
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   return (await res.json()) as CustomerImportUpsertResult;
+};
+
+export const getCustomerImportFormat = async (): Promise<ImportFormat> => {
+  if (USE_MOCK) return CUSTOMER_IMPORT_FORMAT_MOCK;
+  const res = await fetchWithAuth('/api/v1/customers/import-format', { method: 'GET' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  return toImportFormat((await res.json()) as ApiImportFormatResponse);
 };
 
 export const listOrders = async (staleDeliveryOnly = false): Promise<OrderSummary[]> =>
