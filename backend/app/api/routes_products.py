@@ -7,9 +7,10 @@ from app.core.exception_mapping import map_integrity_error
 
 from app.core.audit import AuditAction, write_audit_log
 from app.core.codegen import generate_next_code
+from app.core.import_formats import PRODUCT_IMPORT_FORMAT
 from app.db.session import get_db
 from app.models.entities import OrderItem, PricingBasis, Product, SupplierProduct
-from app.schemas.common import ApiErrorResponse
+from app.schemas.common import ApiErrorResponse, ImportFormatResponse
 from app.schemas.product import (
     BulkOperationError,
     BulkOperationSummary,
@@ -44,6 +45,11 @@ def list_products(
         query = query.filter(Product.active.is_(True))
     rows = query.order_by(Product.id.asc()).all()
     return [ProductResponse.model_validate(r) for r in rows]
+
+
+@router.get("/import-format", response_model=ImportFormatResponse)
+def get_product_import_format() -> ImportFormatResponse:
+    return PRODUCT_IMPORT_FORMAT
 
 
 @router.get(

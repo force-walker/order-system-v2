@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 from app.core.audit import AuditAction, write_audit_log
 from app.core.codegen import generate_next_code
 from app.core.exception_mapping import map_integrity_error
+from app.core.import_formats import SUPPLIER_IMPORT_FORMAT
 from app.db.session import get_db
 from app.models.entities import Product, PurchaseResult, Supplier, SupplierAllocation, SupplierProduct
-from app.schemas.common import ApiErrorResponse
+from app.schemas.common import ApiErrorResponse, ImportFormatResponse
 from app.schemas.supplier import (
     SupplierCreateRequest,
     SupplierImportError,
@@ -49,6 +50,11 @@ def list_suppliers(
 
     rows = query.order_by(Supplier.id.asc()).offset(offset).limit(limit).all()
     return [SupplierResponse.model_validate(row) for row in rows]
+
+
+@router.get("/import-format", response_model=ImportFormatResponse)
+def get_supplier_import_format() -> ImportFormatResponse:
+    return SUPPLIER_IMPORT_FORMAT
 
 
 @router.get(
