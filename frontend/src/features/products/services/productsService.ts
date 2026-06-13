@@ -8,6 +8,7 @@ export {
   unarchiveProduct,
   deleteProduct,
   importProductsUpsert,
+  getProductImportFormat,
   type ProductImportUpsertRequest,
   type ProductImportUpsertResult,
 } from 'features/orders/services/ordersService';

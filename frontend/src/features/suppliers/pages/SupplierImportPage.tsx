@@ -2,7 +2,7 @@ import {
   MasterImportPage,
   type PreflightErrorRow,
 } from 'features/imports/components/MasterImportPage';
-import { importSuppliersUpsert } from 'features/suppliers/services/suppliersService';
+import { getSupplierImportFormat, importSuppliersUpsert } from 'features/suppliers/services/suppliersService';
 
 const SAMPLE_JSON = `[
   {
@@ -72,6 +72,7 @@ export const SupplierImportPage = () => (
     sampleJson={SAMPLE_JSON}
     sampleCsv={SAMPLE_CSV}
     importAction={importSuppliersUpsert}
+    fetchImportFormat={getSupplierImportFormat}
     normalizeItemsBeforeSubmit={normalizeItemsBeforeSubmit}
   />
 );

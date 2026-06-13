@@ -146,6 +146,61 @@ th, td {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.import-format-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.import-format-card {
+  padding: 0;
+  box-shadow: none;
+  border: 1px solid #e5e7eb;
+}
+
+.import-format-card .section-row,
+.import-format-card details,
+.import-format-card > p {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.import-format-card .section-row {
+  padding-top: 16px;
+  margin-bottom: 4px;
+}
+
+.import-format-card details:last-child {
+  padding-bottom: 16px;
+}
+
+.import-required-badge {
+  display: inline-block;
+  border-radius: 9999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.import-required-badge.required {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.import-required-badge.optional {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+@media (max-width: 960px) {
+  .import-format-grid,
+  .two-col,
+  .three-col {
+    grid-template-columns: 1fr;
+  }
+}
+
 .order-form {
   display: grid;
   gap: 16px;

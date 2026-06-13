@@ -1,5 +1,6 @@
 import { apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload } from 'shared/error';
+import type { ImportFormat } from 'features/imports/types/importFormat';
 import type {
   Supplier,
   SupplierCreateRequest,
@@ -37,6 +38,20 @@ type ApiSupplierProductMapping = {
   updated_at: string;
 };
 
+type ApiImportFormatField = {
+  name: string;
+  label: string;
+  required: boolean;
+  required_scope: 'always' | 'create' | 'never';
+  description?: string | null;
+  example?: unknown;
+};
+
+type ApiImportFormatResponse = {
+  entity: string;
+  fields: ApiImportFormatField[];
+};
+
 export type SupplierImportUpsertRequest = {
   items: Record<string, unknown>[];
 };
@@ -58,6 +73,15 @@ export type SupplierImportUpsertResult = {
 const TOKEN_STORAGE_KEY = 'osv2_access_token';
 const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
 const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
+
+const SUPPLIER_IMPORT_FORMAT_MOCK: ImportFormat = {
+  entity: 'suppliers',
+  fields: [
+    { name: 'import_key', label: 'Import Key', required: false, requiredScope: 'never', description: '更新時の照合キー', example: 'sup-001' },
+    { name: 'name', label: 'Name', required: true, requiredScope: 'create', description: '仕入先名', example: 'テスト仕入先' },
+    { name: 'active', label: 'Active', required: false, requiredScope: 'never', description: '有効フラグ', example: true },
+  ],
+};
 
 const ensureDevToken = async (): Promise<string> => {
   const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -93,6 +117,18 @@ const toSupplier = (row: ApiSupplier): Supplier => ({
   active: row.active,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+});
+
+const toImportFormat = (row: ApiImportFormatResponse): ImportFormat => ({
+  entity: row.entity,
+  fields: row.fields.map((field) => ({
+    name: field.name,
+    label: field.label,
+    required: field.required,
+    requiredScope: field.required_scope,
+    description: field.description,
+    example: field.example,
+  })),
 });
 
 export const listSuppliers = async (params: SupplierListParams): Promise<SupplierListResult> => {
@@ -301,4 +337,13 @@ export const importSuppliersUpsert = async (
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   return (await res.json()) as SupplierImportUpsertResult;
+};
+
+export const getSupplierImportFormat = async (): Promise<ImportFormat> => {
+  if ((import.meta.env.VITE_USE_MOCK ?? 'true') === 'true') return SUPPLIER_IMPORT_FORMAT_MOCK;
+  const res = await fetchWithAuth('/api/v1/suppliers/import-format', {
+    method: 'GET',
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  return toImportFormat((await res.json()) as ApiImportFormatResponse);
 };
