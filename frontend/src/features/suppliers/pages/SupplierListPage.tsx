@@ -99,6 +99,7 @@ export const SupplierListPage = () => {
             <p className="subtle">検索・アーカイブ・削除・ページング対応</p>
           </div>
           <div className="list-controls">
+            <Link to="/suppliers/import" className="order-link">Import</Link>
             <Link to="/suppliers/new" className="order-link">+ 仕入先を作成</Link>
           </div>
         </div>

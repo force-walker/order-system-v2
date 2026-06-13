@@ -37,6 +37,24 @@ type ApiSupplierProductMapping = {
   updated_at: string;
 };
 
+export type SupplierImportUpsertRequest = {
+  items: Record<string, unknown>[];
+};
+
+export type SupplierImportUpsertResult = {
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  errors: Array<{
+    index: number;
+    itemRef?: string | null;
+    code: string;
+    message: string;
+  }>;
+};
+
 const TOKEN_STORAGE_KEY = 'osv2_access_token';
 const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
 const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
@@ -273,3 +291,14 @@ export const deleteSupplier = async (supplierId: number): Promise<void> => {
 };
 
 export const deactivateSupplier = deleteSupplier;
+
+export const importSuppliersUpsert = async (
+  payload: SupplierImportUpsertRequest,
+): Promise<SupplierImportUpsertResult> => {
+  const res = await fetchWithAuth('/api/v1/suppliers/import-upsert', {
+    method: 'POST',
+    body: payload,
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  return (await res.json()) as SupplierImportUpsertResult;
+};

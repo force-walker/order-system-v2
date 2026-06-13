@@ -155,6 +155,19 @@ def test_customer_delete_in_use_is_409_and_no_ref_is_204():
     assert deleted.status_code == 204
 
 
+def test_get_customer_import_format():
+    client = _client()
+    res = client.get("/api/v1/customers/import-format")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["entity"] == "customers"
+    field_names = [field["name"] for field in body["fields"]]
+    assert field_names == ["import_key", "region", "name", "active"]
+    name_field = next(field for field in body["fields"] if field["name"] == "name")
+    assert name_field["required"] is True
+    assert name_field["required_scope"] == "create"
+
+
 def test_import_upsert_customers_create_success():
     client = _client()
     res = client.post(
