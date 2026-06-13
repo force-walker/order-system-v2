@@ -140,8 +140,6 @@ def build_invoice_pdf(doc: InvoicePdfDocument) -> bytes:
     width, height = A4
     left = 40
     right = width - 40
-    content_w = right - left
-    row_h = 18
     bottom_limit = 90
 
     def draw_header() -> float:
