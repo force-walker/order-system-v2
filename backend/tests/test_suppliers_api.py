@@ -265,6 +265,19 @@ def test_update_supplier_success_and_not_found():
     assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
 
 
+def test_get_supplier_import_format():
+    client = _client()
+    res = client.get("/api/v1/suppliers/import-format")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["entity"] == "suppliers"
+    field_names = [field["name"] for field in body["fields"]]
+    assert field_names == ["import_key", "name", "active"]
+    name_field = next(field for field in body["fields"] if field["name"] == "name")
+    assert name_field["required"] is True
+    assert name_field["required_scope"] == "create"
+
+
 def test_import_upsert_suppliers_create_success():
     client = _client()
     res = client.post(

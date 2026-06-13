@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 from app.core.audit import AuditAction, write_audit_log
 from app.core.codegen import generate_next_code
 from app.core.exception_mapping import map_integrity_error
+from app.core.import_formats import CUSTOMER_IMPORT_FORMAT
 from app.db.session import get_db
 from app.models.entities import Customer, Order
-from app.schemas.common import ApiErrorResponse
+from app.schemas.common import ApiErrorResponse, ImportFormatResponse
 from app.schemas.customer import (
     CustomerCreateRequest,
     CustomerImportError,
@@ -36,6 +37,11 @@ def list_customers(
         query = query.filter(Customer.active.is_(True))
     rows = query.order_by(Customer.id.asc()).all()
     return [CustomerResponse.model_validate(r) for r in rows]
+
+
+@router.get("/import-format", response_model=ImportFormatResponse)
+def get_customer_import_format() -> ImportFormatResponse:
+    return CUSTOMER_IMPORT_FORMAT
 
 
 @router.get(

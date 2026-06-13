@@ -15,6 +15,7 @@ def test_openapi_error_contracts_for_core_apis():
     # products
     assert "409" in _responses("/api/v1/products", "post")
     assert "422" in _responses("/api/v1/products", "post")
+    assert "200" in _responses("/api/v1/products/import-format", "get")
     assert "422" in _responses("/api/v1/products/import-upsert", "post")
     assert "404" in _responses("/api/v1/products/{product_id}/archive", "post")
     assert "404" in _responses("/api/v1/products/{product_id}/unarchive", "post")
@@ -25,6 +26,7 @@ def test_openapi_error_contracts_for_core_apis():
     # customers
     assert "409" in _responses("/api/v1/customers", "post")
     assert "422" in _responses("/api/v1/customers", "post")
+    assert "200" in _responses("/api/v1/customers/import-format", "get")
     assert "422" in _responses("/api/v1/customers/import-upsert", "post")
     assert "404" in _responses("/api/v1/customers/{customer_id}/archive", "post")
     assert "404" in _responses("/api/v1/customers/{customer_id}/unarchive", "post")
@@ -35,6 +37,7 @@ def test_openapi_error_contracts_for_core_apis():
     # suppliers
     assert "409" in _responses("/api/v1/suppliers", "post")
     assert "422" in _responses("/api/v1/suppliers", "post")
+    assert "200" in _responses("/api/v1/suppliers/import-format", "get")
     assert "422" in _responses("/api/v1/suppliers/import-upsert", "post")
     assert "404" in _responses("/api/v1/suppliers/{supplier_id}", "get")
     assert "422" in _responses("/api/v1/suppliers/{supplier_id}", "patch")
@@ -109,6 +112,10 @@ def test_openapi_error_contracts_for_core_apis():
     assert "/api/v1/invoices/draft-list" in spec["paths"]
     assert "ApiErrorResponse" in spec["components"]["schemas"]
     assert "details" in spec["components"]["schemas"]["ApiErrorDetail"]["properties"]
+    import_format_props = spec["components"]["schemas"]["ImportFormatResponse"]["properties"]
+    assert {"entity", "fields"}.issubset(import_format_props)
+    import_format_field_props = spec["components"]["schemas"]["ImportFormatField"]["properties"]
+    assert {"name", "label", "required", "required_scope", "description", "example"}.issubset(import_format_field_props)
 
     import_error_props = spec["components"]["schemas"]["ProductImportError"]["properties"]
     assert {"index", "import_key", "action", "code", "message", "product_id"}.issubset(import_error_props)
