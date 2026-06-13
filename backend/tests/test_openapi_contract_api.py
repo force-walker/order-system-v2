@@ -25,6 +25,7 @@ def test_openapi_error_contracts_for_core_apis():
     # customers
     assert "409" in _responses("/api/v1/customers", "post")
     assert "422" in _responses("/api/v1/customers", "post")
+    assert "422" in _responses("/api/v1/customers/import-upsert", "post")
     assert "404" in _responses("/api/v1/customers/{customer_id}/archive", "post")
     assert "404" in _responses("/api/v1/customers/{customer_id}/unarchive", "post")
     assert "404" in _responses("/api/v1/customers/{customer_id}", "delete")
@@ -34,6 +35,7 @@ def test_openapi_error_contracts_for_core_apis():
     # suppliers
     assert "409" in _responses("/api/v1/suppliers", "post")
     assert "422" in _responses("/api/v1/suppliers", "post")
+    assert "422" in _responses("/api/v1/suppliers/import-upsert", "post")
     assert "404" in _responses("/api/v1/suppliers/{supplier_id}", "get")
     assert "422" in _responses("/api/v1/suppliers/{supplier_id}", "patch")
     assert "404" in _responses("/api/v1/suppliers/{supplier_id}", "patch")
@@ -110,6 +112,12 @@ def test_openapi_error_contracts_for_core_apis():
 
     import_error_props = spec["components"]["schemas"]["ProductImportError"]["properties"]
     assert {"index", "import_key", "action", "code", "message", "product_id"}.issubset(import_error_props)
+
+    customer_import_error_props = spec["components"]["schemas"]["CustomerImportError"]["properties"]
+    assert {"index", "import_key", "action", "code", "message", "customer_id"}.issubset(customer_import_error_props)
+
+    supplier_import_error_props = spec["components"]["schemas"]["SupplierImportError"]["properties"]
+    assert {"index", "import_key", "action", "code", "message", "supplier_id"}.issubset(supplier_import_error_props)
 
     purchase_result_props = spec["components"]["schemas"]["PurchaseResultResponse"]["properties"]
     assert {"supplier_id", "supplier_name", "invoice_qty", "invoice_uom", "received_qty", "order_uom", "unit_cost"}.issubset(purchase_result_props)

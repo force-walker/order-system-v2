@@ -155,6 +155,100 @@ def test_customer_delete_in_use_is_409_and_no_ref_is_204():
     assert deleted.status_code == 204
 
 
+def test_import_upsert_customers_create_success():
+    client = _client()
+    res = client.post(
+        "/api/v1/customers/import-upsert",
+        json={"items": [{"import_key": "CUST-IMP-001", "region": "kanto", "name": "Imported Customer", "active": True}]},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["total"] == 1
+    assert body["created"] == 1
+    assert body["updated"] == 0
+    assert body["failed"] == 0
+
+
+def test_import_upsert_customers_update_success():
+    client = _client()
+    created = client.post(
+        "/api/v1/customers/import-upsert",
+        json={"items": [{"import_key": "CUST-IMP-UPD-001", "region": "kanto", "name": "Before"}]},
+    )
+    assert created.status_code == 200
+
+    updated = client.post(
+        "/api/v1/customers/import-upsert",
+        json={"items": [{"import_key": "CUST-IMP-UPD-001", "region": "kansai", "name": "After"}]},
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["created"] == 0
+    assert body["updated"] == 1
+
+
+def test_import_upsert_customers_duplicate_import_key_conflict_in_payload():
+    client = _client()
+    res = client.post(
+        "/api/v1/customers/import-upsert",
+        json={
+            "items": [
+                {"import_key": "CUST-IMP-DUP-001", "name": "A"},
+                {"import_key": "CUST-IMP-DUP-001", "name": "B"},
+            ]
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["failed"] == 1
+    assert res.json()["errors"][0]["code"] == "DUPLICATE_IMPORT_KEY_IN_PAYLOAD"
+
+
+def test_import_upsert_customers_create_required_missing_is_failed():
+    client = _client()
+    res = client.post(
+        "/api/v1/customers/import-upsert",
+        json={"items": [{"import_key": "CUST-IMP-MISS-001", "region": "kanto"}]},
+    )
+    assert res.status_code == 200
+    assert res.json()["created"] == 0
+    assert res.json()["failed"] == 1
+    assert res.json()["errors"][0]["code"] == "REQUIRED_FIELDS_MISSING"
+
+
+def test_import_upsert_customers_empty_update_is_skipped():
+    client = _client()
+    created = client.post(
+        "/api/v1/customers/import-upsert",
+        json={"items": [{"import_key": "CUST-IMP-SKIP-001", "region": "kanto", "name": "Skip Target"}]},
+    )
+    assert created.status_code == 200
+
+    skipped = client.post(
+        "/api/v1/customers/import-upsert",
+        json={"items": [{"import_key": "CUST-IMP-SKIP-001", "region": "", "name": ""}]},
+    )
+    assert skipped.status_code == 200
+    assert skipped.json()["skipped"] == 1
+
+
+def test_import_upsert_customers_partial_failure_keeps_other_rows():
+    client = _client()
+    res = client.post(
+        "/api/v1/customers/import-upsert",
+        json={
+            "items": [
+                {"import_key": "CUST-IMP-PART-001", "name": "Kept Customer"},
+                {"import_key": "CUST-IMP-PART-002"},
+            ]
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["created"] == 1
+    assert body["failed"] == 1
+    assert body["errors"][0]["code"] == "REQUIRED_FIELDS_MISSING"
+
+
 def test_create_order_success_and_list():
     cid = _seed_customer("CUST-ORDER")
     payload = {

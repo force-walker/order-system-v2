@@ -265,6 +265,100 @@ def test_update_supplier_success_and_not_found():
     assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
 
 
+def test_import_upsert_suppliers_create_success():
+    client = _client()
+    res = client.post(
+        "/api/v1/suppliers/import-upsert",
+        json={"items": [{"import_key": "SUP-IMP-001", "name": "Imported Supplier", "active": True}]},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["total"] == 1
+    assert body["created"] == 1
+    assert body["updated"] == 0
+    assert body["failed"] == 0
+
+
+def test_import_upsert_suppliers_update_success():
+    client = _client()
+    created = client.post(
+        "/api/v1/suppliers/import-upsert",
+        json={"items": [{"import_key": "SUP-IMP-UPD-001", "name": "Before"}]},
+    )
+    assert created.status_code == 200
+
+    updated = client.post(
+        "/api/v1/suppliers/import-upsert",
+        json={"items": [{"import_key": "SUP-IMP-UPD-001", "name": "After", "active": False}]},
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["created"] == 0
+    assert body["updated"] == 1
+
+
+def test_import_upsert_suppliers_duplicate_import_key_conflict_in_payload():
+    client = _client()
+    res = client.post(
+        "/api/v1/suppliers/import-upsert",
+        json={
+            "items": [
+                {"import_key": "SUP-IMP-DUP-001", "name": "A"},
+                {"import_key": "SUP-IMP-DUP-001", "name": "B"},
+            ]
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["failed"] == 1
+    assert res.json()["errors"][0]["code"] == "DUPLICATE_IMPORT_KEY_IN_PAYLOAD"
+
+
+def test_import_upsert_suppliers_create_required_missing_is_failed():
+    client = _client()
+    res = client.post(
+        "/api/v1/suppliers/import-upsert",
+        json={"items": [{"import_key": "SUP-IMP-MISS-001"}]},
+    )
+    assert res.status_code == 200
+    assert res.json()["created"] == 0
+    assert res.json()["failed"] == 1
+    assert res.json()["errors"][0]["code"] == "REQUIRED_FIELDS_MISSING"
+
+
+def test_import_upsert_suppliers_empty_update_is_skipped():
+    client = _client()
+    created = client.post(
+        "/api/v1/suppliers/import-upsert",
+        json={"items": [{"import_key": "SUP-IMP-SKIP-001", "name": "Skip Target", "active": True}]},
+    )
+    assert created.status_code == 200
+
+    skipped = client.post(
+        "/api/v1/suppliers/import-upsert",
+        json={"items": [{"import_key": "SUP-IMP-SKIP-001", "name": "", "active": None}]},
+    )
+    assert skipped.status_code == 200
+    assert skipped.json()["skipped"] == 1
+
+
+def test_import_upsert_suppliers_partial_failure_keeps_other_rows():
+    client = _client()
+    res = client.post(
+        "/api/v1/suppliers/import-upsert",
+        json={
+            "items": [
+                {"import_key": "SUP-IMP-PART-001", "name": "Kept Supplier"},
+                {"import_key": "SUP-IMP-PART-002"},
+            ]
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["created"] == 1
+    assert body["failed"] == 1
+    assert body["errors"][0]["code"] == "REQUIRED_FIELDS_MISSING"
+
+
 def test_update_supplier_validation_error_is_422():
     supplier_id = _seed_supplier("SUP-UPD-422")
     client = _client()
