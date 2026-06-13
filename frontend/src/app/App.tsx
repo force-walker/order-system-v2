@@ -21,10 +21,12 @@ import { CustomerListPage } from 'features/customers/pages/CustomerListPage';
 import { CustomerDetailPage } from 'features/customers/pages/CustomerDetailPage';
 import { CustomerCreatePage } from 'features/customers/pages/CustomerCreatePage';
 import { CustomerEditPage } from 'features/customers/pages/CustomerEditPage';
+import { CustomerImportPage } from 'features/customers/pages/CustomerImportPage';
 import { SupplierListPage } from 'features/suppliers/pages/SupplierListPage';
 import { SupplierCreatePage } from 'features/suppliers/pages/SupplierCreatePage';
 import { SupplierEditPage } from 'features/suppliers/pages/SupplierEditPage';
 import { SupplierDetailPage } from 'features/suppliers/pages/SupplierDetailPage';
+import { SupplierImportPage } from 'features/suppliers/pages/SupplierImportPage';
 
 export const App = () => {
   useEffect(() => {
@@ -62,10 +64,12 @@ export const App = () => {
         <Route path="/products/:productId/edit" element={<ProductEditPage />} />
         <Route path="/customers" element={<CustomerListPage />} />
         <Route path="/customers/new" element={<CustomerCreatePage />} />
+        <Route path="/customers/import" element={<CustomerImportPage />} />
         <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
         <Route path="/customers/:customerId/edit" element={<CustomerEditPage />} />
         <Route path="/suppliers" element={<SupplierListPage />} />
         <Route path="/suppliers/new" element={<SupplierCreatePage />} />
+        <Route path="/suppliers/import" element={<SupplierImportPage />} />
         <Route path="/suppliers/:supplierId" element={<SupplierDetailPage />} />
         <Route path="/suppliers/:supplierId/edit" element={<SupplierEditPage />} />
       </Route>

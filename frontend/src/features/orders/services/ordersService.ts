@@ -718,6 +718,34 @@ export const importProductsUpsert = async (payload: ProductImportUpsertRequest):
   return (await res.json()) as ProductImportUpsertResult;
 };
 
+export type CustomerImportUpsertRequest = {
+  items: Record<string, unknown>[];
+};
+
+export type CustomerImportUpsertResult = ProductImportUpsertResult;
+
+export const importCustomersUpsert = async (
+  payload: CustomerImportUpsertRequest,
+): Promise<CustomerImportUpsertResult> => {
+  if (USE_MOCK) {
+    return {
+      total: payload.items.length,
+      created: payload.items.length,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+    };
+  }
+
+  const res = await fetchWithAuth('/api/v1/customers/import-upsert', {
+    method: 'POST',
+    body: payload,
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  return (await res.json()) as CustomerImportUpsertResult;
+};
+
 export const listOrders = async (staleDeliveryOnly = false): Promise<OrderSummary[]> =>
   (USE_MOCK ? listOrdersMock(staleDeliveryOnly) : listOrdersApi(staleDeliveryOnly));
 
