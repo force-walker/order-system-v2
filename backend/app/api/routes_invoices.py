@@ -1,9 +1,11 @@
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
+from app.core.invoice_pdf import InvoicePdfDocument, InvoicePdfLine, build_invoice_pdf
 from app.db.session import get_db
 from app.models.entities import Customer, Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, PricingBasis, Product, PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
@@ -105,6 +107,12 @@ def _recalc_invoice_totals(db: Session, invoice: Invoice) -> None:
     invoice.subtotal = float(_amount(subtotal))
     invoice.tax_total = float(_amount(tax_total))
     invoice.grand_total = float(_amount(subtotal + tax_total))
+
+
+def _payment_terms_label(invoice: Invoice) -> str:
+    if invoice.due_date is None:
+        return "Not specified"
+    return f"Due on {invoice.due_date.strftime('%m/%d/%Y')}"
 
 
 @router.post(
@@ -326,6 +334,60 @@ def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> Invoic
             for i in items
         ],
     )
+
+
+@router.get(
+    "/{invoice_id}/pdf",
+    responses={
+        200: {"content": {"application/pdf": {}}},
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def get_invoice_pdf(invoice_id: int, db: Session = Depends(get_db)) -> Response:
+    invoice = _get_invoice_or_404(db, invoice_id)
+    customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
+    if customer is None:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+
+    rows = (
+        db.query(InvoiceItem, OrderItem, Product, Order)
+        .join(OrderItem, OrderItem.id == InvoiceItem.order_item_id)
+        .join(Product, Product.id == OrderItem.product_id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(InvoiceItem.invoice_id == invoice_id)
+        .order_by(InvoiceItem.id.asc())
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_ITEMS_REQUIRED", "message": "invoice must have at least one item"})
+
+    customer_address_lines = [line for line in [customer.region] if line]
+    doc = InvoicePdfDocument(
+        invoice_no=invoice.invoice_no,
+        invoice_date=invoice.invoice_date,
+        due_date=invoice.due_date,
+        customer_name=customer.name,
+        customer_address_lines=customer_address_lines,
+        untaxed_amount=float(invoice.subtotal),
+        total=float(invoice.grand_total),
+        tax_total=float(invoice.tax_total),
+        payment_terms=_payment_terms_label(invoice),
+        payment_communication=invoice.invoice_no,
+        lines=[
+            InvoicePdfLine(
+                description=product.name,
+                source=order.order_no,
+                quantity=float(item.billable_qty),
+                unit_price=float(item.sales_unit_price),
+                amount=float(item.line_amount),
+            )
+            for item, _order_item, product, order in rows
+        ],
+    )
+    pdf_bytes = build_invoice_pdf(doc)
+    headers = {"Content-Disposition": f'inline; filename="{invoice.invoice_no}.pdf"'}
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
 @router.patch(

@@ -154,6 +154,36 @@ def _seed_purchase_result_for_order(order_id: int, purchased_qty: float = 2, uni
     return rid
 
 
+def _add_extra_order_items(order_id: int, count: int) -> None:
+    db = TestingSessionLocal()
+    for idx in range(count):
+        product = Product(
+            sku=f"SKU-INV-PDF-{datetime.now(UTC).timestamp()}-{idx}",
+            name=f"Invoice PDF Product {idx}",
+            order_uom="count",
+            purchase_uom="count",
+            invoice_uom="count",
+            is_catch_weight=False,
+            weight_capture_required=False,
+            pricing_basis_default=PricingBasis.uom_count,
+            active=True,
+        )
+        db.add(product)
+        db.flush()
+        db.add(
+            OrderItem(
+                order_id=order_id,
+                product_id=product.id,
+                ordered_qty=idx + 1,
+                pricing_basis=PricingBasis.uom_count,
+                unit_price_uom_count=100 + idx,
+                unit_price_uom_kg=None,
+            )
+        )
+    db.commit()
+    db.close()
+
+
 def test_create_invoice_invalid_date_range_is_422():
     order_id = _seed_order()
     client = _client()
@@ -303,6 +333,58 @@ def test_list_invoice_items_and_invoice_filters():
     filtered_by_order = client.get(f"/api/v1/invoices?order_id={order_id}")
     assert filtered_by_order.status_code == 200
     assert any(row["id"] == invoice_id for row in filtered_by_order.json())
+
+
+def test_get_invoice_pdf_success_and_not_found():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+
+    gen = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-PDF-001", "order_id": order_id, "invoice_date": str(date.today()), "due_date": str(date.today())},
+    )
+    assert gen.status_code == 201
+    invoice_id = gen.json()["id"]
+
+    pdf_res = client.get(f"/api/v1/invoices/{invoice_id}/pdf")
+    assert pdf_res.status_code == 200
+    assert pdf_res.headers["content-type"].startswith("application/pdf")
+    assert "INV-PDF-001.pdf" in pdf_res.headers.get("content-disposition", "")
+    assert len(pdf_res.content) > 1000
+
+    nf = client.get("/api/v1/invoices/999999/pdf")
+    assert nf.status_code == 404
+    assert nf.json()["detail"]["code"] == "INVOICE_NOT_FOUND"
+
+
+def test_get_invoice_pdf_without_items_is_409():
+    order_id = _seed_order(with_items=False)
+    client = _client()
+    created = client.post(
+        "/api/v1/invoices",
+        json={"invoice_no": "INV-PDF-NOITEM", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    assert created.status_code == 201
+
+    res = client.get(f"/api/v1/invoices/{created.json()['id']}/pdf")
+    assert res.status_code == 409
+    assert res.json()["detail"]["code"] == "INVOICE_ITEMS_REQUIRED"
+
+
+def test_get_invoice_pdf_multi_page():
+    order_id = _seed_order(with_items=True)
+    _add_extra_order_items(order_id, 40)
+    client = _client()
+    gen = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-PDF-MULTI", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    assert gen.status_code == 201
+
+    pdf_res = client.get(f"/api/v1/invoices/{gen.json()['id']}/pdf")
+    assert pdf_res.status_code == 200
+    assert pdf_res.headers["content-type"].startswith("application/pdf")
+    assert pdf_res.content.count(b"/Type /Page") >= 2
 
 
 def test_generate_draft_from_purchase_results_and_finalize_separation():
