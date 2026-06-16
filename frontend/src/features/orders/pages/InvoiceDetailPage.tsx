@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { getInvoiceDetailView, listInvoiceSummaries } from 'features/orders/services/invoiceService';
+import { PdfExportButton } from 'components/common/PdfExportButton';
+import { generateInvoicePdf, getInvoiceDetailView, listInvoiceSummaries } from 'features/orders/services/invoiceService';
 import type { InvoiceDetailView, InvoiceSummaryRow } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
+import { openPdfBlob } from 'shared/pdf';
 
 const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 
@@ -13,6 +15,8 @@ export const InvoiceDetailPage = () => {
   const [error, setError] = useState('');
   const [data, setData] = useState<InvoiceDetailView | null>(null);
   const [summaries, setSummaries] = useState<InvoiceSummaryRow[]>([]);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [pdfError, setPdfError] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -34,6 +38,20 @@ export const InvoiceDetailPage = () => {
     };
     void load();
   }, [invoiceId]);
+
+  const onGeneratePdf = async () => {
+    if (!data) return;
+    setPdfGenerating(true);
+    setPdfError('');
+    try {
+      const blob = await generateInvoicePdf(data.invoiceId);
+      openPdfBlob(blob);
+    } catch (e) {
+      setPdfError(toActionableMessage(e, '請求書PDFの生成に失敗しました。'));
+    } finally {
+      setPdfGenerating(false);
+    }
+  };
 
   const nav = useMemo(() => {
     if (!data) return { prevId: null as number | null, nextId: null as number | null };
@@ -57,9 +75,18 @@ export const InvoiceDetailPage = () => {
           <div>
             <h2>請求書詳細 #{data.invoiceNo}</h2>
             <p className="subtle">ステータス: {data.status}</p>
+            {pdfError ? <p className="field-error">{pdfError}</p> : null}
           </div>
           <div style={{ display: 'grid', gap: 6, justifyItems: 'end' }}>
             <Link to="/invoices" className="order-link">← 請求書一覧へ</Link>
+            <PdfExportButton
+              busy={pdfGenerating}
+              idleLabel="請求書PDF"
+              busyLabel="ダウンロード中..."
+              onClick={() => {
+                void onGeneratePdf();
+              }}
+            />
             <div style={{ display: 'flex', gap: 14 }}>
               {nav.nextId ? (
                 <Link to={`/invoices/${nav.nextId}`} className="order-link">次の請求書詳細へジャンプ</Link>
