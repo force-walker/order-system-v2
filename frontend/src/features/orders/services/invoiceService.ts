@@ -46,6 +46,7 @@ type ApiInvoiceDraftListRow = {
   auto_price_error?: string | null;
   line_amount: number;
   gross_margin_pct: number | null;
+  gross_margin_unavailable: boolean;
 };
 
 type ApiInvoiceReportLine = {
@@ -225,6 +226,7 @@ export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]>
       autoPriceError: r.auto_price_error ?? undefined,
       lineAmount: r.line_amount,
       grossMarginPct: r.gross_margin_pct ?? undefined,
+      grossMarginUnavailable: r.gross_margin_unavailable,
       deliveryDate: s?.deliveryDate,
       status: s?.status,
     };

@@ -111,6 +111,7 @@ export type ProductDetail = {
   orderUom: string;
   purchaseUom: string;
   invoiceUom: string;
+  freightWeight?: number;
   pricingBasisDefault: 'uom_count' | 'uom_kg';
   isCatchWeight: boolean;
   weightCaptureRequired: boolean;
@@ -122,6 +123,7 @@ export type ProductCreateRequest = {
   orderUom: string;
   purchaseUom: string;
   invoiceUom: string;
+  freightWeight?: number;
   pricingBasisDefault: 'uom_count' | 'uom_kg';
   isCatchWeight: boolean;
   weightCaptureRequired: boolean;
@@ -132,6 +134,7 @@ export type ProductUpdateRequest = {
   orderUom?: string;
   purchaseUom?: string;
   invoiceUom?: string;
+  freightWeight?: number;
   isCatchWeight?: boolean;
   weightCaptureRequired?: boolean;
   active?: boolean;
@@ -242,6 +245,7 @@ export type InvoiceDraftListRow = {
   autoPriceError?: string;
   lineAmount: number;
   grossMarginPct?: number;
+  grossMarginUnavailable?: boolean;
   deliveryDate?: string;
   status?: InvoiceStatus;
 };

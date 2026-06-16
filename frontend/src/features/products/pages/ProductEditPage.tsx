@@ -26,6 +26,7 @@ export const ProductEditPage = () => {
     orderUom: string;
     purchaseUom: string;
     invoiceUom: string;
+    freightWeight?: number;
     pricingBasisDefault: 'uom_count' | 'uom_kg';
     isCatchWeight: boolean;
     weightCaptureRequired: boolean;
@@ -35,6 +36,7 @@ export const ProductEditPage = () => {
       orderUom: payload.orderUom,
       purchaseUom: payload.purchaseUom,
       invoiceUom: payload.invoiceUom,
+      freightWeight: payload.freightWeight,
       isCatchWeight: payload.isCatchWeight,
       weightCaptureRequired: payload.weightCaptureRequired,
     });
