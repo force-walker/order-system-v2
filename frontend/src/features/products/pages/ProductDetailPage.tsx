@@ -58,6 +58,7 @@ export const ProductDetailPage = () => {
           <div><dt>注文単位</dt><dd>{product.orderUom}</dd></div>
           <div><dt>仕入単位</dt><dd>{product.purchaseUom}</dd></div>
           <div><dt>請求単位</dt><dd>{product.invoiceUom}</dd></div>
+          <div><dt>運賃重量</dt><dd>{product.freightWeight ?? '-'}</dd></div>
           <div><dt>課金基準</dt><dd>{product.pricingBasisDefault}</dd></div>
           <div><dt>有効</dt><dd>{product.active ? '有効' : '無効'}</dd></div>
         </dl>

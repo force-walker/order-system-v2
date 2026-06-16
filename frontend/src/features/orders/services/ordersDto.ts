@@ -38,6 +38,7 @@ export const toApiProductCreate = (payload: ProductCreateRequest): ApiProductCre
   order_uom: payload.orderUom,
   purchase_uom: payload.purchaseUom,
   invoice_uom: payload.invoiceUom,
+  freight_weight: payload.freightWeight,
   is_catch_weight: payload.isCatchWeight,
   weight_capture_required: payload.weightCaptureRequired,
   pricing_basis_default: payload.pricingBasisDefault,
@@ -48,10 +49,11 @@ export const toApiProductUpdate = (payload: ProductUpdateRequest): ApiProductUpd
   order_uom: payload.orderUom,
   purchase_uom: payload.purchaseUom,
   invoice_uom: payload.invoiceUom,
+  freight_weight: payload.freightWeight,
   is_catch_weight: payload.isCatchWeight,
   weight_capture_required: payload.weightCaptureRequired,
   active: payload.active,
-});
+} as unknown as ApiProductUpdateRequest);
 
 export const toApiOrderCreateHeader = (
   customerId: number,
@@ -111,6 +113,7 @@ export const toProductDetail = (row: ApiProductResponse): ProductDetail => ({
   orderUom: row.order_uom,
   purchaseUom: row.purchase_uom,
   invoiceUom: row.invoice_uom,
+  freightWeight: (row as unknown as { freight_weight?: number | null }).freight_weight ?? undefined,
   pricingBasisDefault: row.pricing_basis_default,
   isCatchWeight: row.is_catch_weight,
   weightCaptureRequired: row.weight_capture_required,

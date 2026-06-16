@@ -5,7 +5,7 @@ import { listInvoiceDraftListRows, updateInvoiceDraftItem } from 'features/order
 import type { InvoiceDraftListRow, InvoiceStatus } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 
-const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
+const hkdCurrency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'HKD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const formatGrossMargin = (value?: number) => {
   if (value == null || Number.isNaN(value)) return '-';
@@ -96,32 +96,22 @@ export const InvoiceDraftPage = () => {
                   <th style={{ textAlign: 'right' }}>請求数量</th>
                   <th>請求単位</th>
                   <th style={{ textAlign: 'right' }}>請求単価</th>
-                  <th style={{ textAlign: 'right' }}>仕入単価</th>
+                  <th style={{ textAlign: 'right' }}>仕入単価(HKD)</th>
                   <th style={{ textAlign: 'right' }}>請求金額</th>
-                  <th style={{ textAlign: 'right' }}>粗利％</th>
+                  <th style={{ textAlign: 'right' }}>粗利%</th>
+                  <th style={{ textAlign: 'right' }}>TAX(0%)</th>
                   <th>詳細</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="subtle">条件に合う請求ドラフトがありません。</td>
+                    <td colSpan={10} className="subtle">条件に合う請求ドラフトがありません。</td>
                   </tr>
                 ) : filtered.map((row) => {
                   const editedPriceRaw = editedUnitPriceByItemId[row.invoiceItemId];
                   const raw = editedPriceRaw ?? String(row.salesUnitPrice);
                   const hasError = Boolean(unitPriceErrorByItemId[row.invoiceItemId]);
-                  const isHalfWidthNumeric = /^\d+(\.\d+)?$/.test(raw.trim());
-                  const editedPrice =
-                    raw.trim() !== '' && isHalfWidthNumeric
-                      ? Number(raw)
-                      : row.salesUnitPrice;
-                  const calculatedAmount = editedPrice * row.billableQty;
-                  const purchaseUnitPrice = row.unitCostBasis;
-                  const calculatedMargin =
-                    purchaseUnitPrice != null && editedPrice > 0
-                      ? ((editedPrice - (purchaseUnitPrice / 20 + 50)) / editedPrice) * 100
-                      : undefined;
 
                   return (
                     <tr key={row.invoiceItemId}>
@@ -175,14 +165,12 @@ export const InvoiceDraftPage = () => {
                           style={{ width: 110, textAlign: 'right', borderColor: hasError ? '#dc2626' : undefined }}
                         />
                         {hasError ? <div className="field-error">{unitPriceErrorByItemId[row.invoiceItemId]}</div> : null}
-                        <div className="subtle" style={{ fontSize: 12 }}>
-                          自動計算値（仕入単価ベース）: {(row.unitCostBasis != null) ? `${Math.round((((row.unitCostBasis / 20 + 50) / 0.75) * 100)) / 100}` : '計算不可'}
-                        </div>
                         {row.autoPriceError ? <div className="field-error">{row.autoPriceError}</div> : null}
                       </td>
-                      <td style={{ textAlign: 'right' }}>{row.unitCostBasis != null ? currency.format(row.unitCostBasis) : '-'}</td>
-                      <td style={{ textAlign: 'right' }}>{currency.format(calculatedAmount)}</td>
-                      <td style={{ textAlign: 'right' }}>{formatGrossMargin(calculatedMargin)}</td>
+                      <td style={{ textAlign: 'right' }}>{row.unitCostBasis != null ? hkdCurrency.format(row.unitCostBasis) : '-'}</td>
+                      <td style={{ textAlign: 'right' }}>{hkdCurrency.format(row.lineAmount)}</td>
+                      <td style={{ textAlign: 'right' }}>{row.grossMarginUnavailable ? '-' : formatGrossMargin(row.grossMarginPct)}</td>
+                      <td style={{ textAlign: 'right' }}>0%</td>
                       <td><Link to={`/invoices/drafts/${row.invoiceId}`}>詳細</Link></td>
                     </tr>
                   );

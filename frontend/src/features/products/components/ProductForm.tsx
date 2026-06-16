@@ -16,6 +16,7 @@ const toInitial = (initial?: ProductDetail): FormState => ({
   orderUom: initial?.orderUom ?? 'kg',
   purchaseUom: initial?.purchaseUom ?? 'kg',
   invoiceUom: initial?.invoiceUom ?? 'kg',
+  freightWeight: initial?.freightWeight ?? 0,
   pricingBasisDefault: initial?.pricingBasisDefault ?? 'uom_count',
   isCatchWeight: initial?.isCatchWeight ?? false,
   weightCaptureRequired: initial?.weightCaptureRequired ?? false,
@@ -45,6 +46,7 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
         orderUom: form.orderUom.trim(),
         purchaseUom: form.purchaseUom.trim(),
         invoiceUom: form.invoiceUom.trim(),
+        freightWeight: form.freightWeight,
         pricingBasisDefault: form.pricingBasisDefault,
         isCatchWeight: form.isCatchWeight,
         weightCaptureRequired: form.weightCaptureRequired,
@@ -81,6 +83,17 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
       <label>
         請求単位
         <input value={form.invoiceUom} onChange={(e) => setForm((p) => ({ ...p, invoiceUom: e.target.value }))} />
+      </label>
+      <label>
+        運賃重量
+        <input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.001"
+          value={form.freightWeight}
+          onChange={(e) => setForm((p) => ({ ...p, freightWeight: Number(e.target.value) }))}
+        />
       </label>
       <label>
         課金基準

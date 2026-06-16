@@ -11,6 +11,7 @@ const SAMPLE_JSON = `[
     "order_uom": "count",
     "purchase_uom": "count",
     "invoice_uom": "count",
+    "freight_weight": 0.5,
     "pricing_basis_default": "uom_count"
   }
 ]`;
@@ -28,6 +29,7 @@ const DECIMAL_NULLABLE_FIELDS = [
   'inventory_price',
   'list_price',
   'customs_reference_price',
+  'freight_weight',
 ] as const;
 const INTEGER_NULLABLE_FIELDS = ['pack_size'] as const;
 const DROP_BEFORE_SEND_FIELDS = ['created_at', 'updated_at'] as const;
