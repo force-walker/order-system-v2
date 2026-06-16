@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -21,6 +22,7 @@ from app.models.entities import (
     PurchaseResult,
     PurchaseResultStatus,
     SupplierAllocation,
+    SystemSettings,
 )
 
 
@@ -45,6 +47,33 @@ def override_get_db():
 def _client() -> TestClient:
     app.dependency_overrides[get_db] = override_get_db
     return TestClient(app)
+
+
+def _seed_system_settings(
+    *,
+    exchange_rate: str = "1.0000",
+    jp_gross_margin_pct: str = "25.000",
+    hk_gross_margin_pct: str = "25.000",
+    freight_unit_price: str = "0.00",
+) -> None:
+    db = TestingSessionLocal()
+    row = db.query(SystemSettings).filter(SystemSettings.id == 1).first()
+    if row is None:
+        row = SystemSettings(
+            id=1,
+            exchange_rate=Decimal(exchange_rate),
+            jp_gross_margin_pct=Decimal(jp_gross_margin_pct),
+            hk_gross_margin_pct=Decimal(hk_gross_margin_pct),
+            freight_unit_price=Decimal(freight_unit_price),
+        )
+        db.add(row)
+    else:
+        row.exchange_rate = Decimal(exchange_rate)
+        row.jp_gross_margin_pct = Decimal(jp_gross_margin_pct)
+        row.hk_gross_margin_pct = Decimal(hk_gross_margin_pct)
+        row.freight_unit_price = Decimal(freight_unit_price)
+    db.commit()
+    db.close()
 
 
 def _seed_order(with_items: bool = False, include_kg_without_weight: bool = False) -> int:
@@ -72,6 +101,7 @@ def _seed_order(with_items: bool = False, include_kg_without_weight: bool = Fals
             purchase_uom="count",
             invoice_uom="count",
             tax_rate_code="10",
+            freight_weight=Decimal("0.500"),
             is_catch_weight=False,
             weight_capture_required=False,
             pricing_basis_default=PricingBasis.uom_count,
@@ -389,6 +419,7 @@ def test_get_invoice_pdf_multi_page():
 
 def test_generate_draft_from_purchase_results_and_finalize_separation():
     order_id = _seed_order(with_items=True)
+    _seed_system_settings()
     purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
     client = _client()
 
@@ -411,6 +442,10 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
     assert len(items.json()) >= 1
     # (1000/20 + 50) / 0.75 = 133.333... => 133.33
     assert float(items.json()[0]["sales_unit_price"]) == 133.33
+    assert float(items.json()[0]["unit_cost_basis"]) == 40.0
+    assert float(items.json()[0]["gross_margin_pct"]) == 70.0
+    assert items.json()[0]["gross_margin_unavailable"] is False
+    assert float(items.json()[0]["tax_amount"]) == 0.0
 
     fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert fin.status_code == 200
@@ -419,6 +454,7 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
 
 def test_draft_generation_price_auto_calc_missing_cost_sets_zero_and_error():
     order_id = _seed_order(with_items=True)
+    _seed_system_settings()
     purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
     client = _client()
 
@@ -442,6 +478,7 @@ def test_draft_generation_price_auto_calc_missing_cost_sets_zero_and_error():
 
 def test_invoice_draft_list_margin_formula_and_edge_cases():
     order_id = _seed_order(with_items=True)
+    _seed_system_settings()
     purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
     client = _client()
 
@@ -462,9 +499,11 @@ def test_invoice_draft_list_margin_formula_and_edge_cases():
     assert listed.status_code == 200
     row = next(r for r in listed.json() if r["invoice_id"] == invoice_id)
 
-    # sales=133.33, baseline=(1000/20+50)=100.00 => margin=(133.33-100)/133.33=0.24999... => 25.00%
+    # HKD cost = 1000 / 25 / 1 + 0 = 40.00
+    # margin = (133.33 - 40.00) / 133.33 * 100 => 70.00%
+    assert float(row["unit_cost_basis"]) == 40.0
     assert row["gross_margin_pct"] is not None
-    assert float(row["gross_margin_pct"]) == 25.0
+    assert float(row["gross_margin_pct"]) == 70.0
     assert row["gross_margin_unavailable"] is False
 
     # 請求単価=0 は計算不可
@@ -483,6 +522,7 @@ def test_invoice_draft_list_margin_formula_and_edge_cases():
 
 def test_invoice_draft_list_rows_include_required_columns():
     order_id = _seed_order(with_items=True)
+    _seed_system_settings()
     purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
     client = _client()
 
@@ -516,8 +556,90 @@ def test_invoice_draft_list_rows_include_required_columns():
     }.issubset(row.keys())
 
 
+def test_draft_generation_uses_system_settings_and_freight_weight():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings(exchange_rate="2.0000", jp_gross_margin_pct="25.000", freight_unit_price="12.00")
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-HKD-001",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert draft.status_code == 201
+
+    items = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items")
+    row = items.json()[0]
+    # 1000 / 25 / 2 = 20.00, freight = 12 * 0.5 * 0.5 = 3.00, total = 23.00
+    assert float(row["unit_cost_basis"]) == 23.0
+    assert float(row["gross_margin_pct"]) == 82.75
+
+
+def test_draft_generation_without_freight_weight_uses_zero_freight_component():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings(exchange_rate="2.0000", jp_gross_margin_pct="25.000", freight_unit_price="12.00")
+    db = TestingSessionLocal()
+    product = db.query(Product).filter(Product.name == "Count product").order_by(Product.id.desc()).first()
+    assert product is not None
+    product.freight_weight = None
+    db.commit()
+    db.close()
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-HKD-002",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert draft.status_code == 201
+
+    items = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items")
+    assert float(items.json()[0]["unit_cost_basis"]) == 20.0
+
+
+def test_draft_generation_rounds_hkd_cost_and_margin_half_up():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings(exchange_rate="2.0000", jp_gross_margin_pct="25.000", freight_unit_price="10.00")
+    db = TestingSessionLocal()
+    product = db.query(Product).filter(Product.name == "Count product").order_by(Product.id.desc()).first()
+    assert product is not None
+    product.freight_weight = Decimal("0.333")
+    db.commit()
+    db.close()
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-HKD-003",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert draft.status_code == 201
+
+    items = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items")
+    row = items.json()[0]
+    # 20 + (10 * 0.333 * 0.333 = 1.10889) => 21.11 after half-up rounding
+    assert float(row["unit_cost_basis"]) == 21.11
+    assert float(row["gross_margin_pct"]) == 84.17
+
+
 def test_draft_generation_from_purchase_results_is_idempotent():
     order_id = _seed_order(with_items=True)
+    _seed_system_settings()
     purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
     client = _client()
 
@@ -566,7 +688,7 @@ def test_update_invoice_draft_item_recalculates_and_finalized_rejects():
     )
     assert patch.status_code == 200
     assert float(patch.json()["line_amount"]) == 617.25
-    assert float(patch.json()["tax_amount"]) == 61.72
+    assert float(patch.json()["tax_amount"]) == 0.0
 
     report = client.get(f"/api/v1/invoices/{invoice_id}/report")
     assert report.status_code == 200

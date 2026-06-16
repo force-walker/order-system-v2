@@ -131,6 +131,7 @@ def create_product(payload: ProductCreateRequest, db: Session = Depends(get_db))
         name_en=payload.name_en,
         name_zh_hk=payload.name_zh_hk,
         customs_reference_price=payload.customs_reference_price,
+        freight_weight=payload.freight_weight,
         customs_origin_text=payload.customs_origin_text,
         remarks=payload.remarks,
         chayafuda_flag=payload.chayafuda_flag,
@@ -239,6 +240,7 @@ def bulk_create_products(payload: ProductBulkCreateRequest, db: Session = Depend
             order_uom=item.order_uom,
             purchase_uom=item.purchase_uom,
             invoice_uom=item.invoice_uom,
+            freight_weight=item.freight_weight,
             is_catch_weight=item.is_catch_weight,
             weight_capture_required=item.weight_capture_required,
             pricing_basis_default=item.pricing_basis_default,
@@ -292,6 +294,7 @@ def bulk_upsert_products(payload: ProductBulkUpsertRequest, db: Session = Depend
                 order_uom=item.order_uom,
                 purchase_uom=item.purchase_uom,
                 invoice_uom=item.invoice_uom,
+                freight_weight=item.freight_weight,
                 is_catch_weight=item.is_catch_weight,
                 weight_capture_required=item.weight_capture_required,
                 pricing_basis_default=item.pricing_basis_default,
@@ -309,6 +312,7 @@ def bulk_upsert_products(payload: ProductBulkUpsertRequest, db: Session = Depend
         row.order_uom = item.order_uom
         row.purchase_uom = item.purchase_uom
         row.invoice_uom = item.invoice_uom
+        row.freight_weight = item.freight_weight
         row.is_catch_weight = item.is_catch_weight
         row.weight_capture_required = item.weight_capture_required
         row.pricing_basis_default = item.pricing_basis_default
@@ -388,6 +392,7 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
         "name_en",
         "name_zh_hk",
         "customs_reference_price",
+        "freight_weight",
         "customs_origin_text",
         "remarks",
         "chayafuda_flag",
@@ -500,6 +505,7 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
                         name_en=item.name_en,
                         name_zh_hk=item.name_zh_hk,
                         customs_reference_price=item.customs_reference_price,
+                        freight_weight=item.freight_weight,
                         customs_origin_text=item.customs_origin_text,
                         remarks=item.remarks,
                         chayafuda_flag=item.chayafuda_flag,

@@ -115,6 +115,7 @@ class Product(Base):
     name_en: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name_zh_hk: Mapped[str | None] = mapped_column(String(255), nullable=True)
     customs_reference_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    freight_weight: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     customs_origin_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     chayafuda_flag: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

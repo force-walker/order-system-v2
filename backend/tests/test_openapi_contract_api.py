@@ -194,6 +194,13 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert "category_code" in product_response_props
     assert "sales_price_6" in product_response_props
     assert "application_category_code" in product_response_props
+    assert "freight_weight" in product_response_props
+
+    invoice_item_props = spec["components"]["schemas"]["InvoiceItemResponse"]["properties"]
+    assert {"unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable"}.issubset(invoice_item_props)
+
+    invoice_report_line_props = spec["components"]["schemas"]["InvoiceReportLine"]["properties"]
+    assert {"unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable"}.issubset(invoice_report_line_props)
 
     cancel_reason_schema = spec["components"]["schemas"].get("OrderCancelReasonCode")
     assert cancel_reason_schema is not None

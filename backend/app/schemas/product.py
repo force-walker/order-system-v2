@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -35,6 +36,7 @@ class ProductCreateRequest(BaseModel):
     name_en: str | None = Field(default=None, min_length=1, max_length=255)
     name_zh_hk: str | None = Field(default=None, min_length=1, max_length=255)
     customs_reference_price: float | None = Field(default=None, ge=0)
+    freight_weight: Decimal | None = Field(default=None, ge=Decimal("0"))
     customs_origin_text: str | None = Field(default=None, min_length=1, max_length=255)
     remarks: str | None = None
     chayafuda_flag: bool | None = None
@@ -78,6 +80,7 @@ class ProductUpdateRequest(BaseModel):
     name_en: str | None = Field(default=None, min_length=1, max_length=255)
     name_zh_hk: str | None = Field(default=None, min_length=1, max_length=255)
     customs_reference_price: float | None = Field(default=None, ge=0)
+    freight_weight: Decimal | None = Field(default=None, ge=Decimal("0"))
     customs_origin_text: str | None = Field(default=None, min_length=1, max_length=255)
     remarks: str | None = None
     chayafuda_flag: bool | None = None
@@ -121,6 +124,7 @@ class ProductResponse(BaseModel):
     name_en: str | None
     name_zh_hk: str | None
     customs_reference_price: float | None
+    freight_weight: Decimal | None
     customs_origin_text: str | None
     remarks: str | None
     chayafuda_flag: bool | None
@@ -147,6 +151,7 @@ class ProductBulkCreateItem(BaseModel):
     order_uom: str = Field(min_length=1, max_length=32)
     purchase_uom: str = Field(min_length=1, max_length=32)
     invoice_uom: str = Field(min_length=1, max_length=32)
+    freight_weight: Decimal | None = Field(default=None, ge=Decimal("0"))
     is_catch_weight: bool = False
     weight_capture_required: bool = False
     pricing_basis_default: PricingBasis = PricingBasis.uom_count
@@ -164,6 +169,7 @@ class ProductBulkUpdateItem(BaseModel):
     order_uom: str | None = Field(default=None, min_length=1, max_length=32)
     purchase_uom: str | None = Field(default=None, min_length=1, max_length=32)
     invoice_uom: str | None = Field(default=None, min_length=1, max_length=32)
+    freight_weight: Decimal | None = Field(default=None, ge=Decimal("0"))
     is_catch_weight: bool | None = None
     weight_capture_required: bool | None = None
     active: bool | None = None
@@ -229,6 +235,7 @@ class ProductImportItem(BaseModel):
     name_en: str | None = Field(default=None, min_length=1, max_length=255)
     name_zh_hk: str | None = Field(default=None, min_length=1, max_length=255)
     customs_reference_price: float | None = Field(default=None, ge=0)
+    freight_weight: Decimal | None = Field(default=None, ge=Decimal("0"))
     customs_origin_text: str | None = Field(default=None, min_length=1, max_length=255)
     remarks: str | None = None
     chayafuda_flag: bool | None = None
