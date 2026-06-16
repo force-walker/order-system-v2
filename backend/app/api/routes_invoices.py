@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.core.invoice_pdf import InvoicePdfDocument, InvoicePdfLine, build_invoice_pdf
+from app.core.invoice_pricing import compute_draft_margin, compute_hkd_purchase_unit_cost, get_system_settings_or_404
 from app.db.session import get_db
 from app.models.entities import Customer, Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, PricingBasis, Product, PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
@@ -71,29 +72,41 @@ def _amount(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def _tax_rate_from_code(tax_rate_code: str | None) -> Decimal:
-    if not tax_rate_code:
-        return Decimal("0")
-    code = tax_rate_code.strip().lower()
-    if code in {"exempt", "non_taxable", "none", "0", "0%"}:
-        return Decimal("0")
-
-    normalized = "".join(ch for ch in code if (ch.isdigit() or ch == "."))
-    if not normalized:
-        return Decimal("0")
-
-    raw = Decimal(normalized)
-    if raw > 1:
-        return raw / Decimal("100")
-    return raw
-
-
 def _compute_auto_sales_unit_price(purchase_unit_cost: Decimal | None) -> tuple[Decimal, str | None]:
     if purchase_unit_cost is None:
         return Decimal("0.00"), "仕入単価が未設定のため自動計算できません"
     # sales_unit_price = (purchase_unit_cost / 20 + 50) / 0.75
     price = ((purchase_unit_cost / Decimal("20")) + Decimal("50")) / Decimal("0.75")
     return _amount(price), None
+
+
+def _draft_item_metrics(item: InvoiceItem) -> tuple[float | None, bool]:
+    margin = compute_draft_margin(
+        sales_unit_price=Decimal(str(item.sales_unit_price)),
+        unit_cost_basis=(Decimal(str(item.unit_cost_basis)) if item.unit_cost_basis is not None else None),
+    )
+    return margin.gross_margin_pct, margin.gross_margin_unavailable
+
+
+def _invoice_item_response(item: InvoiceItem) -> InvoiceItemResponse:
+    gross_margin_pct, gross_margin_unavailable = _draft_item_metrics(item)
+    return InvoiceItemResponse(
+        id=item.id,
+        invoice_id=item.invoice_id,
+        order_item_id=item.order_item_id,
+        billable_qty=float(item.billable_qty),
+        billable_uom=item.billable_uom,
+        invoice_line_status=item.invoice_line_status,
+        sales_unit_price=float(item.sales_unit_price),
+        unit_cost_basis=(float(item.unit_cost_basis) if item.unit_cost_basis is not None else None),
+        auto_price_error=("仕入単価が未設定のため自動計算できません" if item.unit_cost_basis is None else None),
+        line_amount=float(item.line_amount),
+        tax_amount=float(item.tax_amount),
+        gross_margin_pct=gross_margin_pct,
+        gross_margin_unavailable=gross_margin_unavailable,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
 
 
 def _recalc_invoice_totals(db: Session, invoice: Invoice) -> None:
@@ -193,18 +206,7 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
 
     result: list[InvoiceDraftListRow] = []
     for inv, item, customer, product, order in rows:
-        # 粗利率 = {請求単価 - (仕入単価/20 + 50)} / 請求単価
-        # 請求単価=0 または 仕入単価未設定は計算不可として null + flag
-        gross_margin_pct = None
-        gross_margin_unavailable = False
-        sales_unit_price = Decimal(str(item.sales_unit_price))
-        unit_cost_basis_dec = Decimal(str(item.unit_cost_basis)) if item.unit_cost_basis is not None else None
-        if sales_unit_price == 0 or unit_cost_basis_dec is None:
-            gross_margin_unavailable = True
-        else:
-            numerator = sales_unit_price - ((unit_cost_basis_dec / Decimal("20")) + Decimal("50"))
-            gross_margin_pct = float(_amount((numerator / sales_unit_price) * Decimal("100")))
-
+        gross_margin_pct, gross_margin_unavailable = _draft_item_metrics(item)
         line_amount = float(item.line_amount)
         unit_cost_basis = float(item.unit_cost_basis) if item.unit_cost_basis is not None else None
         result.append(
@@ -246,24 +248,7 @@ def get_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceRespon
 def list_invoice_items(invoice_id: int, db: Session = Depends(get_db)) -> list[InvoiceItemResponse]:
     _get_invoice_or_404(db, invoice_id)
     rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.id.asc()).all()
-    return [
-        InvoiceItemResponse(
-            id=row.id,
-            invoice_id=row.invoice_id,
-            order_item_id=row.order_item_id,
-            billable_qty=float(row.billable_qty),
-            billable_uom=row.billable_uom,
-            invoice_line_status=row.invoice_line_status,
-            sales_unit_price=float(row.sales_unit_price),
-            unit_cost_basis=(float(row.unit_cost_basis) if row.unit_cost_basis is not None else None),
-            auto_price_error=("仕入単価が未設定のため自動計算できません" if row.unit_cost_basis is None else None),
-            line_amount=float(row.line_amount),
-            tax_amount=float(row.tax_amount),
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
-        for row in rows
-    ]
+    return [_invoice_item_response(row) for row in rows]
 
 
 @router.get(
@@ -328,8 +313,11 @@ def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> Invoic
                 billable_qty=float(i.billable_qty),
                 billable_uom=i.billable_uom,
                 sales_unit_price=float(i.sales_unit_price),
+                unit_cost_basis=(float(i.unit_cost_basis) if i.unit_cost_basis is not None else None),
                 line_amount=float(i.line_amount),
                 tax_amount=float(i.tax_amount),
+                gross_margin_pct=_draft_item_metrics(i)[0],
+                gross_margin_unavailable=_draft_item_metrics(i)[1],
             )
             for i in items
         ],
@@ -415,10 +403,6 @@ def update_invoice_draft_item(
     if order_item is None:
         raise HTTPException(status_code=404, detail={"code": "ORDER_ITEM_NOT_FOUND", "message": "order item not found"})
 
-    product = db.query(Product).filter(Product.id == order_item.product_id).first()
-    if product is None:
-        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
-
     before = {
         "billable_qty": float(item.billable_qty),
         "sales_unit_price": float(item.sales_unit_price),
@@ -430,8 +414,7 @@ def update_invoice_draft_item(
     sales_unit_price = Decimal(str(payload.sales_unit_price))
     line_amount = _amount(billable_qty * sales_unit_price)
 
-    tax_rate = _tax_rate_from_code(product.tax_rate_code)
-    tax_amount = _amount((line_amount * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_DOWN)) if tax_rate > 0 else Decimal("0")
+    tax_amount = Decimal("0")
 
     item.billable_qty = float(billable_qty)
     if payload.billable_uom is not None:
@@ -462,7 +445,7 @@ def update_invoice_draft_item(
 
     db.commit()
     db.refresh(item)
-    return InvoiceItemResponse.model_validate(item)
+    return _invoice_item_response(item)
 
 
 @router.post(
@@ -497,7 +480,7 @@ def finalize_invoice_item_line(invoice_id: int, invoice_item_id: int, db: Sessio
 
     db.commit()
     db.refresh(item)
-    return InvoiceItemResponse.model_validate(item)
+    return _invoice_item_response(item)
 
 
 @router.post(
@@ -651,16 +634,21 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     db.add(invoice)
     db.flush()
 
+    settings = get_system_settings_or_404(db)
     subtotal = Decimal("0")
     tax_total = Decimal("0")
     for pr, item, product in rows_to_create:
         billable_qty = Decimal(str(pr.invoice_qty if pr.invoice_qty is not None else pr.purchased_qty))
         purchase_unit_cost = Decimal(str(pr.final_unit_cost if pr.final_unit_cost is not None else pr.unit_cost)) if (pr.final_unit_cost is not None or pr.unit_cost is not None) else None
         sales_unit_price, _ = _compute_auto_sales_unit_price(purchase_unit_cost)
+        hkd_purchase_unit_cost = compute_hkd_purchase_unit_cost(
+            jpy_purchase_unit_cost=purchase_unit_cost,
+            freight_weight=(Decimal(str(product.freight_weight)) if product.freight_weight is not None else None),
+            settings=settings,
+        )
 
         line_amount = _amount(billable_qty * sales_unit_price)
-        tax_rate = _tax_rate_from_code(product.tax_rate_code)
-        line_tax = _amount((line_amount * tax_rate).quantize(Decimal("0.01"), rounding=ROUND_DOWN)) if tax_rate > 0 else Decimal("0")
+        line_tax = Decimal("0")
 
         subtotal += line_amount
         tax_total += line_tax
@@ -673,11 +661,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
                 billable_uom=pr.purchased_uom,
                 invoice_line_status="uninvoiced",
                 sales_unit_price=float(sales_unit_price),
-                unit_cost_basis=(
-                    float(pr.final_unit_cost)
-                    if pr.final_unit_cost is not None
-                    else (float(pr.unit_cost) if pr.unit_cost is not None else None)
-                ),
+                unit_cost_basis=(float(hkd_purchase_unit_cost) if hkd_purchase_unit_cost is not None else None),
                 line_amount=float(line_amount),
                 tax_amount=float(line_tax),
             )

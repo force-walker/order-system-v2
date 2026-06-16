@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -42,6 +43,7 @@ def _seed_product(sku: str = "SKU-001") -> int:
         order_uom="count",
         purchase_uom="count",
         invoice_uom="count",
+        freight_weight=Decimal("0.500"),
         is_catch_weight=False,
         weight_capture_required=False,
         pricing_basis_default=PricingBasis.uom_count,
@@ -92,6 +94,7 @@ def test_create_product_auto_code_and_manual_code_rejected():
         "order_uom": "count",
         "purchase_uom": "count",
         "invoice_uom": "count",
+        "freight_weight": "0.625",
         "is_catch_weight": False,
         "weight_capture_required": False,
         "pricing_basis_default": "uom_count",
@@ -101,6 +104,7 @@ def test_create_product_auto_code_and_manual_code_rejected():
     assert created.json()["sku"].startswith("SKU-")
     assert created.json()["legacy_code"] == "L-001"
     assert created.json()["legacy_unit_code"] == "U-01"
+    assert Decimal(created.json()["freight_weight"]) == Decimal("0.625")
 
     manual = client.post("/api/v1/products", json={**payload, "sku": "SKU-MANUAL"})
     assert manual.status_code == 422
@@ -130,12 +134,13 @@ def test_update_product_success_and_not_found():
 
     ok = client.patch(
         f"/api/v1/products/{pid}",
-        json={"name": "Updated Name", "legacy_code": "L-UPD", "legacy_unit_code": "U-UPD", "active": False},
+        json={"name": "Updated Name", "legacy_code": "L-UPD", "legacy_unit_code": "U-UPD", "freight_weight": "1.125", "active": False},
     )
     assert ok.status_code == 200
     assert ok.json()["name"] == "Updated Name"
     assert ok.json()["legacy_code"] == "L-UPD"
     assert ok.json()["legacy_unit_code"] == "U-UPD"
+    assert Decimal(ok.json()["freight_weight"]) == Decimal("1.125")
     assert ok.json()["active"] is False
 
     nf = client.patch("/api/v1/products/999999", json={"name": "x"})
@@ -235,7 +240,7 @@ def test_get_product_import_format():
     body = res.json()
     assert body["entity"] == "products"
     field_names = [field["name"] for field in body["fields"]]
-    assert {"import_key", "name", "order_uom", "purchase_uom", "invoice_uom", "active"}.issubset(field_names)
+    assert {"import_key", "name", "order_uom", "purchase_uom", "invoice_uom", "freight_weight", "active"}.issubset(field_names)
     name_field = next(field for field in body["fields"] if field["name"] == "name")
     assert name_field["required"] is True
     assert name_field["required_scope"] == "create"
@@ -256,6 +261,7 @@ def test_import_upsert_products_create_success():
                     "order_uom": "count",
                     "purchase_uom": "count",
                     "invoice_uom": "count",
+                    "freight_weight": "0.375",
                 }
             ]
         },
@@ -266,6 +272,10 @@ def test_import_upsert_products_create_success():
     assert body["created"] == 1
     assert body["updated"] == 0
     assert body["failed"] == 0
+
+    listed = client.get("/api/v1/products?include_inactive=true")
+    row = next(r for r in listed.json() if r.get("import_key") == "IMP-001")
+    assert Decimal(row["freight_weight"]) == Decimal("0.375")
 
 
 def test_import_upsert_products_import_key_update_success():
@@ -323,6 +333,7 @@ def test_import_upsert_products_partial_update_keeps_unspecified_and_null_fields
                     "import_key": "IMP-PARTIAL-001",
                     "name": "Partial Base",
                     "legacy_code": "LEG-BASE",
+                    "freight_weight": "0.250",
                     "order_uom": "count",
                     "purchase_uom": "count",
                     "invoice_uom": "count",
@@ -345,6 +356,7 @@ def test_import_upsert_products_partial_update_keeps_unspecified_and_null_fields
     row = rows[0]
     assert row["name"] == "Partial Updated"
     assert row["legacy_code"] == "LEG-BASE"
+    assert Decimal(row["freight_weight"]) == Decimal("0.250")
 
 
 def test_import_upsert_products_duplicate_import_key_conflict_in_payload():
@@ -406,3 +418,18 @@ def test_import_upsert_products_invalid_numeric_is_row_error_and_empty_string_is
     assert body["failed"] == 1
     assert body["created"] == 1
     assert body["errors"][0]["code"] == "ITEM_VALIDATION_ERROR"
+
+
+def test_freight_weight_negative_validation_is_422():
+    client = _client()
+    res = client.post(
+        "/api/v1/products",
+        json={
+            "name": "Invalid Freight Weight",
+            "order_uom": "count",
+            "purchase_uom": "count",
+            "invoice_uom": "count",
+            "freight_weight": "-0.001",
+        },
+    )
+    assert res.status_code == 422

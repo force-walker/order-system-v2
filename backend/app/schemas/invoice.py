@@ -57,6 +57,8 @@ class InvoiceItemResponse(BaseModel):
     auto_price_error: str | None = None
     line_amount: float
     tax_amount: float
+    gross_margin_pct: float | None = None
+    gross_margin_unavailable: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -99,8 +101,11 @@ class InvoiceReportLine(BaseModel):
     billable_qty: float
     billable_uom: str
     sales_unit_price: float
+    unit_cost_basis: float | None = None
     line_amount: float
     tax_amount: float
+    gross_margin_pct: float | None = None
+    gross_margin_unavailable: bool = False
 
 
 class InvoiceReportResponse(BaseModel):
