@@ -94,6 +94,14 @@ class InvoiceDraftGenerateResult(BaseModel):
     idempotent_hit: bool
 
 
+class InvoiceDraftRecalculateResponse(BaseModel):
+    invoice_id: int
+    recalculated_count: int
+    subtotal: float
+    tax_total: float
+    grand_total: float
+
+
 class InvoiceReportLine(BaseModel):
     invoice_item_id: int
     order_item_id: int

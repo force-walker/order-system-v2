@@ -80,6 +80,7 @@ def test_get_and_put_system_settings_with_audit_log():
     body = update_res.json()
     assert Decimal(body["exchange_rate"]) == Decimal("7.8125")
     assert Decimal(body["jp_gross_margin_pct"]) == Decimal("26.5")
+    assert Decimal(body["jp_gross_margin_rate"]) == Decimal("26.5")
     assert Decimal(body["hk_gross_margin_pct"]) == Decimal("18.25")
     assert Decimal(body["freight_unit_price"]) == Decimal("12.34")
 
@@ -114,6 +115,25 @@ def test_system_settings_validation_errors_return_422():
     body = res.json()
     assert body["detail"]["code"] == "VALIDATION_ERROR"
     assert isinstance(body["detail"]["details"], list)
+
+
+def test_system_settings_accepts_jp_gross_margin_rate_alias():
+    _seed_settings()
+    client = _client()
+
+    res = client.put(
+        "/api/v1/system-settings",
+        json={
+            "exchange_rate": "1.2500",
+            "jp_gross_margin_rate": "22.5",
+            "hk_gross_margin_pct": "15.0",
+            "freight_unit_price": "3.50",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert Decimal(body["jp_gross_margin_pct"]) == Decimal("22.5")
+    assert Decimal(body["jp_gross_margin_rate"]) == Decimal("22.5")
 
 
 def test_system_settings_audit_timeline_is_queryable():

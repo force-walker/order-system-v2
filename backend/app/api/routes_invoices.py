@@ -15,6 +15,7 @@ from app.schemas.invoice import (
     InvoiceDraftFromPurchaseResultsRequest,
     InvoiceDraftGenerateResult,
     InvoiceDraftListRow,
+    InvoiceDraftRecalculateResponse,
     InvoiceFinalizeResponse,
     InvoiceGenerateRequest,
     InvoiceItemResponse,
@@ -120,6 +121,39 @@ def _recalc_invoice_totals(db: Session, invoice: Invoice) -> None:
     invoice.subtotal = float(_amount(subtotal))
     invoice.tax_total = float(_amount(tax_total))
     invoice.grand_total = float(_amount(subtotal + tax_total))
+
+
+def _recalculate_draft_invoice_costs(db: Session, invoice: Invoice) -> int:
+    rows = (
+        db.query(InvoiceItem, OrderItem, Product)
+        .join(OrderItem, OrderItem.id == InvoiceItem.order_item_id)
+        .join(Product, Product.id == OrderItem.product_id)
+        .filter(InvoiceItem.invoice_id == invoice.id)
+        .order_by(InvoiceItem.id.asc())
+        .all()
+    )
+    settings = get_system_settings_or_404(db)
+    recalculated_count = 0
+
+    for item, _order_item, product in rows:
+        old_basis = Decimal(str(item.unit_cost_basis)) if item.unit_cost_basis is not None else None
+        if item.source_purchase_unit_cost_jpy is None:
+            new_basis = None
+        else:
+            new_basis = compute_hkd_purchase_unit_cost(
+                jpy_purchase_unit_cost=Decimal(str(item.source_purchase_unit_cost_jpy)),
+                freight_weight=(Decimal(str(product.freight_weight)) if product.freight_weight is not None else None),
+                settings=settings,
+            )
+
+        if old_basis != new_basis:
+            item.unit_cost_basis = float(new_basis) if new_basis is not None else None
+            recalculated_count += 1
+        if Decimal(str(item.tax_amount)) != Decimal("0"):
+            item.tax_amount = 0
+
+    _recalc_invoice_totals(db, invoice)
+    return recalculated_count
 
 
 def _payment_terms_label(invoice: Invoice) -> str:
@@ -552,6 +586,7 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
                 invoice_line_status="uninvoiced",
                 sales_unit_price=float(sales_unit_price),
                 unit_cost_basis=None,
+                source_purchase_unit_cost_jpy=None,
                 line_amount=float(line_amount),
                 tax_amount=0,
             )
@@ -662,6 +697,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
                 invoice_line_status="uninvoiced",
                 sales_unit_price=float(sales_unit_price),
                 unit_cost_basis=(float(hkd_purchase_unit_cost) if hkd_purchase_unit_cost is not None else None),
+                source_purchase_unit_cost_jpy=float(purchase_unit_cost) if purchase_unit_cost is not None else None,
                 line_amount=float(line_amount),
                 tax_amount=float(line_tax),
             )
@@ -733,6 +769,51 @@ def finalize_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceF
     )
     db.commit()
     return InvoiceFinalizeResponse(invoice_id=row.id, status=row.status, is_locked=row.is_locked)
+
+
+@router.post(
+    "/{invoice_id}/recalculate-draft-costs",
+    response_model=InvoiceDraftRecalculateResponse,
+    responses={
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+        422: {"model": ApiErrorResponse, "description": "Validation Error"},
+    },
+)
+def recalculate_draft_costs(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceDraftRecalculateResponse:
+    invoice = _get_invoice_or_404(db, invoice_id)
+    if invoice.status != InvoiceStatus.draft:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
+
+    before = {
+        "subtotal": float(invoice.subtotal),
+        "tax_total": float(invoice.tax_total),
+        "grand_total": float(invoice.grand_total),
+    }
+    recalculated_count = _recalculate_draft_invoice_costs(db, invoice)
+    db.flush()
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        action=AuditAction.UPDATE,
+        reason_code="recalculate_draft_costs",
+        before=before,
+        after={
+            "recalculated_count": recalculated_count,
+            "subtotal": float(invoice.subtotal),
+            "tax_total": float(invoice.tax_total),
+            "grand_total": float(invoice.grand_total),
+        },
+    )
+    db.commit()
+    return InvoiceDraftRecalculateResponse(
+        invoice_id=invoice.id,
+        recalculated_count=recalculated_count,
+        subtotal=float(invoice.subtotal),
+        tax_total=float(invoice.tax_total),
+        grand_total=float(invoice.grand_total),
+    )
 
 
 @router.post(

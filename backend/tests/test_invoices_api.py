@@ -52,24 +52,27 @@ def _client() -> TestClient:
 def _seed_system_settings(
     *,
     exchange_rate: str = "1.0000",
-    jp_gross_margin_pct: str = "25.000",
+    jp_gross_margin_pct: str | None = "25.000",
+    jp_gross_margin_rate: str | None = None,
     hk_gross_margin_pct: str = "25.000",
     freight_unit_price: str = "0.00",
 ) -> None:
     db = TestingSessionLocal()
+    normalized_margin = jp_gross_margin_rate if jp_gross_margin_rate is not None else jp_gross_margin_pct
+    assert normalized_margin is not None
     row = db.query(SystemSettings).filter(SystemSettings.id == 1).first()
     if row is None:
         row = SystemSettings(
             id=1,
             exchange_rate=Decimal(exchange_rate),
-            jp_gross_margin_pct=Decimal(jp_gross_margin_pct),
+            jp_gross_margin_pct=Decimal(normalized_margin),
             hk_gross_margin_pct=Decimal(hk_gross_margin_pct),
             freight_unit_price=Decimal(freight_unit_price),
         )
         db.add(row)
     else:
         row.exchange_rate = Decimal(exchange_rate)
-        row.jp_gross_margin_pct = Decimal(jp_gross_margin_pct)
+        row.jp_gross_margin_pct = Decimal(normalized_margin)
         row.hk_gross_margin_pct = Decimal(hk_gross_margin_pct)
         row.freight_unit_price = Decimal(freight_unit_price)
     db.commit()
@@ -635,6 +638,67 @@ def test_draft_generation_rounds_hkd_cost_and_margin_half_up():
     # 20 + (10 * 0.333 * 0.333 = 1.10889) => 21.11 after half-up rounding
     assert float(row["unit_cost_basis"]) == 21.11
     assert float(row["gross_margin_pct"]) == 84.17
+
+
+def test_recalculate_draft_costs_reuses_current_settings_and_product_weight():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings(exchange_rate="2.0000", jp_gross_margin_pct="25.000", freight_unit_price="12.00")
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-RECALC-001",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert draft.status_code == 201
+    invoice_id = draft.json()["invoice_id"]
+
+    _seed_system_settings(exchange_rate="4.0000", jp_gross_margin_rate="20.000", freight_unit_price="8.00")
+    db = TestingSessionLocal()
+    product = db.query(Product).filter(Product.name == "Count product").order_by(Product.id.desc()).first()
+    assert product is not None
+    product.freight_weight = Decimal("1.000")
+    db.commit()
+    db.close()
+
+    recalc = client.post(f"/api/v1/invoices/{invoice_id}/recalculate-draft-costs")
+    assert recalc.status_code == 200
+    assert recalc.json()["recalculated_count"] == 1
+
+    items = client.get(f"/api/v1/invoices/{invoice_id}/items")
+    row = items.json()[0]
+    # 1000 / 20 / 4 = 12.50, freight = 8 * 1 * 1 = 8.00 => 20.50
+    assert float(row["unit_cost_basis"]) == 20.5
+    assert float(row["gross_margin_pct"]) == 84.62
+
+
+def test_recalculate_draft_costs_rejects_non_draft_invoice():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "invoice_no": "INV-PR-RECALC-002",
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    invoice_id = draft.json()["invoice_id"]
+    fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
+    assert fin.status_code == 200
+
+    recalc = client.post(f"/api/v1/invoices/{invoice_id}/recalculate-draft-costs")
+    assert recalc.status_code == 409
+    assert recalc.json()["detail"]["code"] == "INVOICE_NOT_DRAFT"
 
 
 def test_draft_generation_from_purchase_results_is_idempotent():
