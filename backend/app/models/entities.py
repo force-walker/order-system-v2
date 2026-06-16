@@ -309,6 +309,7 @@ class InvoiceItem(Base):
     )
     sales_unit_price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     unit_cost_basis: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    source_purchase_unit_cost_jpy: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     line_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))

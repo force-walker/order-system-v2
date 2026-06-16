@@ -94,6 +94,9 @@ def test_openapi_error_contracts_for_core_apis():
     assert "422" in _responses("/api/v1/invoices/{invoice_id}/finalize", "post")
     assert "409" in _responses("/api/v1/invoices/{invoice_id}/unlock", "post")
     assert "422" in _responses("/api/v1/invoices/{invoice_id}/unlock", "post")
+    assert "200" in _responses("/api/v1/invoices/{invoice_id}/recalculate-draft-costs", "post")
+    assert "409" in _responses("/api/v1/invoices/{invoice_id}/recalculate-draft-costs", "post")
+    assert "422" in _responses("/api/v1/invoices/{invoice_id}/recalculate-draft-costs", "post")
 
     # allocations / purchase-results / order-item-allocation-flow
     assert "422" in _responses("/api/v1/allocations/{allocation_id}/override", "patch")
@@ -201,6 +204,9 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     invoice_report_line_props = spec["components"]["schemas"]["InvoiceReportLine"]["properties"]
     assert {"unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable"}.issubset(invoice_report_line_props)
+
+    system_settings_props = spec["components"]["schemas"]["SystemSettingsResponse"]["properties"]
+    assert {"jp_gross_margin_pct", "jp_gross_margin_rate"}.issubset(system_settings_props)
 
     cancel_reason_schema = spec["components"]["schemas"].get("OrderCancelReasonCode")
     assert cancel_reason_schema is not None
