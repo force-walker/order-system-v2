@@ -104,6 +104,13 @@ def test_openapi_error_contracts_for_core_apis():
     assert "422" in _responses("/api/v1/order-item-allocations/bulk-save", "post")
     assert "409" in _responses("/api/v1/order-item-allocations/bulk-save", "post")
 
+    # system settings
+    assert "200" in _responses("/api/v1/system-settings", "get")
+    assert "404" in _responses("/api/v1/system-settings", "get")
+    assert "200" in _responses("/api/v1/system-settings", "put")
+    assert "404" in _responses("/api/v1/system-settings", "put")
+    assert "422" in _responses("/api/v1/system-settings", "put")
+
     # reports
     assert "422" in _responses("/api/v1/reports/shipping", "get")
 

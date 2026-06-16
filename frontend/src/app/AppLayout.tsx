@@ -26,6 +26,7 @@ export const AppLayout = () => {
           <NavLink to="/products" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>商品</NavLink>
           <NavLink to="/customers" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>顧客</NavLink>
           <NavLink to="/suppliers" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>仕入先</NavLink>
+          <NavLink to="/settings/system" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>環境設定</NavLink>
         </nav>
       </header>
 

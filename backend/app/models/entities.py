@@ -358,6 +358,24 @@ class BatchJob(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
 
+class SystemSettings(Base):
+    __tablename__ = "system_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_system_settings_singleton_id"),
+        CheckConstraint("exchange_rate > 0", name="ck_system_settings_exchange_rate_positive"),
+        CheckConstraint("jp_gross_margin_pct >= 0", name="ck_system_settings_jp_gross_margin_pct_non_negative"),
+        CheckConstraint("hk_gross_margin_pct >= 0", name="ck_system_settings_hk_gross_margin_pct_non_negative"),
+        CheckConstraint("freight_unit_price >= 0", name="ck_system_settings_freight_unit_price_non_negative"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    exchange_rate: Mapped[float] = mapped_column(Numeric(12, 4))
+    jp_gross_margin_pct: Mapped[float] = mapped_column(Numeric(7, 3))
+    hk_gross_margin_pct: Mapped[float] = mapped_column(Numeric(7, 3))
+    freight_unit_price: Mapped[float] = mapped_column(Numeric(12, 2))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
