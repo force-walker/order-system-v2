@@ -27,6 +27,7 @@ import { SupplierCreatePage } from 'features/suppliers/pages/SupplierCreatePage'
 import { SupplierEditPage } from 'features/suppliers/pages/SupplierEditPage';
 import { SupplierDetailPage } from 'features/suppliers/pages/SupplierDetailPage';
 import { SupplierImportPage } from 'features/suppliers/pages/SupplierImportPage';
+import { SystemSettingsPage } from 'features/settings/pages/SystemSettingsPage';
 
 export const App = () => {
   useEffect(() => {
@@ -72,6 +73,7 @@ export const App = () => {
         <Route path="/suppliers/import" element={<SupplierImportPage />} />
         <Route path="/suppliers/:supplierId" element={<SupplierDetailPage />} />
         <Route path="/suppliers/:supplierId/edit" element={<SupplierEditPage />} />
+        <Route path="/settings/system" element={<SystemSettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/orders/new" replace />} />
     </Routes>
