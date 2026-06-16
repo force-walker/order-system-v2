@@ -296,3 +296,9 @@ export const getInvoiceDetailView = async (invoiceId: number): Promise<InvoiceDe
     })),
   };
 };
+
+export const generateInvoicePdf = async (invoiceId: number): Promise<Blob> => {
+  const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/pdf`, { method: 'GET' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  return await res.blob();
+};

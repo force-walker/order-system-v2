@@ -119,12 +119,12 @@ class NumberedCanvas(canvas.Canvas):
         self._startPage()
 
     def save(self):
-        total_pages = len(self._saved_page_states) + 1
+        self._saved_page_states.append(dict(self.__dict__))
+        total_pages = len(self._saved_page_states)
         for state in self._saved_page_states:
             self.__dict__.update(state)
             self._draw_page_number(total_pages)
             canvas.Canvas.showPage(self)
-        self._draw_page_number(total_pages)
         canvas.Canvas.save(self)
 
     def _draw_page_number(self, total_pages: int):

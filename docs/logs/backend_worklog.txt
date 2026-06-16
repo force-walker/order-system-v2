@@ -1,0 +1,26 @@
+
+
+## 2026-05-01 Invoice Draft Pricing / Margin Updates
+- Implemented and merged invoice draft auto sales-unit-price logic based on fixed formula:
+  - `sales_unit_price = (purchase_unit_cost / 20 + 50) / 0.75`
+  - Applied at draft generation time (`generate-draft-from-purchase-results`)
+  - Manual override behavior kept unchanged (user input wins)
+  - Missing purchase cost policy unified: save `0.00` and return row-level `auto_price_error`
+- Added/updated API response fields for UI support:
+  - `auto_price_error` on draft items/list rows
+  - invoice neighbors API for detail prev/next navigation (merged earlier in same flow)
+- Updated gross margin formula and edge-case handling (merged PR #185):
+  - New formula: `{sales_unit_price - (purchase_unit_cost/20 + 50)} / sales_unit_price`
+  - Unified unavailable cases: `gross_margin_pct=null` + `gross_margin_unavailable=true` when sales price is 0 or purchase cost missing
+  - Decimal precision rule unified in backend calculation path
+- Regression stability follow-up:
+  - Fixed date-boundary test instability (month boundary / target_date explicit) in separate PR #182
+- Validation status:
+  - Backend regression re-run passed (132 passed)
+  - Typecheck passed
+  - CI checks passed on merged PRs
+- Merge/cleanup completed:
+  - PR #181 merged and branch cleaned
+  - PR #182 merged and branch cleaned
+  - PR #185 merged and branch cleaned
+  - Main synchronized to latest merged commit

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { listInvoiceSummaries } from 'features/orders/services/invoiceService';
+import { PdfExportButton } from 'components/common/PdfExportButton';
+import { generateInvoicePdf, listInvoiceSummaries } from 'features/orders/services/invoiceService';
 import type { InvoiceSummaryRow } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
+import { openPdfBlob } from 'shared/pdf';
 
 const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 
@@ -11,6 +13,8 @@ export const InvoiceListPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceSummaryRow[]>([]);
+  const [pdfGeneratingId, setPdfGeneratingId] = useState<number | null>(null);
+  const [pdfError, setPdfError] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -29,6 +33,19 @@ export const InvoiceListPage = () => {
 
   const sorted = useMemo(() => [...rows].sort((a, b) => b.invoiceId - a.invoiceId), [rows]);
 
+  const onGeneratePdf = async (invoiceId: number) => {
+    setPdfGeneratingId(invoiceId);
+    setPdfError('');
+    try {
+      const blob = await generateInvoicePdf(invoiceId);
+      openPdfBlob(blob);
+    } catch (e) {
+      setPdfError(toActionableMessage(e, '請求書PDFの生成に失敗しました。'));
+    } finally {
+      setPdfGeneratingId(null);
+    }
+  };
+
   if (error) return <ErrorState title="請求書一覧の取得に失敗しました" description={error} />;
   if (loading) return <LoadingState title="請求書一覧を読み込み中" description="しばらくお待ちください。" />;
 
@@ -43,6 +60,7 @@ export const InvoiceListPage = () => {
             <p className="subtle">請求書単位で表示します。</p>
           </div>
         </div>
+        {pdfError ? <p className="field-error" style={{ marginTop: 0, marginBottom: 12 }}>{pdfError}</p> : null}
         <div className="table-wrap">
           <table>
             <thead>
@@ -53,6 +71,7 @@ export const InvoiceListPage = () => {
                 <th>ステータス</th>
                 <th style={{ textAlign: 'right' }}>合計金額</th>
                 <th style={{ textAlign: 'right' }}>明細件数</th>
+                <th>請求書PDF</th>
                 <th>詳細</th>
               </tr>
             </thead>
@@ -65,6 +84,16 @@ export const InvoiceListPage = () => {
                   <td>{r.status}</td>
                   <td style={{ textAlign: 'right' }}>{currency.format(r.grandTotal)}</td>
                   <td style={{ textAlign: 'right' }}>{r.itemCount}</td>
+                  <td>
+                    <PdfExportButton
+                      busy={pdfGeneratingId === r.invoiceId}
+                      idleLabel="請求書PDF"
+                      busyLabel="ダウンロード中..."
+                      onClick={() => {
+                        void onGeneratePdf(r.invoiceId);
+                      }}
+                    />
+                  </td>
                   <td><Link to={`/invoices/${r.invoiceId}`}>詳細</Link></td>
                 </tr>
               ))}
