@@ -1,0 +1,39 @@
+
+[2026-05-01] Frontend: Focus navigation & number input behavior unified
+- PR #186 MERGED: feat(frontend): unify focus navigation and disable number-step arrows
+  URL: https://github.com/force-walker/order-system-v2/pull/186
+- Scope (FE only):
+  - Added reusable `useFocusNavigation` hook (`frontend/src/shared/useFocusNavigation.ts`)
+  - Unified key navigation on major input screens:
+    - Tab / ArrowDown / ArrowRight -> next
+    - ArrowUp / ArrowLeft -> previous
+  - IME/caret-safe handling preserved for text-like inputs.
+  - Disabled browser number steppers and prevented ArrowUp/ArrowDown value stepping on number inputs globally.
+- Validation/contract notes:
+  - Existing 422/409/404 error display flows preserved.
+- Branch cleanup:
+  - feature/frontend-unify-focus-navigation-rules merged & deleted (local/remote).
+
+Related BE PRs (context for invoice flow around this FE series):
+- PR #172: feat(backend): invoice draft generation/update/finalize/report flow
+  https://github.com/force-walker/order-system-v2/pull/172
+- PR #174: feat(backend): invoice item line finalize transition API
+  https://github.com/force-walker/order-system-v2/pull/174
+
+[2026-05-01] Frontend: 粗利率表示の新計算式対応
+- PR #187 MERGED: feat(frontend): apply new gross margin formula on invoice drafts
+  URL: https://github.com/force-walker/order-system-v2/pull/187
+- 実装内容:
+  - 請求ドラフト一覧の粗利率計算を新式へ更新
+    粗利率 = {請求単価 - (仕入単価/20 + 50)} / 請求単価
+  - 請求単価編集中の即時計算表示も同式に統一
+  - 例外値（請求単価0/未設定、仕入単価未設定）は `-` 表示で統一（NaN/Infinity回避）
+  - 既存422/409/404エラー表示ルールは維持
+- ブランチ整理:
+  - feature/frontend-gross-margin-formula-update を local/remote とも削除
+
+Related BE PRs (invoice flow context):
+- PR #172: feat(backend): invoice draft generation/update/finalize/report flow
+  https://github.com/force-walker/order-system-v2/pull/172
+- PR #174: feat(backend): invoice item line finalize transition API
+  https://github.com/force-walker/order-system-v2/pull/174
