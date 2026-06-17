@@ -1,6 +1,7 @@
 import { apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload } from 'shared/error';
 import type { InvoiceDetailView, InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceStatus, InvoiceSummaryRow } from 'features/orders/types/order';
+import { markOrdersStatusDirty } from './ordersService';
 
 const TOKEN_STORAGE_KEY = 'osv2_access_token';
 const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
@@ -246,6 +247,7 @@ export const updateInvoiceDraftItem = async (invoiceId: number, invoiceItemId: n
 export const finalizeInvoiceDraft = async (invoiceId: number): Promise<void> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/finalize`, { method: 'POST' });
   if (!res.ok) throw await parseApiErrorPayload(res);
+  markOrdersStatusDirty();
 };
 
 export const listInvoiceSummaries = async (): Promise<InvoiceSummaryRow[]> => {

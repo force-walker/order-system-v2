@@ -36,6 +36,7 @@ const DEBUG_ORDER_ITEM_FIELDS = (import.meta.env.VITE_DEBUG_ORDER_ITEM_FIELDS ??
 
 const STORAGE_KEY = 'osv2_mock_orders';
 const TOKEN_STORAGE_KEY = 'osv2_access_token';
+const ORDER_STATUS_REFRESH_KEY = 'osv2_order_status_refresh';
 const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true';
 const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
 const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
@@ -93,6 +94,21 @@ const readOrders = (): OrderDetail[] => {
 
 const writeOrders = (orders: OrderDetail[]) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+};
+
+export const invalidateOrderCaches = () => {
+  apiOrderCache.clear();
+};
+
+export const markOrdersStatusDirty = () => {
+  invalidateOrderCaches();
+  sessionStorage.setItem(ORDER_STATUS_REFRESH_KEY, String(Date.now()));
+};
+
+export const hasDirtyOrderStatus = () => sessionStorage.getItem(ORDER_STATUS_REFRESH_KEY) !== null;
+
+export const clearDirtyOrderStatus = () => {
+  sessionStorage.removeItem(ORDER_STATUS_REFRESH_KEY);
 };
 
 const toImportFormat = (row: ApiImportFormatResponse): ImportFormat => ({

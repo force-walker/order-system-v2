@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { getOrderItem } from 'features/orders/services/ordersService';
+import { clearDirtyOrderStatus, getOrderItem, hasDirtyOrderStatus } from 'features/orders/services/ordersService';
 import type { OrderDetail, OrderItem, OrderStatus } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 
@@ -26,26 +26,45 @@ export const OrderItemDetailPage = () => {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const load = async () => {
     const oid = Number(orderId);
     const iid = Number(itemId);
 
     if (!oid || !iid) {
       setError('不正なIDです');
+      setLoaded(true);
       return;
     }
 
     setLoaded(false);
-    getOrderItem(oid, iid)
-      .then((result) => {
-        if (!result) {
-          setDetail(null);
-          return;
-        }
-        setDetail(result);
-      })
-      .catch((e) => setError(toActionableMessage(e, 'アイテム詳細の取得に失敗しました')))
-      .finally(() => setLoaded(true));
+    setError('');
+    try {
+      const result = await getOrderItem(oid, iid);
+      setDetail(result);
+      clearDirtyOrderStatus();
+    } catch (e) {
+      setError(toActionableMessage(e, 'アイテム詳細の取得に失敗しました'));
+    } finally {
+      setLoaded(true);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [orderId, itemId]);
+
+  useEffect(() => {
+    const reloadIfDirty = () => {
+      if (!hasDirtyOrderStatus()) return;
+      void load();
+    };
+
+    window.addEventListener('focus', reloadIfDirty);
+    window.addEventListener('pageshow', reloadIfDirty);
+    return () => {
+      window.removeEventListener('focus', reloadIfDirty);
+      window.removeEventListener('pageshow', reloadIfDirty);
+    };
   }, [orderId, itemId]);
 
   const itemCount = useMemo(() => detail?.order.items.length ?? 0, [detail]);
