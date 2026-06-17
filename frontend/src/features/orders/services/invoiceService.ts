@@ -24,14 +24,18 @@ type ApiInvoiceSummary = {
 
 type ApiInvoiceItem = {
   id: number;
+  invoice_id: number;
   order_item_id: number;
   billable_qty: number;
   billable_uom: string;
   invoice_line_status: 'uninvoiced' | 'partially_invoiced' | 'invoiced' | 'cancelled';
   sales_unit_price: number;
+  unit_cost_basis?: number | null;
   auto_price_error?: string | null;
   line_amount: number;
   tax_amount: number;
+  gross_margin_pct?: number | null;
+  gross_margin_unavailable?: boolean;
 };
 
 type ApiInvoiceDraftListRow = {
@@ -53,11 +57,15 @@ type ApiInvoiceDraftListRow = {
 type ApiInvoiceReportLine = {
   invoice_item_id: number;
   order_item_id: number;
+  product_name: string;
   billable_qty: number;
   billable_uom: string;
   sales_unit_price: number;
+  unit_cost_basis?: number | null;
   line_amount: number;
   tax_amount: number;
+  gross_margin_pct?: number | null;
+  gross_margin_unavailable?: boolean;
 };
 
 type ApiInvoiceReport = {
@@ -74,6 +82,23 @@ type ApiInvoiceReport = {
   grand_total: number;
   items: ApiInvoiceReportLine[];
 };
+
+type ApiInvoiceBatchFinalizeResult = {
+  invoice_id: number;
+  ok: boolean;
+  status?: InvoiceStatus | null;
+  is_locked?: boolean | null;
+  reason_code?: string | null;
+  message?: string | null;
+};
+
+type ApiInvoiceBatchFinalizeResponse = {
+  success_count: number;
+  failure_count: number;
+  results: ApiInvoiceBatchFinalizeResult[];
+};
+
+const INVOICE_STATUSES: InvoiceStatus[] = ['draft', 'finalized', 'sent', 'cancelled'];
 
 const ensureDevToken = async (): Promise<string> => {
   const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -134,6 +159,12 @@ const listInvoicesByStatus = async (status: InvoiceStatus): Promise<InvoiceDraft
   }));
 };
 
+const getInvoiceReport = async (invoiceId: number): Promise<ApiInvoiceReport> => {
+  const reportRes = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/report`, { method: 'GET' });
+  if (!reportRes.ok) throw await parseApiErrorPayload(reportRes);
+  return (await reportRes.json()) as ApiInvoiceReport;
+};
+
 export const listInvoiceDrafts = async (): Promise<InvoiceDraftSummary[]> => {
   const res = await fetchWithAuth('/api/v1/invoices?status=draft', { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
@@ -176,9 +207,12 @@ export const getInvoiceDraftItems = async (invoiceId: number): Promise<InvoiceDr
     billableUom: r.billable_uom,
     invoiceLineStatus: r.invoice_line_status,
     salesUnitPrice: r.sales_unit_price,
+    unitCostBasis: r.unit_cost_basis ?? undefined,
     autoPriceError: r.auto_price_error ?? undefined,
     lineAmount: r.line_amount,
     taxAmount: r.tax_amount,
+    grossMarginPct: r.gross_margin_pct ?? undefined,
+    grossMarginUnavailable: r.gross_margin_unavailable ?? false,
   }));
 };
 
@@ -250,35 +284,51 @@ export const finalizeInvoiceDraft = async (invoiceId: number): Promise<void> => 
   markOrdersStatusDirty();
 };
 
+export const finalizeInvoiceDraftsBatch = async (invoiceIds: number[]) => {
+  const deduped = [...new Set(invoiceIds)];
+  const res = await fetchWithAuth('/api/v1/invoices/finalize-batch', {
+    method: 'POST',
+    body: { invoice_ids: deduped },
+  });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+
+  const data = (await res.json()) as ApiInvoiceBatchFinalizeResponse;
+  if ((data.success_count ?? 0) > 0) {
+    markOrdersStatusDirty();
+  }
+  return data;
+};
+
 export const listInvoiceSummaries = async (): Promise<InvoiceSummaryRow[]> => {
-  const [drafts, finalized] = await Promise.all([
-    listInvoicesByStatus('draft'),
-    listInvoicesByStatus('finalized'),
-  ]);
-  const all = [...drafts, ...finalized];
+  const grouped = await Promise.all(INVOICE_STATUSES.map((status) => listInvoicesByStatus(status)));
+  const all = grouped.flat();
+  const reports = await Promise.all(
+    all.map(async (row) => {
+      try {
+        return [row.id, await getInvoiceReport(row.id)] as const;
+      } catch {
+        return [row.id, null] as const;
+      }
+    }),
+  );
+  const reportById = new Map<number, ApiInvoiceReport | null>(reports);
+
   return all.map((r) => ({
     invoiceId: r.id,
     invoiceNo: r.invoiceNo,
-    customerName: `customer#${r.customerId}`,
+    customerName: reportById.get(r.id)?.customer_name ?? `customer#${r.customerId}`,
     invoiceDate: r.invoiceDate,
     deliveryDate: r.deliveryDate,
     status: r.status,
     subtotal: r.subtotal,
     taxTotal: r.taxTotal,
     grandTotal: r.grandTotal,
-    itemCount: r.itemCount,
+    itemCount: reportById.get(r.id)?.items.length ?? r.itemCount,
   }));
 };
 
 export const getInvoiceDetailView = async (invoiceId: number): Promise<InvoiceDetailView> => {
-  const reportRes = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/report`, { method: 'GET' });
-  if (!reportRes.ok) throw await parseApiErrorPayload(reportRes);
-  const report = (await reportRes.json()) as ApiInvoiceReport;
-
-  const rowsRes = await fetchWithAuth('/api/v1/invoices/draft-list', { method: 'GET' });
-  if (!rowsRes.ok) throw await parseApiErrorPayload(rowsRes);
-  const draftRows = (await rowsRes.json()) as ApiInvoiceDraftListRow[];
-  const productNameByItemId = new Map<number, string>(draftRows.map((r) => [r.invoice_item_id, r.product_name]));
+  const report = await getInvoiceReport(invoiceId);
 
   return {
     invoiceId: report.invoice_id,
@@ -292,11 +342,14 @@ export const getInvoiceDetailView = async (invoiceId: number): Promise<InvoiceDe
     grandTotal: report.grand_total,
     items: report.items.map((i) => ({
       invoiceItemId: i.invoice_item_id,
-      productName: productNameByItemId.get(i.invoice_item_id) ?? `item#${i.order_item_id}`,
+      productName: i.product_name,
       billableQty: i.billable_qty,
       billableUom: i.billable_uom,
       salesUnitPrice: i.sales_unit_price,
+      unitCostBasis: i.unit_cost_basis ?? undefined,
       lineAmount: i.line_amount,
+      grossMarginPct: i.gross_margin_pct ?? undefined,
+      grossMarginUnavailable: i.gross_margin_unavailable ?? false,
     })),
   };
 };

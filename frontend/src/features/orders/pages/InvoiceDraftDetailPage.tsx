@@ -37,7 +37,7 @@ export const InvoiceDraftDetailPage = () => {
     setFinalizing(true);
     try {
       await finalizeInvoiceDraft(Number(invoiceId));
-      navigate('/invoices');
+      navigate('/invoices/drafts');
     } catch (e) {
       setError(toActionableMessage(e, '請求確定に失敗しました。'));
     } finally {
@@ -68,11 +68,11 @@ export const InvoiceDraftDetailPage = () => {
         <div className="list-header">
           <div>
             <h2>請求ドラフト詳細 #{invoiceId}</h2>
-            <p className="subtle">数量差異/単価調整後の値を確認し、必要に応じて確定します。</p>
+            <p className="subtle">数量差異/単価調整後の値を確認し、このドラフト画面から請求書発行します。</p>
           </div>
           <div className="list-controls">
             <button type="button" className="secondary" onClick={() => navigate('/invoices/drafts')}>戻る</button>
-            <button type="button" onClick={() => void onFinalize()} disabled={finalizing}>{finalizing ? '確定中...' : '確定（別操作）'}</button>
+            <button type="button" onClick={() => void onFinalize()} disabled={finalizing}>{finalizing ? '発行中...' : '請求書発行'}</button>
           </div>
         </div>
 
