@@ -57,7 +57,7 @@ export const InvoiceListPage = () => {
         <div className="list-header">
           <div>
             <h2>請求書一覧</h2>
-            <p className="subtle">請求書単位で表示します。</p>
+            <p className="subtle">発行済み請求書の参照ページです。請求書PDF は帳票出力のみで、ステータス変更は行いません。</p>
           </div>
         </div>
         {pdfError ? <p className="field-error" style={{ marginTop: 0, marginBottom: 12 }}>{pdfError}</p> : null}
