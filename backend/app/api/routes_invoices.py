@@ -11,6 +11,9 @@ from app.db.session import get_db
 from app.models.entities import Customer, Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
+    InvoiceBatchFinalizeRequest,
+    InvoiceBatchFinalizeResponse,
+    InvoiceBatchFinalizeResult,
     InvoiceCreateRequest,
     InvoiceDraftFromPurchaseResultsRequest,
     InvoiceDraftGenerateResult,
@@ -218,6 +221,33 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
                 before=before,
                 after={"order_status": order.status.value},
             )
+
+
+def _finalize_invoice_row(db: Session, invoice: Invoice, *, reason_code: str | None = None) -> InvoiceFinalizeResponse:
+    if invoice.status != InvoiceStatus.draft:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
+    if invoice.is_locked:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_ALREADY_LOCKED", "message": "invoice is already locked"})
+
+    has_items = db.query(InvoiceItem.id).filter(InvoiceItem.invoice_id == invoice.id).first() is not None
+    if not has_items:
+        raise HTTPException(status_code=409, detail={"code": "INVOICE_ITEMS_REQUIRED", "message": "invoice must have at least one item"})
+
+    before = {"status": invoice.status.value, "is_locked": invoice.is_locked}
+    invoice.status = InvoiceStatus.finalized
+    invoice.is_locked = True
+    db.flush()
+    _sync_order_statuses_for_invoice(db, invoice)
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        action=AuditAction.FINALIZE,
+        reason_code=reason_code,
+        before=before,
+        after={"status": invoice.status.value, "is_locked": invoice.is_locked},
+    )
+    return InvoiceFinalizeResponse(invoice_id=invoice.id, status=invoice.status, is_locked=invoice.is_locked)
 
 
 def _payment_terms_label(invoice: Invoice) -> str:
@@ -807,30 +837,61 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
 )
 def finalize_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceFinalizeResponse:
     row = _get_invoice_or_404(db, invoice_id)
-    if row.status != InvoiceStatus.draft:
-        raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
-    if row.is_locked:
-        raise HTTPException(status_code=409, detail={"code": "INVOICE_ALREADY_LOCKED", "message": "invoice is already locked"})
-
-    has_items = db.query(InvoiceItem.id).filter(InvoiceItem.invoice_id == row.id).first() is not None
-    if not has_items:
-        raise HTTPException(status_code=409, detail={"code": "INVOICE_ITEMS_REQUIRED", "message": "invoice must have at least one item"})
-
-    before = {"status": row.status.value, "is_locked": row.is_locked}
-    row.status = InvoiceStatus.finalized
-    row.is_locked = True
-    db.flush()
-    _sync_order_statuses_for_invoice(db, row)
-    write_audit_log(
-        db,
-        entity_type="invoice",
-        entity_id=row.id,
-        action=AuditAction.FINALIZE,
-        before=before,
-        after={"status": row.status.value, "is_locked": row.is_locked},
-    )
+    result = _finalize_invoice_row(db, row)
     db.commit()
-    return InvoiceFinalizeResponse(invoice_id=row.id, status=row.status, is_locked=row.is_locked)
+    return result
+
+
+@router.post(
+    "/finalize-batch",
+    response_model=InvoiceBatchFinalizeResponse,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def finalize_invoices_batch(payload: InvoiceBatchFinalizeRequest, db: Session = Depends(get_db)) -> InvoiceBatchFinalizeResponse:
+    results: list[InvoiceBatchFinalizeResult] = []
+    seen: set[int] = set()
+
+    for invoice_id in payload.invoice_ids:
+        if invoice_id in seen:
+            continue
+        seen.add(invoice_id)
+
+        savepoint = db.begin_nested()
+        try:
+            row = _get_invoice_or_404(db, invoice_id)
+            finalized = _finalize_invoice_row(db, row, reason_code="batch_finalize")
+            savepoint.commit()
+            results.append(
+                InvoiceBatchFinalizeResult(
+                    invoice_id=finalized.invoice_id,
+                    ok=True,
+                    status=finalized.status,
+                    is_locked=finalized.is_locked,
+                )
+            )
+        except HTTPException as exc:
+            savepoint.rollback()
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            results.append(
+                InvoiceBatchFinalizeResult(
+                    invoice_id=invoice_id,
+                    ok=False,
+                    reason_code=detail.get("code", "BATCH_FINALIZE_FAILED"),
+                    message=detail.get("message", "batch finalize failed"),
+                )
+            )
+
+    db.commit()
+    success_count = sum(1 for result in results if result.ok)
+    failure_count = len(results) - success_count
+    return InvoiceBatchFinalizeResponse(
+        success_count=success_count,
+        failure_count=failure_count,
+        results=results,
+    )
 
 
 @router.post(
