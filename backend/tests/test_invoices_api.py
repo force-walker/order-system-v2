@@ -364,6 +364,91 @@ def test_finalize_invoice_without_items_is_409():
     assert fin.json()["detail"]["code"] == "INVOICE_ITEMS_REQUIRED"
 
 
+def test_finalize_batch_invoices_partial_success():
+    client = _client()
+    order_id_ok = _seed_order(with_items=True)
+    order_id_locked = _seed_order(with_items=True)
+    order_id_empty = _seed_order(with_items=False)
+
+    ok = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-BATCH-OK-1", "order_id": order_id_ok, "invoice_date": str(date.today())},
+    )
+    assert ok.status_code == 201
+    ok_id = ok.json()["id"]
+
+    locked = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-BATCH-LOCK-1", "order_id": order_id_locked, "invoice_date": str(date.today())},
+    )
+    assert locked.status_code == 201
+    locked_id = locked.json()["id"]
+    locked_fin = client.post(f"/api/v1/invoices/{locked_id}/finalize")
+    assert locked_fin.status_code == 200
+
+    empty = client.post(
+        "/api/v1/invoices",
+        json={"invoice_no": "INV-BATCH-EMPTY-1", "order_id": order_id_empty, "invoice_date": str(date.today())},
+    )
+    assert empty.status_code == 201
+    empty_id = empty.json()["id"]
+
+    batch = client.post(
+        "/api/v1/invoices/finalize-batch",
+        json={"invoice_ids": [ok_id, locked_id, empty_id, 999999, ok_id]},
+    )
+    assert batch.status_code == 200
+    body = batch.json()
+    assert body["success_count"] == 1
+    assert body["failure_count"] == 3
+    assert len(body["results"]) == 4
+
+    result_by_id = {row["invoice_id"]: row for row in body["results"]}
+    assert result_by_id[ok_id]["ok"] is True
+    assert result_by_id[ok_id]["status"] == "finalized"
+    assert result_by_id[ok_id]["is_locked"] is True
+    assert result_by_id[locked_id]["ok"] is False
+    assert result_by_id[locked_id]["reason_code"] == "INVOICE_NOT_DRAFT"
+    assert result_by_id[empty_id]["ok"] is False
+    assert result_by_id[empty_id]["reason_code"] == "INVOICE_ITEMS_REQUIRED"
+    assert result_by_id[999999]["ok"] is False
+    assert result_by_id[999999]["reason_code"] == "INVOICE_NOT_FOUND"
+
+    db = TestingSessionLocal()
+    ok_row = db.query(Invoice).filter(Invoice.id == ok_id).first()
+    locked_row = db.query(Invoice).filter(Invoice.id == locked_id).first()
+    empty_row = db.query(Invoice).filter(Invoice.id == empty_id).first()
+    ok_order = db.query(Order).filter(Order.id == order_id_ok).first()
+    locked_order = db.query(Order).filter(Order.id == order_id_locked).first()
+    db.close()
+    assert ok_row is not None and ok_row.status == InvoiceStatus.finalized and ok_row.is_locked is True
+    assert locked_row is not None and locked_row.status == InvoiceStatus.finalized and locked_row.is_locked is True
+    assert empty_row is not None and empty_row.status == InvoiceStatus.draft and empty_row.is_locked is False
+    assert ok_order is not None and ok_order.status == OrderStatus.invoiced
+    assert locked_order is not None and locked_order.status == OrderStatus.invoiced
+
+
+def test_finalize_batch_writes_finalize_audit_logs():
+    client = _client()
+    order_id = _seed_order(with_items=True)
+
+    created = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-BATCH-AUD-1", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    assert created.status_code == 201
+    invoice_id = created.json()["id"]
+
+    batch = client.post("/api/v1/invoices/finalize-batch", json={"invoice_ids": [invoice_id]})
+    assert batch.status_code == 200
+    assert batch.json()["success_count"] == 1
+
+    db = TestingSessionLocal()
+    logs = db.query(AuditLog).filter(AuditLog.entity_type == "invoice", AuditLog.entity_id == invoice_id).all()
+    db.close()
+    assert any(log.action == "finalize" and log.reason_code == "batch_finalize" for log in logs)
+
+
 def test_list_invoice_items_and_invoice_filters():
     order_id = _seed_order(with_items=True)
     client = _client()

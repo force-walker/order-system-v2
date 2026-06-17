@@ -157,6 +157,25 @@ class InvoiceFinalizeResponse(BaseModel):
     is_locked: bool
 
 
+class InvoiceBatchFinalizeRequest(BaseModel):
+    invoice_ids: list[int] = Field(min_length=1)
+
+
+class InvoiceBatchFinalizeResult(BaseModel):
+    invoice_id: int
+    ok: bool
+    status: InvoiceStatus | None = None
+    is_locked: bool | None = None
+    reason_code: str | None = None
+    message: str | None = None
+
+
+class InvoiceBatchFinalizeResponse(BaseModel):
+    success_count: int
+    failure_count: int
+    results: list[InvoiceBatchFinalizeResult]
+
+
 class InvoiceResetRequest(BaseModel):
     reset_reason_code: str
     reason_note: str | None = None
