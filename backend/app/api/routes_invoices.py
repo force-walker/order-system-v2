@@ -8,7 +8,7 @@ from app.core.audit import AuditAction, write_audit_log
 from app.core.invoice_pdf import InvoicePdfDocument, InvoicePdfLine, build_invoice_pdf
 from app.core.invoice_pricing import compute_draft_margin, compute_hkd_purchase_unit_cost, get_system_settings_or_404
 from app.db.session import get_db
-from app.models.entities import Customer, Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, PricingBasis, Product, PurchaseResult, SupplierAllocation
+from app.models.entities import Customer, Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
     InvoiceCreateRequest,
@@ -154,6 +154,70 @@ def _recalculate_draft_invoice_costs(db: Session, invoice: Invoice) -> int:
 
     _recalc_invoice_totals(db, invoice)
     return recalculated_count
+
+
+def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
+    order_ids = {
+        order_id
+        for (order_id,) in (
+            db.query(OrderItem.order_id)
+            .join(InvoiceItem, InvoiceItem.order_item_id == OrderItem.id)
+            .filter(InvoiceItem.invoice_id == invoice.id)
+            .distinct()
+            .all()
+        )
+    }
+    if not order_ids:
+        return
+
+    for order_id in order_ids:
+        lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
+        for line in lines:
+            has_finalized_invoice = (
+                db.query(InvoiceItem.id)
+                .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+                .filter(InvoiceItem.order_item_id == line.id, Invoice.status == InvoiceStatus.finalized)
+                .first()
+                is not None
+            )
+            target_line_status = LineStatus.invoiced if has_finalized_invoice else LineStatus.shipped
+            if target_line_status == line.line_status:
+                continue
+
+            before = {"line_status": line.line_status.value}
+            line.line_status = target_line_status
+            write_audit_log(
+                db,
+                entity_type="order_item",
+                entity_id=line.id,
+                action=AuditAction.UPDATE,
+                before=before,
+                after={"line_status": line.line_status.value, "order_id": line.order_id},
+            )
+
+        order = db.query(Order).filter(Order.id == order_id).first()
+        if order is None:
+            continue
+        all_invoiced = bool(lines) and all(line.line_status == LineStatus.invoiced for line in lines)
+        if all_invoiced:
+            target_order_status = OrderStatus.invoiced
+        elif lines:
+            target_order_status = OrderStatus.shipped
+        else:
+            target_order_status = order.status
+
+        if target_order_status != order.status:
+            before = {"order_status": order.status.value}
+            order.status = target_order_status
+            order.updated_by = "system_api"
+            write_audit_log(
+                db,
+                entity_type="order",
+                entity_id=order.id,
+                action=AuditAction.UPDATE,
+                before=before,
+                after={"order_status": order.status.value},
+            )
 
 
 def _payment_terms_label(invoice: Invoice) -> str:
@@ -592,9 +656,6 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
             )
         )
 
-        if item.line_status in {LineStatus.open, LineStatus.allocated, LineStatus.purchased, LineStatus.shipped}:
-            item.line_status = LineStatus.invoiced
-
     invoice.subtotal = float(_amount(subtotal))
     invoice.tax_total = 0
     invoice.grand_total = float(_amount(subtotal))
@@ -759,6 +820,7 @@ def finalize_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceF
     row.status = InvoiceStatus.finalized
     row.is_locked = True
     db.flush()
+    _sync_order_statuses_for_invoice(db, row)
     write_audit_log(
         db,
         entity_type="invoice",
@@ -834,6 +896,7 @@ def reset_to_draft(invoice_id: int, payload: InvoiceResetRequest, db: Session = 
     row.status = InvoiceStatus.draft
     row.is_locked = False
     db.flush()
+    _sync_order_statuses_for_invoice(db, row)
     write_audit_log(
         db,
         entity_type="invoice",

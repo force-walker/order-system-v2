@@ -10,10 +10,12 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.entities import (
+    AuditLog,
     Customer,
     Invoice,
     InvoiceItem,
     InvoiceStatus,
+    LineStatus,
     Order,
     OrderItem,
     OrderStatus,
@@ -255,6 +257,14 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert fin.json()["status"] == "finalized"
     assert fin.json()["is_locked"] is True
 
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).first()
+    lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
+    assert order is not None
+    assert order.status == OrderStatus.invoiced
+    assert all(line.line_status == LineStatus.invoiced for line in lines)
+    db.close()
+
     unlock = client.post(
         f"/api/v1/invoices/{invoice_id}/unlock",
         json={"unlock_reason_code": "data_fix", "reason_note": "fix"},
@@ -271,6 +281,14 @@ def test_create_finalize_unlock_reset_invoice_flow():
     )
     assert reset.status_code == 200
     assert reset.json()["status"] == "draft"
+
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).first()
+    lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
+    assert order is not None
+    assert order.status == OrderStatus.shipped
+    assert all(line.line_status == LineStatus.shipped for line in lines)
+    db.close()
 
 
 def test_generate_invoice_from_order_items_success():
@@ -293,8 +311,10 @@ def test_generate_invoice_from_order_items_success():
 
     db = TestingSessionLocal()
     invoice_items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == body["id"]).all()
+    order_lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
     db.close()
     assert len(invoice_items) == 2
+    assert all(line.line_status != LineStatus.invoiced for line in order_lines)
 
 
 def test_generate_invoice_without_items_is_422():
@@ -453,6 +473,15 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
     fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert fin.status_code == 200
     assert fin.json()["status"] == "finalized"
+
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).first()
+    lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
+    assert order is not None
+    assert order.status == OrderStatus.shipped
+    assert lines[0].line_status == LineStatus.invoiced
+    assert lines[1].line_status != LineStatus.invoiced
+    db.close()
 
 
 def test_draft_generation_price_auto_calc_missing_cost_sets_zero_and_error():
@@ -811,6 +840,33 @@ def test_finalize_invoice_item_line_status_transition():
     fin_after_header = client.post(f"/api/v1/invoices/{invoice_id}/items/{item_id}/finalize")
     assert fin_after_header.status_code == 409
     assert fin_after_header.json()["detail"]["code"] == "INVOICE_NOT_DRAFT"
+
+
+def test_finalize_and_reset_write_order_audit_logs():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+
+    gen = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-AUD-ORDER-1", "order_id": order_id, "invoice_date": str(date.today())},
+    )
+    assert gen.status_code == 201
+    invoice_id = gen.json()["id"]
+
+    fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
+    assert fin.status_code == 200
+    reset = client.post(
+        f"/api/v1/invoices/{invoice_id}/reset-to-draft",
+        json={"reset_reason_code": "data_error", "reason_note": "redo"},
+    )
+    assert reset.status_code == 200
+
+    db = TestingSessionLocal()
+    order_logs = db.query(AuditLog).filter(AuditLog.entity_type == "order", AuditLog.entity_id == order_id).all()
+    order_item_logs = db.query(AuditLog).filter(AuditLog.entity_type == "order_item").all()
+    db.close()
+    assert len(order_logs) >= 2
+    assert len(order_item_logs) >= 2
 
 
 def test_invoice_report_not_found():
