@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { OrderForm } from 'features/orders/components/OrderForm';
-import { getOrder, listCustomers, listProducts, updateOrder } from 'features/orders/services/ordersService';
+import { clearDirtyOrderStatus, getOrder, hasDirtyOrderStatus, listCustomers, listProducts, updateOrder } from 'features/orders/services/ordersService';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 
@@ -15,47 +15,65 @@ export const OrderEditPage = () => {
   const [initialValue, setInitialValue] = useState<CreateOrderRequest | null>(null);
   const [error, setError] = useState('');
 
-  const orderIdNum = useMemo(() => Number(orderId), [orderId]);
-
-  useEffect(() => {
+  const load = async () => {
     if (!orderIdNum) {
       setError('不正な注文IDです');
       return;
     }
 
-    Promise.all([listCustomers(), listProducts(), getOrder(orderIdNum)])
-      .then(([customerRows, productRows, order]) => {
-        setCustomers(customerRows);
-        setProducts(productRows);
+    setError('');
+    const [customerRows, productRows, order] = await Promise.all([listCustomers(), listProducts(), getOrder(orderIdNum)]);
+    setCustomers(customerRows);
+    setProducts(productRows);
 
-        if (!order) {
-          setInitialValue(null);
-          return;
-        }
+    if (!order) {
+      setInitialValue(null);
+      clearDirtyOrderStatus();
+      return;
+    }
 
-        setInitialValue({
-          orderNo: order.orderNo,
-          customerId: order.customerId ?? 0,
-          customerName: order.customerName,
-          deliveryDate: order.deliveryDate,
-          note: order.note,
-          items: order.items.map((i) => ({
-            id: i.id,
-            productId: i.productId,
-            productName: i.productName,
-            quantity: i.quantity,
-            unit: i.unit,
-            unitPrice: i.unitPrice ?? 0,
-            pricingBasis: i.pricingBasis ?? 'uom_count',
-            estimatedWeightKg: i.estimatedWeightKg,
-            targetPrice: i.targetPrice,
-            priceCeiling: i.priceCeiling,
-            stockoutPolicy: i.stockoutPolicy,
-            comment: i.comment,
-          })),
-        });
-      })
-      .catch((e) => setError(toActionableMessage(e, '注文編集情報の取得に失敗しました')));
+    setInitialValue({
+      orderNo: order.orderNo,
+      customerId: order.customerId ?? 0,
+      customerName: order.customerName,
+      deliveryDate: order.deliveryDate,
+      note: order.note,
+      items: order.items.map((i) => ({
+        id: i.id,
+        productId: i.productId,
+        productName: i.productName,
+        quantity: i.quantity,
+        unit: i.unit,
+        unitPrice: i.unitPrice ?? 0,
+        pricingBasis: i.pricingBasis ?? 'uom_count',
+        estimatedWeightKg: i.estimatedWeightKg,
+        targetPrice: i.targetPrice,
+        priceCeiling: i.priceCeiling,
+        stockoutPolicy: i.stockoutPolicy,
+        comment: i.comment,
+      })),
+    });
+    clearDirtyOrderStatus();
+  };
+
+  const orderIdNum = useMemo(() => Number(orderId), [orderId]);
+
+  useEffect(() => {
+    load().catch((e) => setError(toActionableMessage(e, '注文編集情報の取得に失敗しました')));
+  }, [orderIdNum]);
+
+  useEffect(() => {
+    const reloadIfDirty = () => {
+      if (!hasDirtyOrderStatus()) return;
+      load().catch((e) => setError(toActionableMessage(e, '注文編集情報の取得に失敗しました')));
+    };
+
+    window.addEventListener('focus', reloadIfDirty);
+    window.addEventListener('pageshow', reloadIfDirty);
+    return () => {
+      window.removeEventListener('focus', reloadIfDirty);
+      window.removeEventListener('pageshow', reloadIfDirty);
+    };
   }, [orderIdNum]);
 
   const handleSubmit = async (payload: CreateOrderRequest) => {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
-import { bulkCancelOrders, listOrders } from 'features/orders/services/ordersService';
+import { bulkCancelOrders, clearDirtyOrderStatus, hasDirtyOrderStatus, listOrders } from 'features/orders/services/ordersService';
 import type { OrderStatus, OrderSummary } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 import { useFocusNavigation } from 'shared/useFocusNavigation';
@@ -42,6 +42,7 @@ export const OrderListPage = () => {
       const sorted = [...data].sort((a, b) => b.id - a.id);
       setOrders(sorted);
       setSelectedByOrderId((prev) => Object.fromEntries(sorted.map((o) => [o.id, prev[o.id] ?? false])));
+      clearDirtyOrderStatus();
     } catch (e) {
       setError(toActionableMessage(e, '一覧取得に失敗しました'));
     }
@@ -67,6 +68,20 @@ export const OrderListPage = () => {
     const t = window.setTimeout(() => setToast(null), 4500);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    const reloadIfDirty = () => {
+      if (!hasDirtyOrderStatus()) return;
+      void load();
+    };
+
+    window.addEventListener('focus', reloadIfDirty);
+    window.addEventListener('pageshow', reloadIfDirty);
+    return () => {
+      window.removeEventListener('focus', reloadIfDirty);
+      window.removeEventListener('pageshow', reloadIfDirty);
+    };
+  }, [staleOnly]);
 
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
