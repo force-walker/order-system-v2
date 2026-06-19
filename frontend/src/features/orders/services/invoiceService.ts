@@ -41,6 +41,10 @@ type ApiInvoiceItem = {
 type ApiInvoiceDraftListRow = {
   invoice_id: number;
   invoice_item_id: number;
+  invoice_no: string;
+  invoice_date: string;
+  delivery_date: string;
+  status: InvoiceStatus;
   order_no: string;
   customer_name: string;
   product_name: string;
@@ -236,38 +240,35 @@ export const finalizeInvoiceItemLine = async (invoiceId: number, invoiceItemId: 
 
 
 export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]> => {
-  const [rowsRes, summaries] = await Promise.all([
-    fetchWithAuth('/api/v1/invoices/draft-list', { method: 'GET' }),
-    listInvoiceDrafts(),
-  ]);
+  const rowsRes = await fetchWithAuth('/api/v1/invoices/draft-list', { method: 'GET' });
   if (!rowsRes.ok) throw await parseApiErrorPayload(rowsRes);
   const rows = (await rowsRes.json()) as ApiInvoiceDraftListRow[];
 
-  const summaryById = new Map<number, InvoiceDraftSummary>();
-  summaries.forEach((s) => summaryById.set(s.id, s));
-
-  return rows.map((r) => {
-    const s = summaryById.get(r.invoice_id);
-    return {
-      invoiceId: r.invoice_id,
-      invoiceItemId: r.invoice_item_id,
-      orderNo: r.order_no,
-      customerName: r.customer_name,
-      productName: r.product_name,
-      billableQty: r.billable_qty,
-      billableUom: r.billable_uom,
-      salesUnitPrice: r.sales_unit_price,
-      unitCostBasis: r.unit_cost_basis ?? undefined,
-      autoPriceError: r.auto_price_error ?? undefined,
-      lineAmount: r.line_amount,
-      grossMarginPct: r.gross_margin_pct ?? undefined,
-      grossMarginUnavailable: r.gross_margin_unavailable,
-      deliveryDate: s?.deliveryDate,
-      status: s?.status,
-    };
-  });
+  return rows.map((r) => ({
+    invoiceId: r.invoice_id,
+    invoiceItemId: r.invoice_item_id,
+    invoiceNo: r.invoice_no,
+    invoiceDate: r.invoice_date,
+    deliveryDate: r.delivery_date,
+    status: r.status,
+    orderNo: r.order_no,
+    customerName: r.customer_name,
+    productName: r.product_name,
+    billableQty: r.billable_qty,
+    billableUom: r.billable_uom,
+    salesUnitPrice: r.sales_unit_price,
+    unitCostBasis: r.unit_cost_basis ?? undefined,
+    autoPriceError: r.auto_price_error ?? undefined,
+    lineAmount: r.line_amount,
+    grossMarginPct: r.gross_margin_pct ?? undefined,
+    grossMarginUnavailable: r.gross_margin_unavailable,
+  }));
 };
-export const updateInvoiceDraftItem = async (invoiceId: number, invoiceItemId: number, payload: { billableQty: number; salesUnitPrice: number }): Promise<void> => {
+export const updateInvoiceDraftItem = async (
+  invoiceId: number,
+  invoiceItemId: number,
+  payload: { billableQty: number; salesUnitPrice: number },
+): Promise<InvoiceDraftItem> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/items/${invoiceItemId}`, {
     method: 'PATCH',
     body: {
@@ -276,6 +277,21 @@ export const updateInvoiceDraftItem = async (invoiceId: number, invoiceItemId: n
     },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
+  const r = (await res.json()) as ApiInvoiceItem;
+  return {
+    id: r.id,
+    orderItemId: r.order_item_id,
+    billableQty: r.billable_qty,
+    billableUom: r.billable_uom,
+    invoiceLineStatus: r.invoice_line_status,
+    salesUnitPrice: r.sales_unit_price,
+    unitCostBasis: r.unit_cost_basis ?? undefined,
+    autoPriceError: r.auto_price_error ?? undefined,
+    lineAmount: r.line_amount,
+    taxAmount: r.tax_amount,
+    grossMarginPct: r.gross_margin_pct ?? undefined,
+    grossMarginUnavailable: r.gross_margin_unavailable ?? false,
+  };
 };
 
 export const finalizeInvoiceDraft = async (invoiceId: number): Promise<void> => {

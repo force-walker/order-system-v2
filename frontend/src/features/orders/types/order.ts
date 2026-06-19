@@ -238,6 +238,10 @@ export type InvoiceDraftSummary = {
 export type InvoiceDraftListRow = {
   invoiceId: number;
   invoiceItemId: number;
+  invoiceNo: string;
+  invoiceDate: string;
+  deliveryDate: string;
+  status: InvoiceStatus;
   orderNo: string;
   customerName: string;
   productName: string;
@@ -249,8 +253,6 @@ export type InvoiceDraftListRow = {
   lineAmount: number;
   grossMarginPct?: number;
   grossMarginUnavailable?: boolean;
-  deliveryDate?: string;
-  status?: InvoiceStatus;
 };
 
 export type InvoiceSummaryRow = {
