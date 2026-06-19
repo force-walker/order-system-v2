@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.entities import Invoice, InvoiceItem, Order, OrderItem
@@ -118,11 +119,19 @@ def ensure_invoice_item_number(db: Session, invoice: Invoice, item: InvoiceItem)
 
 def generate_official_invoice_no(db: Session, invoice: Invoice) -> str:
     year = invoice.invoice_date.year
-    prefix = f"INV/{year}/"
-    existing = [
-        value
-        for (value,) in db.query(Invoice.official_invoice_no).filter(Invoice.official_invoice_no.like(f"{prefix}%")).all()
-        if value is not None
-    ]
-    next_seq = _max_sequence(existing, _OFFICIAL_INVOICE_RE, "seq") + 1
-    return f"INV/{year}/{next_seq:05d}"
+    result = db.execute(
+        text(
+            """
+            INSERT INTO invoice_number_sequences (year, next_seq, updated_at)
+            VALUES (:year, 2, CURRENT_TIMESTAMP)
+            ON CONFLICT(year)
+            DO UPDATE SET
+                next_seq = invoice_number_sequences.next_seq + 1,
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING next_seq - 1 AS allocated_seq
+            """
+        ),
+        {"year": year},
+    ).first()
+    allocated_seq = int(result[0])
+    return f"INV/{year}/{allocated_seq:05d}"
