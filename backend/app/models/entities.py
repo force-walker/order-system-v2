@@ -389,6 +389,18 @@ class SystemSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
 
+class InvoiceNumberSequence(Base):
+    __tablename__ = "invoice_number_sequences"
+    __table_args__ = (
+        CheckConstraint("year >= 2000", name="ck_invoice_number_sequences_year_min"),
+        CheckConstraint("next_seq >= 1", name="ck_invoice_number_sequences_next_seq_positive"),
+    )
+
+    year: Mapped[int] = mapped_column(primary_key=True)
+    next_seq: Mapped[int] = mapped_column(default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (

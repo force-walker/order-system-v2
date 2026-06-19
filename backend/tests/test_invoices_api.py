@@ -13,6 +13,7 @@ from app.models.entities import (
     AuditLog,
     Customer,
     Invoice,
+    InvoiceNumberSequence,
     InvoiceItem,
     InvoiceStatus,
     LineStatus,
@@ -303,6 +304,35 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert order is not None
     assert order.status == OrderStatus.shipped
     assert all(line.line_status == LineStatus.shipped for line in lines)
+    db.close()
+
+
+def test_finalize_invoice_allocates_official_number_from_year_sequence():
+    client = _client()
+    invoice_date = date(2099, 4, 1)
+
+    first = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-SEQ-1", "order_id": _seed_order(with_items=True), "invoice_date": str(invoice_date)},
+    )
+    assert first.status_code == 201
+    second = client.post(
+        "/api/v1/invoices/generate",
+        json={"invoice_no": "INV-SEQ-2", "order_id": _seed_order(with_items=True), "invoice_date": str(invoice_date)},
+    )
+    assert second.status_code == 201
+
+    first_fin = client.post(f"/api/v1/invoices/{first.json()['id']}/finalize")
+    second_fin = client.post(f"/api/v1/invoices/{second.json()['id']}/finalize")
+    assert first_fin.status_code == 200
+    assert second_fin.status_code == 200
+    assert first_fin.json()["official_invoice_no"] == "INV/2099/00001"
+    assert second_fin.json()["official_invoice_no"] == "INV/2099/00002"
+
+    db = TestingSessionLocal()
+    seq = db.query(InvoiceNumberSequence).filter(InvoiceNumberSequence.year == 2099).first()
+    assert seq is not None
+    assert seq.next_seq == 3
     db.close()
 
 
