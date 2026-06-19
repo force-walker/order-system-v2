@@ -273,6 +273,8 @@ def test_create_order_success_and_list():
     client = _client()
     create_res = client.post("/api/v1/orders", json=payload)
     assert create_res.status_code == 201
+    assert create_res.json()["tracking_no"] is not None
+    assert len(create_res.json()["tracking_no"].split("-")) == 2
     assert create_res.json()["order_no"].startswith("ORD-")
     assert create_res.json()["created_by"] == "system_api"
     assert create_res.json()["updated_by"] == "system_api"
@@ -341,6 +343,7 @@ def test_create_order_auto_numbering_generates_unique_order_no():
 
     second = client.post("/api/v1/orders", json=payload)
     assert second.status_code == 201
+    assert first.json()["tracking_no"] != second.json()["tracking_no"]
     assert first.json()["order_no"] != second.json()["order_no"]
 
 

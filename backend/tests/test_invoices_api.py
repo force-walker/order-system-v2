@@ -247,6 +247,9 @@ def test_create_finalize_unlock_reset_invoice_flow():
     )
     assert created.status_code == 201
     invoice_id = created.json()["id"]
+    assert created.json()["invoice_draft_no"].startswith("IVD-")
+    assert created.json()["official_invoice_no"] is None
+    assert created.json()["invoice_no"] == created.json()["invoice_draft_no"]
 
     got = client.get(f"/api/v1/invoices/{invoice_id}")
     assert got.status_code == 200
@@ -256,6 +259,8 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert fin.status_code == 200
     assert fin.json()["status"] == "finalized"
     assert fin.json()["is_locked"] is True
+    assert fin.json()["official_invoice_no"].startswith(f"INV/{date.today().year}/")
+    assert fin.json()["invoice_no"] == fin.json()["official_invoice_no"]
 
     db = TestingSessionLocal()
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -305,7 +310,9 @@ def test_generate_invoice_from_order_items_success():
     )
     assert res.status_code == 201
     body = res.json()
-    assert body["invoice_no"] == "INV-GEN-001"
+    assert body["invoice_draft_no"].startswith("IVD-")
+    assert body["invoice_no"] == body["invoice_draft_no"]
+    assert body["official_invoice_no"] is None
     assert float(body["subtotal"]) == 1850.0
     assert float(body["grand_total"]) == 1850.0
 
@@ -314,6 +321,7 @@ def test_generate_invoice_from_order_items_success():
     order_lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
     db.close()
     assert len(invoice_items) == 2
+    assert all(item.invoice_line_no is not None for item in invoice_items)
     assert all(line.line_status != LineStatus.invoiced for line in order_lines)
 
 
@@ -487,7 +495,7 @@ def test_get_invoice_pdf_success_and_not_found():
     pdf_res = client.get(f"/api/v1/invoices/{invoice_id}/pdf")
     assert pdf_res.status_code == 200
     assert pdf_res.headers["content-type"].startswith("application/pdf")
-    assert "INV-PDF-001.pdf" in pdf_res.headers.get("content-disposition", "")
+    assert f'{gen.json()["invoice_no"]}.pdf' in pdf_res.headers.get("content-disposition", "")
     assert len(pdf_res.content) > 1000
 
     nf = client.get("/api/v1/invoices/999999/pdf")
@@ -658,11 +666,15 @@ def test_invoice_draft_list_rows_include_required_columns():
     assert listed.status_code == 200
     assert len(listed.json()) >= 1
 
-    row = next(r for r in listed.json() if r["invoice_no"] == "INV-PR-LIST-001")
+    row = listed.json()[0]
     assert {
         "invoice_id",
         "invoice_item_id",
+        "tracking_no",
         "invoice_no",
+        "invoice_draft_no",
+        "official_invoice_no",
+        "invoice_line_no",
         "invoice_date",
         "delivery_date",
         "status",
@@ -675,6 +687,8 @@ def test_invoice_draft_list_rows_include_required_columns():
         "gross_margin_pct",
         "gross_margin_unavailable",
     }.issubset(row.keys())
+    assert row["invoice_draft_no"].startswith("IVD-")
+    assert row["invoice_no"] == row["invoice_draft_no"]
     assert row["status"] == "draft"
 
 

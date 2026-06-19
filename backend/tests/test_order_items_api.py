@@ -92,6 +92,7 @@ def test_order_items_crud_and_bulk():
     item_id = created.json()["id"]
     assert created.json()["note"] == "line-1"
     assert created.json()["comment"] == "line comment"
+    assert created.json()["order_line_no"].startswith("ODL-")
     assert float(created.json()["estimated_weight_kg"]) == 2.2
     assert float(created.json()["target_price"]) == 88.0
     assert float(created.json()["price_ceiling"]) == 120.0
@@ -100,6 +101,7 @@ def test_order_items_crud_and_bulk():
     listed = client.get(f"/api/v1/orders/{order_id}/items")
     assert listed.status_code == 200
     assert len(listed.json()) == 1
+    assert listed.json()[0]["order_line_no"] == created.json()["order_line_no"]
 
     bulk = client.post(
         f"/api/v1/orders/{order_id}/items/bulk",
