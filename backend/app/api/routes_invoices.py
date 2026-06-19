@@ -96,6 +96,7 @@ def _invoice_item_response(item: InvoiceItem) -> InvoiceItemResponse:
     gross_margin_pct, gross_margin_unavailable = _draft_item_metrics(item)
     return InvoiceItemResponse(
         id=item.id,
+        uuid=item.uuid,
         invoice_id=item.invoice_id,
         order_item_id=item.order_item_id,
         invoice_line_no=item.invoice_line_no,
@@ -370,6 +371,8 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
             InvoiceDraftListRow(
                 invoice_id=inv.id,
                 invoice_item_id=item.id,
+                invoice_uuid=inv.uuid,
+                invoice_item_uuid=item.uuid,
                 tracking_no=inv.tracking_no,
                 invoice_no=inv.invoice_no,
                 invoice_draft_no=inv.invoice_draft_no,
@@ -460,6 +463,7 @@ def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> Invoic
 
     return InvoiceReportResponse(
         invoice_id=invoice.id,
+        invoice_uuid=invoice.uuid,
         tracking_no=invoice.tracking_no,
         invoice_no=invoice.invoice_no,
         invoice_draft_no=invoice.invoice_draft_no,
@@ -476,6 +480,7 @@ def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> Invoic
         items=[
             InvoiceReportLine(
                 invoice_item_id=i.id,
+                invoice_item_uuid=i.uuid,
                 order_item_id=i.order_item_id,
                 invoice_line_no=i.invoice_line_no,
                 product_name=product_name_by_order_item_id.get(i.order_item_id, "-"),

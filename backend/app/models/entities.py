@@ -1,5 +1,6 @@
 import enum
 from datetime import UTC, date, datetime
+from uuid import uuid4
 
 from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -135,6 +136,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
     tracking_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     order_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
@@ -163,6 +165,7 @@ class OrderItem(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
     order_line_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
@@ -270,6 +273,7 @@ class Invoice(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
     invoice_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     tracking_no: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
     invoice_draft_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
@@ -303,6 +307,7 @@ class InvoiceItem(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
     invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"))
     order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"))
     invoice_line_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)

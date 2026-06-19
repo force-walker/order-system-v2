@@ -26,6 +26,7 @@ class InvoiceDraftFromPurchaseResultsRequest(BaseModel):
 
 class InvoiceResponse(BaseModel):
     id: int
+    uuid: str
     tracking_no: str | None = None
     invoice_no: str
     invoice_draft_no: str | None = None
@@ -47,6 +48,7 @@ class InvoiceResponse(BaseModel):
 
 class InvoiceItemResponse(BaseModel):
     id: int
+    uuid: str
     invoice_id: int
     order_item_id: int
     invoice_line_no: str | None = None
@@ -69,6 +71,8 @@ class InvoiceItemResponse(BaseModel):
 class InvoiceDraftListRow(BaseModel):
     invoice_id: int
     invoice_item_id: int
+    invoice_uuid: str
+    invoice_item_uuid: str
     tracking_no: str | None = None
     invoice_no: str
     invoice_draft_no: str | None = None
@@ -113,6 +117,7 @@ class InvoiceDraftRecalculateResponse(BaseModel):
 
 class InvoiceReportLine(BaseModel):
     invoice_item_id: int
+    invoice_item_uuid: str
     order_item_id: int
     invoice_line_no: str | None = None
     product_name: str
@@ -128,6 +133,7 @@ class InvoiceReportLine(BaseModel):
 
 class InvoiceReportResponse(BaseModel):
     invoice_id: int
+    invoice_uuid: str
     tracking_no: str | None = None
     invoice_no: str
     invoice_draft_no: str | None = None
@@ -146,6 +152,7 @@ class InvoiceReportResponse(BaseModel):
 
 class InvoiceSummaryRow(BaseModel):
     invoice_id: int
+    invoice_uuid: str
     tracking_no: str | None = None
     invoice_no: str
     invoice_draft_no: str | None = None
