@@ -68,6 +68,10 @@ class InvoiceItemResponse(BaseModel):
 class InvoiceDraftListRow(BaseModel):
     invoice_id: int
     invoice_item_id: int
+    invoice_no: str
+    invoice_date: date
+    delivery_date: date
+    status: InvoiceStatus
     order_no: str
     customer_name: str
     product_name: str

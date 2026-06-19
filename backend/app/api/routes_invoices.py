@@ -341,6 +341,10 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
             InvoiceDraftListRow(
                 invoice_id=inv.id,
                 invoice_item_id=item.id,
+                invoice_no=inv.invoice_no,
+                invoice_date=inv.invoice_date,
+                delivery_date=inv.delivery_date,
+                status=inv.status,
                 order_no=order.order_no,
                 customer_name=customer.name,
                 product_name=product.name,
