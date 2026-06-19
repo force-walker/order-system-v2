@@ -257,12 +257,20 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert got.json()["id"] == invoice_id
     assert got.json()["uuid"] == created.json()["uuid"]
 
+    got_by_uuid = client.get(f"/api/v1/invoices/uuid/{created.json()['uuid']}")
+    assert got_by_uuid.status_code == 200
+    assert got_by_uuid.json()["id"] == invoice_id
+
     fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert fin.status_code == 200
     assert fin.json()["status"] == "finalized"
     assert fin.json()["is_locked"] is True
     assert fin.json()["official_invoice_no"].startswith(f"INV/{date.today().year}/")
     assert fin.json()["invoice_no"] == fin.json()["official_invoice_no"]
+
+    report_by_uuid = client.get(f"/api/v1/invoices/uuid/{created.json()['uuid']}/report")
+    assert report_by_uuid.status_code == 200
+    assert report_by_uuid.json()["invoice_id"] == invoice_id
 
     db = TestingSessionLocal()
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -326,6 +334,10 @@ def test_generate_invoice_from_order_items_success():
     assert len(invoice_items) == 2
     assert all(item.invoice_line_no is not None for item in invoice_items)
     assert all(line.line_status != LineStatus.invoiced for line in order_lines)
+
+    items_by_uuid = client.get(f"/api/v1/invoices/uuid/{body['uuid']}/items")
+    assert items_by_uuid.status_code == 200
+    assert len(items_by_uuid.json()) == 2
 
 
 def test_generate_invoice_without_items_is_422():

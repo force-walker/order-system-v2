@@ -72,6 +72,34 @@ def _default_delivery_date_by_hk_time(now_hk: datetime) -> datetime.date:
     return now_hk.date()
 
 
+def _get_order_by_id_or_404(db: Session, order_id: int) -> Order:
+    row = db.query(Order).filter(Order.id == order_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    return row
+
+
+def _get_order_by_uuid_or_404(db: Session, order_uuid: str) -> Order:
+    row = db.query(Order).filter(Order.uuid == order_uuid).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    return row
+
+
+def _get_order_item_by_id_or_404(db: Session, order_id: int, item_id: int) -> OrderItem:
+    row = db.query(OrderItem).filter(OrderItem.id == item_id, OrderItem.order_id == order_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "order item not found"})
+    return row
+
+
+def _get_order_item_by_uuid_or_404(db: Session, order_id: int, item_uuid: str) -> OrderItem:
+    row = db.query(OrderItem).filter(OrderItem.uuid == item_uuid, OrderItem.order_id == order_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "order item not found"})
+    return row
+
+
 ORDER_COMMON_ERROR_RESPONSES = {
     422: {"model": ApiErrorResponse, "description": "Validation Error"},
 }
@@ -312,10 +340,16 @@ def list_orders(
     responses={**ORDER_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
 )
 def get_order(order_id: int, db: Session = Depends(get_db)) -> OrderResponse:
-    row = db.query(Order).filter(Order.id == order_id).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
-    return OrderResponse.model_validate(row)
+    return OrderResponse.model_validate(_get_order_by_id_or_404(db, order_id))
+
+
+@router.get(
+    "/uuid/{order_uuid}",
+    response_model=OrderResponse,
+    responses={**ORDER_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def get_order_by_uuid(order_uuid: str, db: Session = Depends(get_db)) -> OrderResponse:
+    return OrderResponse.model_validate(_get_order_by_uuid_or_404(db, order_uuid))
 
 
 @router.patch(
@@ -327,9 +361,41 @@ def get_order(order_id: int, db: Session = Depends(get_db)) -> OrderResponse:
     },
 )
 def update_order(order_id: int, payload: OrderUpdateRequest, db: Session = Depends(get_db)) -> OrderResponse:
-    row = db.query(Order).filter(Order.id == order_id).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    row = _get_order_by_id_or_404(db, order_id)
+
+    if payload.customer_id is not None:
+        customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+        if customer is None:
+            raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+        row.customer_id = payload.customer_id
+
+    if payload.delivery_date is not None:
+        row.delivery_date = payload.delivery_date
+
+    if payload.shipped_date is not None or "shipped_date" in payload.model_fields_set:
+        row.shipped_date = payload.shipped_date
+
+    if payload.note is not None or "note" in payload.model_fields_set:
+        row.note = payload.note
+
+    row.updated_by = "system_api"
+    db.flush()
+    write_audit_log(db, entity_type="order", entity_id=row.id, action=AuditAction.UPDATE)
+    db.commit()
+    db.refresh(row)
+    return OrderResponse.model_validate(row)
+
+
+@router.patch(
+    "/uuid/{order_uuid}",
+    response_model=OrderResponse,
+    responses={
+        **ORDER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+    },
+)
+def update_order_by_uuid(order_uuid: str, payload: OrderUpdateRequest, db: Session = Depends(get_db)) -> OrderResponse:
+    row = _get_order_by_uuid_or_404(db, order_uuid)
 
     if payload.customer_id is not None:
         customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
@@ -646,19 +712,22 @@ def _validate_order_item_pricing(payload: OrderItemCreateRequest | OrderItemUpda
 
 @router.get("/{order_id}/items", response_model=list[OrderItemResponse])
 def list_order_items(order_id: int, db: Session = Depends(get_db)) -> list[OrderItemResponse]:
-    order = db.query(Order).filter(Order.id == order_id).first()
-    if order is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    _get_order_by_id_or_404(db, order_id)
 
     rows = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
     return [OrderItemResponse.model_validate(r) for r in rows]
 
 
+@router.get("/uuid/{order_uuid}/items", response_model=list[OrderItemResponse])
+def list_order_items_by_order_uuid(order_uuid: str, db: Session = Depends(get_db)) -> list[OrderItemResponse]:
+    order = _get_order_by_uuid_or_404(db, order_uuid)
+    rows = db.query(OrderItem).filter(OrderItem.order_id == order.id).order_by(OrderItem.id.asc()).all()
+    return [OrderItemResponse.model_validate(r) for r in rows]
+
+
 @router.post("/{order_id}/items", response_model=OrderItemResponse, status_code=201)
 def create_order_item(order_id: int, payload: OrderItemCreateRequest, db: Session = Depends(get_db)) -> OrderItemResponse:
-    order = db.query(Order).filter(Order.id == order_id).first()
-    if order is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    order = _get_order_by_id_or_404(db, order_id)
 
     product = db.query(Product).filter(Product.id == payload.product_id).first()
     if product is None:
@@ -668,6 +737,40 @@ def create_order_item(order_id: int, payload: OrderItemCreateRequest, db: Sessio
 
     row = OrderItem(
         order_id=order_id,
+        product_id=payload.product_id,
+        ordered_qty=payload.ordered_qty,
+        order_uom_type=payload.order_uom_type,
+        estimated_weight_kg=payload.estimated_weight_kg,
+        target_price=payload.target_price,
+        price_ceiling=payload.price_ceiling,
+        stockout_policy=payload.stockout_policy,
+        pricing_basis=payload.pricing_basis,
+        unit_price_uom_count=payload.unit_price_uom_count,
+        unit_price_uom_kg=payload.unit_price_uom_kg,
+        note=payload.note,
+        comment=payload.comment,
+    )
+    db.add(row)
+    db.flush()
+    ensure_order_item_number(db, order, row)
+    order.updated_by = "system_api"
+    db.commit()
+    db.refresh(row)
+    return OrderItemResponse.model_validate(row)
+
+
+@router.post("/uuid/{order_uuid}/items", response_model=OrderItemResponse, status_code=201)
+def create_order_item_by_order_uuid(order_uuid: str, payload: OrderItemCreateRequest, db: Session = Depends(get_db)) -> OrderItemResponse:
+    order = _get_order_by_uuid_or_404(db, order_uuid)
+
+    product = db.query(Product).filter(Product.id == payload.product_id).first()
+    if product is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
+
+    _validate_order_item_pricing(payload)
+
+    row = OrderItem(
+        order_id=order.id,
         product_id=payload.product_id,
         ordered_qty=payload.ordered_qty,
         order_uom_type=payload.order_uom_type,
@@ -736,13 +839,28 @@ def bulk_create_order_items(order_id: int, payload: OrderItemsBulkCreateRequest,
 
 @router.patch("/{order_id}/items/{item_id}", response_model=OrderItemResponse)
 def update_order_item(order_id: int, item_id: int, payload: OrderItemUpdateRequest, db: Session = Depends(get_db)) -> OrderItemResponse:
-    order = db.query(Order).filter(Order.id == order_id).first()
-    if order is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    order = _get_order_by_id_or_404(db, order_id)
+    row = _get_order_item_by_id_or_404(db, order_id, item_id)
 
-    row = db.query(OrderItem).filter(OrderItem.id == item_id, OrderItem.order_id == order_id).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "order item not found"})
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(row, k, v)
+
+    if payload.pricing_basis is not None or payload.unit_price_uom_count is not None or payload.unit_price_uom_kg is not None:
+        pb = payload.pricing_basis or row.pricing_basis
+        temp = OrderItemUpdateRequest(pricing_basis=pb, unit_price_uom_count=row.unit_price_uom_count, unit_price_uom_kg=row.unit_price_uom_kg)
+        _validate_order_item_pricing(temp)
+
+    order.updated_by = "system_api"
+    db.commit()
+    db.refresh(row)
+    return OrderItemResponse.model_validate(row)
+
+
+@router.patch("/uuid/{order_uuid}/items/{item_uuid}", response_model=OrderItemResponse)
+def update_order_item_by_uuid(order_uuid: str, item_uuid: str, payload: OrderItemUpdateRequest, db: Session = Depends(get_db)) -> OrderItemResponse:
+    order = _get_order_by_uuid_or_404(db, order_uuid)
+    row = _get_order_item_by_uuid_or_404(db, order.id, item_uuid)
 
     data = payload.model_dump(exclude_unset=True)
     for k, v in data.items():
@@ -761,13 +879,19 @@ def update_order_item(order_id: int, item_id: int, payload: OrderItemUpdateReque
 
 @router.delete("/{order_id}/items/{item_id}", status_code=204)
 def delete_order_item(order_id: int, item_id: int, db: Session = Depends(get_db)) -> None:
-    order = db.query(Order).filter(Order.id == order_id).first()
-    if order is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    order = _get_order_by_id_or_404(db, order_id)
+    row = _get_order_item_by_id_or_404(db, order_id, item_id)
 
-    row = db.query(OrderItem).filter(OrderItem.id == item_id, OrderItem.order_id == order_id).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "order item not found"})
+    db.delete(row)
+    order.updated_by = "system_api"
+    db.commit()
+    return None
+
+
+@router.delete("/uuid/{order_uuid}/items/{item_uuid}", status_code=204)
+def delete_order_item_by_uuid(order_uuid: str, item_uuid: str, db: Session = Depends(get_db)) -> None:
+    order = _get_order_by_uuid_or_404(db, order_uuid)
+    row = _get_order_item_by_uuid_or_404(db, order.id, item_uuid)
 
     db.delete(row)
     order.updated_by = "system_api"

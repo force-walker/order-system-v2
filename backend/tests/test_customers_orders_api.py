@@ -291,6 +291,10 @@ def test_create_order_success_and_list():
     assert detail_res.json()["id"] == order_id
     assert detail_res.json()["uuid"] == create_res.json()["uuid"]
 
+    uuid_detail_res = client.get(f"/api/v1/orders/uuid/{create_res.json()['uuid']}")
+    assert uuid_detail_res.status_code == 200
+    assert uuid_detail_res.json()["id"] == order_id
+
 
 def test_default_delivery_date_boundary_rule_hk_tz():
     assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 15, 59, tzinfo=HK_TZ)) == date(2026, 4, 14)
@@ -373,6 +377,21 @@ def test_update_order_header_success_and_not_found():
     nf = client.patch("/api/v1/orders/999999", json={"note": "x"})
     assert nf.status_code == 404
     assert nf.json()["detail"]["code"] == "ORDER_NOT_FOUND"
+
+
+def test_update_order_by_uuid_success():
+    cid = _seed_customer("CUST-ORD-UPD-UUID")
+    client = _client()
+    created = client.post("/api/v1/orders", json={"customer_id": cid, "delivery_date": str(date.today()), "note": "before"})
+    assert created.status_code == 201
+
+    ok = client.patch(
+        f"/api/v1/orders/uuid/{created.json()['uuid']}",
+        json={"note": "after"},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["id"] == created.json()["id"]
+    assert ok.json()["note"] == "after"
 
 
 def test_update_order_customer_not_found():
