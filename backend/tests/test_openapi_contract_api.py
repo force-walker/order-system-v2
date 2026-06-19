@@ -205,6 +205,9 @@ def test_openapi_phase2_query_filters_are_exposed():
     invoice_report_line_props = spec["components"]["schemas"]["InvoiceReportLine"]["properties"]
     assert {"unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable"}.issubset(invoice_report_line_props)
 
+    invoice_draft_list_row_props = spec["components"]["schemas"]["InvoiceDraftListRow"]["properties"]
+    assert {"invoice_no", "invoice_date", "delivery_date", "status"}.issubset(invoice_draft_list_row_props)
+
     system_settings_props = spec["components"]["schemas"]["SystemSettingsResponse"]["properties"]
     assert {"jp_gross_margin_pct", "jp_gross_margin_rate"}.issubset(system_settings_props)
 

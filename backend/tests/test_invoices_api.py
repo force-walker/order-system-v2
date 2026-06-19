@@ -658,10 +658,14 @@ def test_invoice_draft_list_rows_include_required_columns():
     assert listed.status_code == 200
     assert len(listed.json()) >= 1
 
-    row = listed.json()[0]
+    row = next(r for r in listed.json() if r["invoice_no"] == "INV-PR-LIST-001")
     assert {
         "invoice_id",
         "invoice_item_id",
+        "invoice_no",
+        "invoice_date",
+        "delivery_date",
+        "status",
         "customer_name",
         "product_name",
         "billable_qty",
@@ -671,6 +675,7 @@ def test_invoice_draft_list_rows_include_required_columns():
         "gross_margin_pct",
         "gross_margin_unavailable",
     }.issubset(row.keys())
+    assert row["status"] == "draft"
 
 
 def test_draft_generation_uses_system_settings_and_freight_weight():
