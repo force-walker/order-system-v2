@@ -135,6 +135,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    tracking_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     order_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
     order_datetime: Mapped[datetime] = mapped_column(DateTime, index=True)
@@ -163,6 +164,7 @@ class OrderItem(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    order_line_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     ordered_qty: Mapped[float] = mapped_column(Numeric(12, 3))
     order_uom_type: Mapped[PricingBasis] = mapped_column(Enum(PricingBasis, name="pricingbasis"), default=PricingBasis.uom_count)
@@ -269,6 +271,9 @@ class Invoice(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     invoice_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    tracking_no: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
+    invoice_draft_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
+    official_invoice_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
     invoice_date: Mapped[date] = mapped_column(Date)
     delivery_date: Mapped[date] = mapped_column(Date)
@@ -300,6 +305,7 @@ class InvoiceItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"))
     order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"))
+    invoice_line_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     billable_qty: Mapped[float] = mapped_column(Numeric(12, 3))
     billable_uom: Mapped[str] = mapped_column(String(32))
     invoice_line_status: Mapped[InvoiceLineStatus] = mapped_column(

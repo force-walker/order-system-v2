@@ -180,7 +180,7 @@ def test_orders_invoices_and_purchase_results_regression_matrix():
         "/api/v1/invoices/generate",
         json={"invoice_no": "INV-M-1", "order_id": order_id, "invoice_date": str(date.today())},
     )
-    assert inv_dup.status_code == 409
+    assert inv_dup.status_code == 201
 
     inv_bad = client.post(
         "/api/v1/invoices",

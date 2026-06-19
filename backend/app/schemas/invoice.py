@@ -6,21 +6,18 @@ from app.models.entities import InvoiceStatus
 
 
 class InvoiceCreateRequest(BaseModel):
-    invoice_no: str = Field(min_length=1, max_length=64)
     order_id: int = Field(gt=0)
     invoice_date: date
     due_date: date | None = None
 
 
 class InvoiceGenerateRequest(BaseModel):
-    invoice_no: str = Field(min_length=1, max_length=64)
     order_id: int = Field(gt=0)
     invoice_date: date
     due_date: date | None = None
 
 
 class InvoiceDraftFromPurchaseResultsRequest(BaseModel):
-    invoice_no: str = Field(min_length=1, max_length=64)
     order_id: int = Field(gt=0)
     invoice_date: date
     due_date: date | None = None
@@ -29,7 +26,10 @@ class InvoiceDraftFromPurchaseResultsRequest(BaseModel):
 
 class InvoiceResponse(BaseModel):
     id: int
+    tracking_no: str | None = None
     invoice_no: str
+    invoice_draft_no: str | None = None
+    official_invoice_no: str | None = None
     customer_id: int
     invoice_date: date
     delivery_date: date
@@ -49,6 +49,7 @@ class InvoiceItemResponse(BaseModel):
     id: int
     invoice_id: int
     order_item_id: int
+    invoice_line_no: str | None = None
     billable_qty: float
     billable_uom: str
     invoice_line_status: str
@@ -68,7 +69,11 @@ class InvoiceItemResponse(BaseModel):
 class InvoiceDraftListRow(BaseModel):
     invoice_id: int
     invoice_item_id: int
+    tracking_no: str | None = None
     invoice_no: str
+    invoice_draft_no: str | None = None
+    official_invoice_no: str | None = None
+    invoice_line_no: str | None = None
     invoice_date: date
     delivery_date: date
     status: InvoiceStatus
@@ -109,6 +114,7 @@ class InvoiceDraftRecalculateResponse(BaseModel):
 class InvoiceReportLine(BaseModel):
     invoice_item_id: int
     order_item_id: int
+    invoice_line_no: str | None = None
     product_name: str
     billable_qty: float
     billable_uom: str
@@ -122,7 +128,10 @@ class InvoiceReportLine(BaseModel):
 
 class InvoiceReportResponse(BaseModel):
     invoice_id: int
+    tracking_no: str | None = None
     invoice_no: str
+    invoice_draft_no: str | None = None
+    official_invoice_no: str | None = None
     status: InvoiceStatus
     customer_id: int
     customer_name: str
@@ -137,7 +146,10 @@ class InvoiceReportResponse(BaseModel):
 
 class InvoiceSummaryRow(BaseModel):
     invoice_id: int
+    tracking_no: str | None = None
     invoice_no: str
+    invoice_draft_no: str | None = None
+    official_invoice_no: str | None = None
     customer_name: str
     invoice_date: date
     delivery_date: date
@@ -157,6 +169,8 @@ class InvoiceNeighborsResponse(BaseModel):
 
 class InvoiceFinalizeResponse(BaseModel):
     invoice_id: int
+    invoice_no: str
+    official_invoice_no: str | None = None
     status: InvoiceStatus
     is_locked: bool
 

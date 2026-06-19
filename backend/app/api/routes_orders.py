@@ -1,5 +1,4 @@
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from io import BytesIO
@@ -15,6 +14,7 @@ from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
+from app.core.numbering import ensure_order_header_numbers, ensure_order_item_number
 from app.db.session import get_db
 from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
@@ -612,30 +612,21 @@ def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> 
     if customer is None:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
 
-    row = None
-    for _ in range(5):
-        generated_order_no = f"ORD-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:6].upper()}"
-        if db.query(Order).filter(Order.order_no == generated_order_no).first() is not None:
-            continue
-
-        now_hk = _now_hk()
-        row = Order(
-            order_no=generated_order_no,
-            customer_id=payload.customer_id,
-            order_datetime=datetime.now(UTC),
-            delivery_date=(payload.delivery_date or _default_delivery_date_by_hk_time(now_hk)),
-            shipped_date=payload.shipped_date,
-            status=OrderStatus.new,
-            note=payload.note,
-            created_by="system_api",
-            updated_by="system_api",
-        )
-        db.add(row)
-        db.flush()
-        break
-
-    if row is None:
-        raise HTTPException(status_code=409, detail={"code": "ORDER_NO_GENERATION_FAILED", "message": "failed to generate order_no"})
+    now_hk = _now_hk()
+    row = Order(
+        order_no=f"pending-{datetime.now(UTC).timestamp()}",
+        customer_id=payload.customer_id,
+        order_datetime=datetime.now(UTC),
+        delivery_date=(payload.delivery_date or _default_delivery_date_by_hk_time(now_hk)),
+        shipped_date=payload.shipped_date,
+        status=OrderStatus.new,
+        note=payload.note,
+        created_by="system_api",
+        updated_by="system_api",
+    )
+    db.add(row)
+    db.flush()
+    ensure_order_header_numbers(db, row, now_hk=now_hk)
 
     write_audit_log(db, entity_type="order", entity_id=row.id, action=AuditAction.CREATE)
     db.commit()
@@ -692,6 +683,7 @@ def create_order_item(order_id: int, payload: OrderItemCreateRequest, db: Sessio
     )
     db.add(row)
     db.flush()
+    ensure_order_item_number(db, order, row)
     order.updated_by = "system_api"
     db.commit()
     db.refresh(row)
@@ -717,23 +709,24 @@ def bulk_create_order_items(order_id: int, payload: OrderItemsBulkCreateRequest,
             errors.append({"index": idx, "field": "pricing_basis", "code": e.detail.get("code", "VALIDATION_FAILED"), "message": e.detail.get("message", "validation failed")})
             continue
 
-        db.add(
-            OrderItem(
-                order_id=order_id,
-                product_id=item.product_id,
-                ordered_qty=item.ordered_qty,
-                order_uom_type=item.order_uom_type,
-                estimated_weight_kg=item.estimated_weight_kg,
-                target_price=item.target_price,
-                price_ceiling=item.price_ceiling,
-                stockout_policy=item.stockout_policy,
-                pricing_basis=item.pricing_basis,
-                unit_price_uom_count=item.unit_price_uom_count,
-                unit_price_uom_kg=item.unit_price_uom_kg,
-                note=item.note,
-                comment=item.comment,
-            )
+        row = OrderItem(
+            order_id=order_id,
+            product_id=item.product_id,
+            ordered_qty=item.ordered_qty,
+            order_uom_type=item.order_uom_type,
+            estimated_weight_kg=item.estimated_weight_kg,
+            target_price=item.target_price,
+            price_ceiling=item.price_ceiling,
+            stockout_policy=item.stockout_policy,
+            pricing_basis=item.pricing_basis,
+            unit_price_uom_count=item.unit_price_uom_count,
+            unit_price_uom_kg=item.unit_price_uom_kg,
+            note=item.note,
+            comment=item.comment,
         )
+        db.add(row)
+        db.flush()
+        ensure_order_item_number(db, order, row)
         success += 1
 
     order.updated_by = "system_api"

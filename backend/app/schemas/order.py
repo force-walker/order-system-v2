@@ -61,6 +61,7 @@ class OrderBulkCancelResponse(BaseModel):
 
 class OrderResponse(BaseModel):
     id: int
+    tracking_no: str | None = None
     order_no: str
     customer_id: int
     order_datetime: datetime
@@ -108,6 +109,7 @@ class OrderItemUpdateRequest(BaseModel):
 class OrderItemResponse(BaseModel):
     id: int
     order_id: int
+    order_line_no: str | None = None
     product_id: int
     ordered_qty: float
     order_uom_type: PricingBasis
