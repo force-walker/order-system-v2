@@ -105,6 +105,11 @@ def test_order_items_crud_and_bulk():
     assert listed.json()[0]["uuid"] == created.json()["uuid"]
     assert listed.json()[0]["order_line_no"] == created.json()["order_line_no"]
 
+    order_uuid = client.get(f"/api/v1/orders/{order_id}").json()["uuid"]
+    listed_by_uuid = client.get(f"/api/v1/orders/uuid/{order_uuid}/items")
+    assert listed_by_uuid.status_code == 200
+    assert listed_by_uuid.json()[0]["id"] == item_id
+
     bulk = client.post(
         f"/api/v1/orders/{order_id}/items/bulk",
         json={
@@ -138,6 +143,13 @@ def test_order_items_crud_and_bulk():
     assert updated.status_code == 200
     assert float(updated.json()["ordered_qty"]) == 3.0
     assert updated.json()["note"] == "updated"
+
+    updated_by_uuid = client.patch(
+        f"/api/v1/orders/uuid/{order_uuid}/items/{created.json()['uuid']}",
+        json={"ordered_qty": 4},
+    )
+    assert updated_by_uuid.status_code == 200
+    assert float(updated_by_uuid.json()["ordered_qty"]) == 4.0
 
     deleted = client.delete(f"/api/v1/orders/{order_id}/items/{item_id}")
     assert deleted.status_code == 204

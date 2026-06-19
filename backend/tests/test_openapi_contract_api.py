@@ -147,7 +147,7 @@ def test_openapi_phase2_query_filters_are_exposed():
     spec = client.get("/openapi.json").json()
 
     invoice_list_params = {p["name"] for p in spec["paths"]["/api/v1/invoices"]["get"]["parameters"]}
-    assert {"order_id", "status"}.issubset(invoice_list_params)
+    assert {"order_id", "order_uuid", "status"}.issubset(invoice_list_params)
 
     purchase_list_params = {p["name"] for p in spec["paths"]["/api/v1/purchase-results"]["get"]["parameters"]}
     assert {"allocation_id", "customer_id", "product_id", "supplier_id", "sort_by", "sort_order", "limit", "offset"}.issubset(purchase_list_params)
@@ -213,6 +213,13 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     order_response_props = spec["components"]["schemas"]["OrderResponse"]["properties"]
     assert {"uuid", "tracking_no"}.issubset(order_response_props)
+
+    assert "/api/v1/orders/uuid/{order_uuid}" in spec["paths"]
+    assert "/api/v1/orders/uuid/{order_uuid}/items" in spec["paths"]
+    assert "/api/v1/orders/uuid/{order_uuid}/items/{item_uuid}" in spec["paths"]
+    assert "/api/v1/invoices/uuid/{invoice_uuid}" in spec["paths"]
+    assert "/api/v1/invoices/uuid/{invoice_uuid}/items" in spec["paths"]
+    assert "/api/v1/invoices/uuid/{invoice_uuid}/items/{invoice_item_uuid}" in spec["paths"]
 
     system_settings_props = spec["components"]["schemas"]["SystemSettingsResponse"]["properties"]
     assert {"jp_gross_margin_pct", "jp_gross_margin_rate"}.issubset(system_settings_props)
