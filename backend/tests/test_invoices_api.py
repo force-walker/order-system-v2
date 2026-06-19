@@ -247,6 +247,7 @@ def test_create_finalize_unlock_reset_invoice_flow():
     )
     assert created.status_code == 201
     invoice_id = created.json()["id"]
+    assert created.json()["uuid"]
     assert created.json()["invoice_draft_no"].startswith("IVD-")
     assert created.json()["official_invoice_no"] is None
     assert created.json()["invoice_no"] == created.json()["invoice_draft_no"]
@@ -254,6 +255,7 @@ def test_create_finalize_unlock_reset_invoice_flow():
     got = client.get(f"/api/v1/invoices/{invoice_id}")
     assert got.status_code == 200
     assert got.json()["id"] == invoice_id
+    assert got.json()["uuid"] == created.json()["uuid"]
 
     fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert fin.status_code == 200
@@ -310,6 +312,7 @@ def test_generate_invoice_from_order_items_success():
     )
     assert res.status_code == 201
     body = res.json()
+    assert body["uuid"]
     assert body["invoice_draft_no"].startswith("IVD-")
     assert body["invoice_no"] == body["invoice_draft_no"]
     assert body["official_invoice_no"] is None
@@ -670,6 +673,8 @@ def test_invoice_draft_list_rows_include_required_columns():
     assert {
         "invoice_id",
         "invoice_item_id",
+        "invoice_uuid",
+        "invoice_item_uuid",
         "tracking_no",
         "invoice_no",
         "invoice_draft_no",
@@ -688,6 +693,8 @@ def test_invoice_draft_list_rows_include_required_columns():
         "gross_margin_unavailable",
     }.issubset(row.keys())
     assert row["invoice_draft_no"].startswith("IVD-")
+    assert row["invoice_uuid"]
+    assert row["invoice_item_uuid"]
     assert row["invoice_no"] == row["invoice_draft_no"]
     assert row["status"] == "draft"
 

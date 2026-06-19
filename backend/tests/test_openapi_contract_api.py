@@ -200,19 +200,19 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert "freight_weight" in product_response_props
 
     invoice_item_props = spec["components"]["schemas"]["InvoiceItemResponse"]["properties"]
-    assert {"unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable", "invoice_line_no"}.issubset(invoice_item_props)
+    assert {"uuid", "unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable", "invoice_line_no"}.issubset(invoice_item_props)
 
     invoice_report_line_props = spec["components"]["schemas"]["InvoiceReportLine"]["properties"]
-    assert {"unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable", "invoice_line_no"}.issubset(invoice_report_line_props)
+    assert {"invoice_item_uuid", "unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable", "invoice_line_no"}.issubset(invoice_report_line_props)
 
     invoice_draft_list_row_props = spec["components"]["schemas"]["InvoiceDraftListRow"]["properties"]
-    assert {"tracking_no", "invoice_no", "invoice_draft_no", "official_invoice_no", "invoice_line_no", "invoice_date", "delivery_date", "status"}.issubset(invoice_draft_list_row_props)
+    assert {"invoice_uuid", "invoice_item_uuid", "tracking_no", "invoice_no", "invoice_draft_no", "official_invoice_no", "invoice_line_no", "invoice_date", "delivery_date", "status"}.issubset(invoice_draft_list_row_props)
 
     invoice_response_props = spec["components"]["schemas"]["InvoiceResponse"]["properties"]
-    assert {"tracking_no", "invoice_draft_no", "official_invoice_no"}.issubset(invoice_response_props)
+    assert {"uuid", "tracking_no", "invoice_draft_no", "official_invoice_no"}.issubset(invoice_response_props)
 
     order_response_props = spec["components"]["schemas"]["OrderResponse"]["properties"]
-    assert "tracking_no" in order_response_props
+    assert {"uuid", "tracking_no"}.issubset(order_response_props)
 
     system_settings_props = spec["components"]["schemas"]["SystemSettingsResponse"]["properties"]
     assert {"jp_gross_margin_pct", "jp_gross_margin_rate"}.issubset(system_settings_props)

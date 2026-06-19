@@ -273,6 +273,7 @@ def test_create_order_success_and_list():
     client = _client()
     create_res = client.post("/api/v1/orders", json=payload)
     assert create_res.status_code == 201
+    assert create_res.json()["uuid"]
     assert create_res.json()["tracking_no"] is not None
     assert len(create_res.json()["tracking_no"].split("-")) == 2
     assert create_res.json()["order_no"].startswith("ORD-")
@@ -288,6 +289,7 @@ def test_create_order_success_and_list():
     detail_res = client.get(f"/api/v1/orders/{order_id}")
     assert detail_res.status_code == 200
     assert detail_res.json()["id"] == order_id
+    assert detail_res.json()["uuid"] == create_res.json()["uuid"]
 
 
 def test_default_delivery_date_boundary_rule_hk_tz():
