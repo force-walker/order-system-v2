@@ -11,6 +11,7 @@ from app.api.routes_audit import router as audit_router
 from app.api.routes_auth import router as auth_router
 from app.api.routes_batch import router as batch_router
 from app.api.routes_customers import router as customers_router
+from app.api.routes_deliveries import router as deliveries_router
 from app.api.routes_invoices import router as invoices_router
 from app.api.routes_metrics import router as metrics_router
 from app.api.routes_order_item_allocations import router as order_item_allocations_router
@@ -112,6 +113,7 @@ app.include_router(metrics_router)
 app.include_router(audit_router)
 app.include_router(products_router)
 app.include_router(customers_router)
+app.include_router(deliveries_router)
 app.include_router(suppliers_router)
 app.include_router(system_settings_router)
 app.include_router(supplier_product_mappings_router)

@@ -14,6 +14,7 @@ from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
+from app.core.deliveries import ensure_delivery_document
 from app.core.numbering import ensure_order_delivery_number, ensure_order_header_numbers, ensure_order_item_number
 from app.db.session import get_db
 from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierAllocation
@@ -380,6 +381,7 @@ def update_order(order_id: str, payload: OrderUpdateRequest, db: Session = Depen
 
     if row.status in {OrderStatus.shipped, OrderStatus.invoiced}:
         ensure_order_delivery_number(db, row)
+        ensure_delivery_document(db, row)
 
     row.updated_by = "system_api"
     db.flush()
@@ -417,6 +419,7 @@ def update_order_by_uuid(order_uuid: str, payload: OrderUpdateRequest, db: Sessi
 
     if row.status in {OrderStatus.shipped, OrderStatus.invoiced}:
         ensure_order_delivery_number(db, row)
+        ensure_delivery_document(db, row)
 
     row.updated_by = "system_api"
     db.flush()
@@ -480,6 +483,7 @@ def bulk_transition_order(order_id: str, payload: OrderBulkTransitionRequest, db
     order.status = payload.to_status
     if order.status in {OrderStatus.shipped, OrderStatus.invoiced}:
         ensure_order_delivery_number(db, order)
+        ensure_delivery_document(db, order)
     order.updated_by = "system_api"
     db.flush()
     write_audit_log(

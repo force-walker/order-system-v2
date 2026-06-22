@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierAllocation
+from app.models.entities import Customer, Delivery, DeliveryItem, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierAllocation
 
 
 engine = create_engine(
@@ -92,6 +92,28 @@ def _seed_shipping_row(shipped_date: date, supplier_name: str, customer_name: st
         )
     )
 
+    delivery = Delivery(
+        delivery_no=f"DLV-{shipped_date.strftime('%Y%m%d')}-{str(item.id)[-5:].zfill(5)}-01",
+        tracking_no=f"{shipped_date.strftime('%Y%m%d')}-{str(item.id)[-5:].zfill(5)}",
+        order_id=order.id,
+        customer_id=customer.id,
+        delivery_date=shipped_date,
+        shipped_date=shipped_date,
+    )
+    db.add(delivery)
+    db.flush()
+    db.add(
+        DeliveryItem(
+            delivery_id=delivery.id,
+            order_item_id=item.id,
+            product_id=product.id,
+            delivery_line_no=f"DLI-{str(item.id)[-5:].zfill(5)}-01-0001",
+            delivered_qty=5,
+            delivered_uom="count",
+            shipped_date=shipped_date,
+        )
+    )
+
     db.commit()
     db.close()
 
@@ -105,6 +127,7 @@ def test_shipping_report_same_date_and_sort_modes():
     by_supplier = client.get(f"/api/v1/reports/shipping?shipped_date={sdate}&mode=supplier_product")
     assert by_supplier.status_code == 200
     assert len(by_supplier.json()) == 2
+    assert by_supplier.json()[0]["delivery_no"].startswith("DLV-")
     assert by_supplier.json()[0]["supplier_name"] <= by_supplier.json()[1]["supplier_name"]
 
     by_customer = client.get(f"/api/v1/reports/shipping?shipped_date={sdate}&mode=customer")
