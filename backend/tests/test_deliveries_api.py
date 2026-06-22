@@ -151,3 +151,37 @@ def test_build_delivery_from_order_and_pdf():
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
     assert len(pdf.content) > 0
+
+
+def test_list_delivery_invoices():
+    order_id = _seed_purchased_order()
+    client = _client()
+
+    shipped = client.post(
+        f"/api/v1/orders/{order_id}/bulk-transition",
+        json={"from_status": "purchased", "to_status": "shipped"},
+    )
+    assert shipped.status_code == 200
+
+    built = client.post("/api/v1/deliveries/from-order", json={"order_id": order_id})
+    assert built.status_code == 200
+    delivery_id = built.json()["id"]
+    delivery_uuid = built.json()["uuid"]
+
+    invoice = client.post(
+        "/api/v1/invoices/generate-from-delivery",
+        json={"delivery_id": delivery_id, "invoice_date": str(date.today())},
+    )
+    assert invoice.status_code == 201
+
+    listed = client.get(f"/api/v1/deliveries/{delivery_id}/invoices")
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+    assert listed.json()[0]["invoice_id"] == invoice.json()["id"]
+    assert listed.json()[0]["delivery_id"] == delivery_id
+    assert listed.json()[0]["delivery_uuid"] == delivery_uuid
+    assert listed.json()[0]["delivery_no"].startswith("DLV-")
+
+    listed_by_uuid = client.get(f"/api/v1/deliveries/uuid/{delivery_uuid}/invoices")
+    assert listed_by_uuid.status_code == 200
+    assert listed_by_uuid.json()[0]["invoice_id"] == invoice.json()["id"]
