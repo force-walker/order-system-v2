@@ -166,6 +166,15 @@ def _resolve_delivery_for_invoice(db: Session, invoice: Invoice) -> Delivery | N
     return None
 
 
+def _resolve_delivery_for_order(db: Session, order: Order, *, create_if_missing: bool = False) -> Delivery | None:
+    delivery = db.query(Delivery).filter(Delivery.order_id == order.id).order_by(Delivery.created_at.desc()).first()
+    if delivery is not None or not create_if_missing:
+        return delivery
+    if order.status not in {OrderStatus.shipped, OrderStatus.invoiced}:
+        return None
+    return ensure_delivery_document(db, order)
+
+
 def _invoice_response(db: Session, invoice: Invoice) -> InvoiceResponse:
     delivery = _resolve_delivery_for_invoice(db, invoice)
     return InvoiceResponse(
@@ -309,8 +318,9 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
             order.status = target_order_status
             if order.status in {OrderStatus.shipped, OrderStatus.invoiced}:
                 ensure_order_delivery_number(db, order)
-                ensure_delivery_document(db, order)
-                invoice.delivery_no = order.delivery_no
+                delivery = ensure_delivery_document(db, order)
+                invoice.delivery_no = delivery.delivery_no
+                invoice.delivery_date = delivery.delivery_date
             order.updated_by = "system_api"
             write_audit_log(
                 db,
@@ -377,14 +387,15 @@ def _payment_terms_label(invoice: Invoice) -> str:
 def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
     _validate_due_date(payload.invoice_date, payload.due_date)
     order = _get_order_or_404(db, payload.order_id)
+    delivery = _resolve_delivery_for_order(db, order, create_if_missing=True)
 
     row = Invoice(
         invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",
         customer_id=order.customer_id,
-        tracking_no=order.tracking_no,
-        delivery_no=order.delivery_no,
+        tracking_no=(delivery.tracking_no if delivery is not None else order.tracking_no),
+        delivery_no=(delivery.delivery_no if delivery is not None else order.delivery_no),
         invoice_date=payload.invoice_date,
-        delivery_date=order.delivery_date,
+        delivery_date=(delivery.delivery_date if delivery is not None else order.delivery_date),
         due_date=payload.due_date,
         subtotal=0,
         tax_total=0,
@@ -1042,6 +1053,7 @@ def finalize_invoice_item_line_by_uuid(invoice_uuid: str, invoice_item_uuid: str
 def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
     _validate_due_date(payload.invoice_date, payload.due_date)
     order = _get_order_or_404(db, payload.order_id)
+    delivery = _resolve_delivery_for_order(db, order, create_if_missing=True)
 
     order_items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
     if not order_items:
@@ -1050,10 +1062,10 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
     invoice = Invoice(
         invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",
         customer_id=order.customer_id,
-        tracking_no=order.tracking_no,
-        delivery_no=order.delivery_no,
+        tracking_no=(delivery.tracking_no if delivery is not None else order.tracking_no),
+        delivery_no=(delivery.delivery_no if delivery is not None else order.delivery_no),
         invoice_date=payload.invoice_date,
-        delivery_date=order.delivery_date,
+        delivery_date=(delivery.delivery_date if delivery is not None else order.delivery_date),
         due_date=payload.due_date,
         subtotal=0,
         tax_total=0,
@@ -1247,6 +1259,7 @@ def generate_invoice_from_delivery(payload: InvoiceGenerateFromDeliveryRequest, 
 def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResultsRequest, db: Session = Depends(get_db)) -> InvoiceDraftGenerateResult:
     _validate_due_date(payload.invoice_date, payload.due_date)
     order = _get_order_or_404(db, payload.order_id)
+    delivery = _resolve_delivery_for_order(db, order, create_if_missing=True)
 
     rows = (
         db.query(PurchaseResult, OrderItem, Product)
@@ -1272,10 +1285,10 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     invoice = Invoice(
         invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",
         customer_id=order.customer_id,
-        tracking_no=order.tracking_no,
-        delivery_no=order.delivery_no,
+        tracking_no=(delivery.tracking_no if delivery is not None else order.tracking_no),
+        delivery_no=(delivery.delivery_no if delivery is not None else order.delivery_no),
         invoice_date=payload.invoice_date,
-        delivery_date=order.delivery_date,
+        delivery_date=(delivery.delivery_date if delivery is not None else order.delivery_date),
         due_date=payload.due_date,
         subtotal=0,
         tax_total=0,
