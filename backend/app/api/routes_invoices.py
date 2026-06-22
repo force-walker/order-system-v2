@@ -9,6 +9,8 @@ from app.core.audit import AuditAction, write_audit_log
 from app.core.invoice_pdf import InvoicePdfDocument, InvoicePdfLine, build_invoice_pdf
 from app.core.invoice_pricing import compute_draft_margin, compute_hkd_purchase_unit_cost, get_system_settings_or_404
 from app.core.numbering import (
+    ensure_order_delivery_number,
+    ensure_invoice_legacy_id,
     ensure_invoice_item_number,
     generate_invoice_draft_no,
     generate_official_invoice_no,
@@ -51,46 +53,46 @@ def _validate_due_date(invoice_date, due_date) -> None:
         raise HTTPException(status_code=422, detail={"code": "INVALID_DATE_RANGE", "message": "due_date must be on or after invoice_date"})
 
 
-def _get_order_or_404(db: Session, order_id: int) -> Order:
-    order = db.query(Order).filter(Order.id == order_id).first()
+def _get_order_or_404(db: Session, order_id: str | int) -> Order:
+    ident = str(order_id)
+    order = db.query(Order).filter(Order.id == ident).first()
+    if order is None and ident.isdigit():
+        order = db.query(Order).filter(Order.legacy_id == int(ident)).first()
     if order is None:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
     return order
 
 
 def _get_order_by_uuid_or_404(db: Session, order_uuid: str) -> Order:
-    order = db.query(Order).filter(Order.uuid == order_uuid).first()
-    if order is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
-    return order
+    return _get_order_or_404(db, order_uuid)
 
 
-def _get_invoice_or_404(db: Session, invoice_id: int) -> Invoice:
-    row = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+def _get_invoice_or_404(db: Session, invoice_id: str | int) -> Invoice:
+    ident = str(invoice_id)
+    row = db.query(Invoice).filter(Invoice.id == ident).first()
+    if row is None and ident.isdigit():
+        row = db.query(Invoice).filter(Invoice.legacy_id == int(ident)).first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "INVOICE_NOT_FOUND", "message": "invoice not found"})
     return row
 
 
 def _get_invoice_by_uuid_or_404(db: Session, invoice_uuid: str) -> Invoice:
-    row = db.query(Invoice).filter(Invoice.uuid == invoice_uuid).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "INVOICE_NOT_FOUND", "message": "invoice not found"})
-    return row
+    return _get_invoice_or_404(db, invoice_uuid)
 
 
-def _get_invoice_item_or_404(db: Session, invoice_id: int, invoice_item_id: int) -> InvoiceItem:
-    item = db.query(InvoiceItem).filter(InvoiceItem.id == invoice_item_id, InvoiceItem.invoice_id == invoice_id).first()
+def _get_invoice_item_or_404(db: Session, invoice_id: str, invoice_item_id: str | int) -> InvoiceItem:
+    ident = str(invoice_item_id)
+    item = db.query(InvoiceItem).filter(InvoiceItem.id == ident, InvoiceItem.invoice_id == invoice_id).first()
+    if item is None and ident.isdigit():
+        item = db.query(InvoiceItem).filter(InvoiceItem.legacy_id == int(ident), InvoiceItem.invoice_id == invoice_id).first()
     if item is None:
         raise HTTPException(status_code=404, detail={"code": "INVOICE_ITEM_NOT_FOUND", "message": "invoice item not found"})
     return item
 
 
-def _get_invoice_item_by_uuid_or_404(db: Session, invoice_id: int, invoice_item_uuid: str) -> InvoiceItem:
-    item = db.query(InvoiceItem).filter(InvoiceItem.uuid == invoice_item_uuid, InvoiceItem.invoice_id == invoice_id).first()
-    if item is None:
-        raise HTTPException(status_code=404, detail={"code": "INVOICE_ITEM_NOT_FOUND", "message": "invoice item not found"})
-    return item
+def _get_invoice_item_by_uuid_or_404(db: Session, invoice_id: str, invoice_item_uuid: str) -> InvoiceItem:
+    return _get_invoice_item_or_404(db, invoice_id, invoice_item_uuid)
 
 
 def _amount(value: Decimal) -> Decimal:
@@ -118,6 +120,7 @@ def _invoice_item_response(item: InvoiceItem) -> InvoiceItemResponse:
     return InvoiceItemResponse(
         id=item.id,
         uuid=item.uuid,
+        legacy_id=item.legacy_id,
         invoice_id=item.invoice_id,
         order_item_id=item.order_item_id,
         invoice_line_no=item.invoice_line_no,
@@ -250,6 +253,9 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
         if target_order_status != order.status:
             before = {"order_status": order.status.value}
             order.status = target_order_status
+            if order.status in {OrderStatus.shipped, OrderStatus.invoiced}:
+                ensure_order_delivery_number(db, order)
+                invoice.delivery_no = order.delivery_no
             order.updated_by = "system_api"
             write_audit_log(
                 db,
@@ -257,7 +263,7 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
                 entity_id=order.id,
                 action=AuditAction.UPDATE,
                 before=before,
-                after={"order_status": order.status.value},
+                after={"order_status": order.status.value, "delivery_no": order.delivery_no},
             )
 
 
@@ -321,6 +327,7 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
         invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",
         customer_id=order.customer_id,
         tracking_no=order.tracking_no,
+        delivery_no=order.delivery_no,
         invoice_date=payload.invoice_date,
         delivery_date=order.delivery_date,
         due_date=payload.due_date,
@@ -332,6 +339,7 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
     )
     db.add(row)
     db.flush()
+    ensure_invoice_legacy_id(db, row)
     _assign_invoice_header_numbers(db, row, order)
     write_audit_log(
         db,
@@ -352,7 +360,7 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
 
 @router.get("", response_model=list[InvoiceResponse])
 def list_invoices(
-    order_id: int | None = Query(default=None, gt=0),
+    order_id: str | None = Query(default=None),
     order_uuid: str | None = Query(default=None),
     status: InvoiceStatus | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -372,7 +380,7 @@ def list_invoices(
             query = query.filter(Invoice.customer_id == order.customer_id, Invoice.delivery_date == order.delivery_date)
     if status is not None:
         query = query.filter(Invoice.status == status)
-    rows = query.order_by(Invoice.id.desc()).all()
+    rows = query.order_by(Invoice.created_at.desc()).all()
     return [InvoiceResponse.model_validate(row) for row in rows]
 
 
@@ -399,9 +407,12 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
             InvoiceDraftListRow(
                 invoice_id=inv.id,
                 invoice_item_id=item.id,
+                invoice_legacy_id=inv.legacy_id,
+                invoice_item_legacy_id=item.legacy_id,
                 invoice_uuid=inv.uuid,
                 invoice_item_uuid=item.uuid,
                 tracking_no=inv.tracking_no,
+                delivery_no=inv.delivery_no or order.delivery_no,
                 invoice_no=inv.invoice_no,
                 invoice_draft_no=inv.invoice_draft_no,
                 official_invoice_no=inv.official_invoice_no,
@@ -431,7 +442,7 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
     response_model=InvoiceResponse,
     responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
 )
-def get_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceResponse:
+def get_invoice(invoice_id: str, db: Session = Depends(get_db)) -> InvoiceResponse:
     row = _get_invoice_or_404(db, invoice_id)
     return InvoiceResponse.model_validate(row)
 
@@ -451,9 +462,9 @@ def get_invoice_by_uuid(invoice_uuid: str, db: Session = Depends(get_db)) -> Inv
     response_model=list[InvoiceItemResponse],
     responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
 )
-def list_invoice_items(invoice_id: int, db: Session = Depends(get_db)) -> list[InvoiceItemResponse]:
-    _get_invoice_or_404(db, invoice_id)
-    rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.id.asc()).all()
+def list_invoice_items(invoice_id: str, db: Session = Depends(get_db)) -> list[InvoiceItemResponse]:
+    invoice = _get_invoice_or_404(db, invoice_id)
+    rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice.id).order_by(InvoiceItem.created_at.asc()).all()
     return [_invoice_item_response(row) for row in rows]
 
 
@@ -473,16 +484,16 @@ def list_invoice_items_by_uuid(invoice_uuid: str, db: Session = Depends(get_db))
     response_model=InvoiceNeighborsResponse,
     responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
 )
-def get_invoice_neighbors(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceNeighborsResponse:
-    _get_invoice_or_404(db, invoice_id)
-    ordered_ids = [row_id for (row_id,) in db.query(Invoice.id).order_by(Invoice.id.desc()).all()]
-    idx = ordered_ids.index(invoice_id)
+def get_invoice_neighbors(invoice_id: str, db: Session = Depends(get_db)) -> InvoiceNeighborsResponse:
+    invoice = _get_invoice_or_404(db, invoice_id)
+    ordered_ids = [row_id for (row_id,) in db.query(Invoice.id).order_by(Invoice.created_at.desc()).all()]
+    idx = ordered_ids.index(invoice.id)
 
     prev_invoice_id = ordered_ids[idx - 1] if idx > 0 else None
     next_invoice_id = ordered_ids[idx + 1] if idx < len(ordered_ids) - 1 else None
 
     return InvoiceNeighborsResponse(
-        invoice_id=invoice_id,
+        invoice_id=invoice.id,
         prev_invoice_id=prev_invoice_id,
         next_invoice_id=next_invoice_id,
     )
@@ -493,13 +504,13 @@ def get_invoice_neighbors(invoice_id: int, db: Session = Depends(get_db)) -> Inv
     response_model=InvoiceReportResponse,
     responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
 )
-def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceReportResponse:
+def get_invoice_report(invoice_id: str, db: Session = Depends(get_db)) -> InvoiceReportResponse:
     invoice = _get_invoice_or_404(db, invoice_id)
     customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
     if customer is None:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
 
-    items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).order_by(InvoiceItem.id.asc()).all()
+    items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice.id).order_by(InvoiceItem.created_at.asc()).all()
     product_name_by_order_item_id = {
         oi.id: name
         for oi, name in (
@@ -514,6 +525,7 @@ def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> Invoic
         invoice_id=invoice.id,
         invoice_uuid=invoice.uuid,
         tracking_no=invoice.tracking_no,
+        delivery_no=invoice.delivery_no,
         invoice_no=invoice.invoice_no,
         invoice_draft_no=invoice.invoice_draft_no,
         official_invoice_no=invoice.official_invoice_no,
@@ -530,6 +542,7 @@ def get_invoice_report(invoice_id: int, db: Session = Depends(get_db)) -> Invoic
             InvoiceReportLine(
                 invoice_item_id=i.id,
                 invoice_item_uuid=i.uuid,
+                invoice_item_legacy_id=i.legacy_id,
                 order_item_id=i.order_item_id,
                 invoice_line_no=i.invoice_line_no,
                 product_name=product_name_by_order_item_id.get(i.order_item_id, "-"),
@@ -558,7 +571,7 @@ def get_invoice_report_by_uuid(invoice_uuid: str, db: Session = Depends(get_db))
     if customer is None:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
 
-    items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice.id).order_by(InvoiceItem.id.asc()).all()
+    items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice.id).order_by(InvoiceItem.created_at.asc()).all()
     product_name_by_order_item_id = {
         oi.id: name
         for oi, name in (
@@ -573,6 +586,7 @@ def get_invoice_report_by_uuid(invoice_uuid: str, db: Session = Depends(get_db))
         invoice_id=invoice.id,
         invoice_uuid=invoice.uuid,
         tracking_no=invoice.tracking_no,
+        delivery_no=invoice.delivery_no,
         invoice_no=invoice.invoice_no,
         invoice_draft_no=invoice.invoice_draft_no,
         official_invoice_no=invoice.official_invoice_no,
@@ -589,6 +603,7 @@ def get_invoice_report_by_uuid(invoice_uuid: str, db: Session = Depends(get_db))
             InvoiceReportLine(
                 invoice_item_id=i.id,
                 invoice_item_uuid=i.uuid,
+                invoice_item_legacy_id=i.legacy_id,
                 order_item_id=i.order_item_id,
                 invoice_line_no=i.invoice_line_no,
                 product_name=product_name_by_order_item_id.get(i.order_item_id, "-"),
@@ -614,7 +629,7 @@ def get_invoice_report_by_uuid(invoice_uuid: str, db: Session = Depends(get_db))
         409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
 )
-def get_invoice_pdf(invoice_id: int, db: Session = Depends(get_db)) -> Response:
+def get_invoice_pdf(invoice_id: str, db: Session = Depends(get_db)) -> Response:
     invoice = _get_invoice_or_404(db, invoice_id)
     customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
     if customer is None:
@@ -625,8 +640,8 @@ def get_invoice_pdf(invoice_id: int, db: Session = Depends(get_db)) -> Response:
         .join(OrderItem, OrderItem.id == InvoiceItem.order_item_id)
         .join(Product, Product.id == OrderItem.product_id)
         .join(Order, Order.id == OrderItem.order_id)
-        .filter(InvoiceItem.invoice_id == invoice_id)
-        .order_by(InvoiceItem.id.asc())
+        .filter(InvoiceItem.invoice_id == invoice.id)
+        .order_by(InvoiceItem.created_at.asc())
         .all()
     )
     if not rows:
@@ -683,8 +698,8 @@ def get_invoice_pdf_by_uuid(invoice_uuid: str, db: Session = Depends(get_db)) ->
     },
 )
 def update_invoice_draft_item(
-    invoice_id: int,
-    invoice_item_id: int,
+    invoice_id: str,
+    invoice_item_id: str,
     payload: InvoiceItemUpdateRequest,
     db: Session = Depends(get_db),
 ) -> InvoiceItemResponse:
@@ -692,7 +707,7 @@ def update_invoice_draft_item(
     if invoice.status != InvoiceStatus.draft:
         raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
 
-    item = _get_invoice_item_or_404(db, invoice_id, invoice_item_id)
+    item = _get_invoice_item_or_404(db, invoice.id, invoice_item_id)
 
     order_item = db.query(OrderItem).filter(OrderItem.id == item.order_item_id).first()
     if order_item is None:
@@ -819,12 +834,12 @@ def update_invoice_draft_item_by_uuid(
         409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
 )
-def finalize_invoice_item_line(invoice_id: int, invoice_item_id: int, db: Session = Depends(get_db)) -> InvoiceItemResponse:
+def finalize_invoice_item_line(invoice_id: str, invoice_item_id: str, db: Session = Depends(get_db)) -> InvoiceItemResponse:
     invoice = _get_invoice_or_404(db, invoice_id)
     if invoice.status != InvoiceStatus.draft:
         raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
 
-    item = _get_invoice_item_or_404(db, invoice_id, invoice_item_id)
+    item = _get_invoice_item_or_404(db, invoice.id, invoice_item_id)
     if item.invoice_line_status == "invoiced":
         raise HTTPException(status_code=409, detail={"code": "INVOICE_ITEM_ALREADY_INVOICED", "message": "invoice item already invoiced"})
 
@@ -903,6 +918,7 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
         invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",
         customer_id=order.customer_id,
         tracking_no=order.tracking_no,
+        delivery_no=order.delivery_no,
         invoice_date=payload.invoice_date,
         delivery_date=order.delivery_date,
         due_date=payload.due_date,
@@ -914,6 +930,7 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
     )
     db.add(invoice)
     db.flush()
+    ensure_invoice_legacy_id(db, invoice)
     _assign_invoice_header_numbers(db, invoice, order)
 
     subtotal = Decimal("0")
@@ -1020,6 +1037,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
         invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",
         customer_id=order.customer_id,
         tracking_no=order.tracking_no,
+        delivery_no=order.delivery_no,
         invoice_date=payload.invoice_date,
         delivery_date=order.delivery_date,
         due_date=payload.due_date,
@@ -1031,6 +1049,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     )
     db.add(invoice)
     db.flush()
+    ensure_invoice_legacy_id(db, invoice)
     _assign_invoice_header_numbers(db, invoice, order)
 
     settings = get_system_settings_or_404(db)
@@ -1109,7 +1128,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
         409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
 )
-def finalize_invoice(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceFinalizeResponse:
+def finalize_invoice(invoice_id: str, db: Session = Depends(get_db)) -> InvoiceFinalizeResponse:
     row = _get_invoice_or_404(db, invoice_id)
     result = _finalize_invoice_row(db, row)
     db.commit()
@@ -1142,16 +1161,17 @@ def finalize_invoice_by_uuid(invoice_uuid: str, db: Session = Depends(get_db)) -
 )
 def finalize_invoices_batch(payload: InvoiceBatchFinalizeRequest, db: Session = Depends(get_db)) -> InvoiceBatchFinalizeResponse:
     results: list[InvoiceBatchFinalizeResult] = []
-    seen: set[int] = set()
+    seen: set[str] = set()
 
     for invoice_id in payload.invoice_ids:
-        if invoice_id in seen:
+        invoice_identifier = str(invoice_id)
+        if invoice_identifier in seen:
             continue
-        seen.add(invoice_id)
+        seen.add(invoice_identifier)
 
         savepoint = db.begin_nested()
         try:
-            row = _get_invoice_or_404(db, invoice_id)
+            row = _get_invoice_or_404(db, invoice_identifier)
             finalized = _finalize_invoice_row(db, row, reason_code="batch_finalize")
             savepoint.commit()
             results.append(
@@ -1193,7 +1213,7 @@ def finalize_invoices_batch(payload: InvoiceBatchFinalizeRequest, db: Session = 
         422: {"model": ApiErrorResponse, "description": "Validation Error"},
     },
 )
-def recalculate_draft_costs(invoice_id: int, db: Session = Depends(get_db)) -> InvoiceDraftRecalculateResponse:
+def recalculate_draft_costs(invoice_id: str, db: Session = Depends(get_db)) -> InvoiceDraftRecalculateResponse:
     invoice = _get_invoice_or_404(db, invoice_id)
     if invoice.status != InvoiceStatus.draft:
         raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
@@ -1283,7 +1303,7 @@ def recalculate_draft_costs_by_uuid(invoice_uuid: str, db: Session = Depends(get
         409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
 )
-def reset_to_draft(invoice_id: int, payload: InvoiceResetRequest, db: Session = Depends(get_db)) -> InvoiceResetResponse:
+def reset_to_draft(invoice_id: str, payload: InvoiceResetRequest, db: Session = Depends(get_db)) -> InvoiceResetResponse:
     row = _get_invoice_or_404(db, invoice_id)
     if row.status != InvoiceStatus.finalized:
         raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_FINALIZED", "message": "invoice is not finalized"})
@@ -1351,7 +1371,7 @@ def reset_to_draft_by_uuid(invoice_uuid: str, payload: InvoiceResetRequest, db: 
         409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
 )
-def unlock_invoice(invoice_id: int, payload: InvoiceUnlockRequest, db: Session = Depends(get_db)) -> InvoiceUnlockResponse:
+def unlock_invoice(invoice_id: str, payload: InvoiceUnlockRequest, db: Session = Depends(get_db)) -> InvoiceUnlockResponse:
     row = _get_invoice_or_404(db, invoice_id)
     if row.status != InvoiceStatus.finalized or not row.is_locked:
         raise HTTPException(

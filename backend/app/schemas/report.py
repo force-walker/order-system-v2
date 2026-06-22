@@ -10,7 +10,7 @@ class ShippingReportSortMode(str, enum.Enum):
 
 
 class ShippingReportRow(BaseModel):
-    order_item_id: int
+    order_item_id: str
     shipped_date: date
     supplier_name: str | None
     customer_name: str
@@ -20,5 +20,5 @@ class ShippingReportRow(BaseModel):
 
 
 class PurchaseConfirmationPdfRequest(BaseModel):
-    selected_ids: list[int] = Field(min_length=1, max_length=1000)
+    selected_ids: list[str | int] = Field(min_length=1, max_length=1000)
     sort: str = "product_desc"

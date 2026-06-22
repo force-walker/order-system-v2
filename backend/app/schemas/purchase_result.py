@@ -51,7 +51,7 @@ class PurchaseResultDeferRequest(BaseModel):
 class PurchaseResultResponse(BaseModel):
     id: int
     allocation_id: int
-    order_id: int | None = None
+    order_id: str | None = None
     supplier_id: int | None
     supplier_name: str | None = None
     purchased_qty: float

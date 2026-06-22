@@ -351,6 +351,65 @@ def test_create_order_auto_numbering_generates_unique_order_no():
     assert second.status_code == 201
     assert first.json()["tracking_no"] != second.json()["tracking_no"]
     assert first.json()["order_no"] != second.json()["order_no"]
+    assert first.json()["delivery_no"] is None
+    assert second.json()["delivery_no"] is None
+
+
+def test_order_bulk_transition_to_shipped_assigns_delivery_no():
+    cid = _seed_customer("CUST-SHIP-NO")
+    client = _client()
+    created = client.post("/api/v1/orders", json={"customer_id": cid, "delivery_date": str(date.today())})
+    assert created.status_code == 201
+    order_id = created.json()["id"]
+
+    db = TestingSessionLocal()
+    product = Product(
+        sku=f"SKU-SHIP-{uuid4().hex[:8]}",
+        name="Ship Product",
+        order_uom="count",
+        purchase_uom="count",
+        invoice_uom="count",
+        is_catch_weight=False,
+        weight_capture_required=False,
+        pricing_basis_default=PricingBasis.uom_count,
+        active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db.add(product)
+    db.flush()
+
+    line = OrderItem(
+        order_id=order_id,
+        product_id=product.id,
+        ordered_qty=1,
+        pricing_basis=PricingBasis.uom_count,
+        order_uom_type=PricingBasis.uom_count,
+        unit_price_uom_count=10,
+        unit_price_uom_kg=None,
+        line_status=LineStatus.purchased,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db.add(line)
+
+    order = db.query(Order).filter(Order.id == order_id).first()
+    assert order is not None
+    order.status = OrderStatus.purchased
+    db.commit()
+    db.close()
+
+    shipped = client.post(
+        f"/api/v1/orders/{order_id}/bulk-transition",
+        json={"from_status": "purchased", "to_status": "shipped"},
+    )
+    assert shipped.status_code == 200
+
+    detail = client.get(f"/api/v1/orders/{order_id}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "shipped"
+    assert detail.json()["tracking_no"] is not None
+    assert detail.json()["delivery_no"].startswith("DLV-")
 
 
 def test_update_order_header_success_and_not_found():

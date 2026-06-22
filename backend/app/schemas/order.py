@@ -26,7 +26,7 @@ class OrderBulkTransitionRequest(BaseModel):
 
 
 class OrderBulkTransitionResponse(BaseModel):
-    order_id: int
+    order_id: str
     updated_lines: int
     updated_order_status: OrderStatus
 
@@ -41,13 +41,13 @@ class OrderCancelReasonCode(str, enum.Enum):
 
 
 class OrderBulkCancelRequest(BaseModel):
-    order_ids: list[int] = Field(min_length=1, max_length=500)
+    order_ids: list[str | int] = Field(min_length=1, max_length=500)
     cancel_reason_code: OrderCancelReasonCode
     note: str | None = Field(default=None, max_length=1000)
 
 
 class OrderBulkCancelError(BaseModel):
-    order_id: int
+    order_id: str | int
     code: str
     message: str
 
@@ -60,9 +60,11 @@ class OrderBulkCancelResponse(BaseModel):
 
 
 class OrderResponse(BaseModel):
-    id: int
+    id: str
     uuid: str
+    legacy_id: int | None = None
     tracking_no: str | None = None
+    delivery_no: str | None = None
     order_no: str
     customer_id: int
     order_datetime: datetime
@@ -108,9 +110,10 @@ class OrderItemUpdateRequest(BaseModel):
 
 
 class OrderItemResponse(BaseModel):
-    id: int
+    id: str
     uuid: str
-    order_id: int
+    legacy_id: int | None = None
+    order_id: str
     order_line_no: str | None = None
     product_id: int
     ordered_qty: float
@@ -148,4 +151,4 @@ class PurchaseConfirmationPdfRequest(BaseModel):
 
 
 class OrderItemLabelPdfRequest(BaseModel):
-    order_item_ids: list[int] = Field(min_length=1, max_length=500)
+    order_item_ids: list[str | int] = Field(min_length=1, max_length=500)
