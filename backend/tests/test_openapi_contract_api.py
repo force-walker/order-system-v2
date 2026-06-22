@@ -77,6 +77,7 @@ def test_openapi_error_contracts_for_core_apis():
     # deliveries
     assert "404" in _responses("/api/v1/deliveries/{delivery_id}", "get")
     assert "404" in _responses("/api/v1/deliveries/{delivery_id}/items", "get")
+    assert "404" in _responses("/api/v1/deliveries/{delivery_id}/invoices", "get")
     assert "422" in _responses("/api/v1/deliveries/from-order", "post")
     assert "409" in _responses("/api/v1/deliveries/from-order", "post")
     assert "200" in _responses("/api/v1/deliveries/{delivery_id}/pdf", "get")
@@ -235,6 +236,9 @@ def test_openapi_phase2_query_filters_are_exposed():
     invoice_response_props = spec["components"]["schemas"]["InvoiceResponse"]["properties"]
     assert {"uuid", "tracking_no", "delivery_no", "invoice_draft_no", "official_invoice_no"}.issubset(invoice_response_props)
 
+    invoice_summary_props = spec["components"]["schemas"]["InvoiceSummaryRow"]["properties"]
+    assert {"invoice_uuid", "delivery_id", "delivery_uuid", "delivery_no", "invoice_no", "status", "item_count"}.issubset(invoice_summary_props)
+
     order_response_props = spec["components"]["schemas"]["OrderResponse"]["properties"]
     assert {"uuid", "tracking_no", "delivery_no"}.issubset(order_response_props)
 
@@ -243,12 +247,14 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert "/api/v1/orders/uuid/{order_uuid}/items/{item_uuid}" in spec["paths"]
     assert "/api/v1/deliveries/{delivery_id}" in spec["paths"]
     assert "/api/v1/deliveries/{delivery_id}/items" in spec["paths"]
+    assert "/api/v1/deliveries/{delivery_id}/invoices" in spec["paths"]
     assert "/api/v1/deliveries/from-order" in spec["paths"]
     assert "/api/v1/deliveries/{delivery_id}/refresh" in spec["paths"]
     assert "/api/v1/deliveries/{delivery_id}/pdf" in spec["paths"]
     assert "/api/v1/deliveries/uuid/{order_uuid}/from-order" in spec["paths"]
     assert "/api/v1/deliveries/uuid/{delivery_uuid}" in spec["paths"]
     assert "/api/v1/deliveries/uuid/{delivery_uuid}/items" in spec["paths"]
+    assert "/api/v1/deliveries/uuid/{delivery_uuid}/invoices" in spec["paths"]
     assert "/api/v1/deliveries/uuid/{delivery_uuid}/pdf" in spec["paths"]
     assert "/api/v1/invoices/uuid/{invoice_uuid}" in spec["paths"]
     assert "/api/v1/invoices/uuid/{invoice_uuid}/items" in spec["paths"]

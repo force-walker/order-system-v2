@@ -14,9 +14,10 @@ from sqlalchemy.orm import Session
 from app.core.audit import AuditAction, write_audit_log
 from app.core.deliveries import ensure_delivery_document
 from app.db.session import get_db
-from app.models.entities import Customer, Delivery, DeliveryItem, Order, OrderItem, OrderStatus, Product
+from app.models.entities import Customer, Delivery, DeliveryItem, Invoice, InvoiceItem, Order, OrderItem, OrderStatus, Product
 from app.schemas.common import ApiErrorResponse
 from app.schemas.delivery import DeliveryBuildRequest, DeliveryItemResponse, DeliveryResponse
+from app.schemas.invoice import InvoiceSummaryRow
 
 router = APIRouter(prefix="/api/v1/deliveries", tags=["deliveries"])
 
@@ -61,6 +62,46 @@ def _get_order_or_404(db: Session, order_id: str | int) -> Order:
 def _assert_order_deliverable(order: Order) -> None:
     if order.status not in {OrderStatus.shipped, OrderStatus.invoiced}:
         raise HTTPException(status_code=409, detail={"code": "ORDER_NOT_SHIPPED", "message": "order is not shipped"})
+
+
+def _delivery_invoice_rows(db: Session, delivery: Delivery) -> list[InvoiceSummaryRow]:
+    rows = (
+        db.query(Invoice, Customer)
+        .join(Customer, Customer.id == Invoice.customer_id)
+        .filter(
+            (Invoice.delivery_no == delivery.delivery_no)
+            | ((Invoice.delivery_no.is_(None)) & (Invoice.tracking_no == delivery.tracking_no))
+        )
+        .order_by(Invoice.created_at.desc())
+        .all()
+    )
+
+    result: list[InvoiceSummaryRow] = []
+    for invoice, customer in rows:
+        item_count = db.query(InvoiceItem.id).filter(InvoiceItem.invoice_id == invoice.id).count()
+        result.append(
+            InvoiceSummaryRow(
+                invoice_id=invoice.id,
+                invoice_uuid=invoice.uuid,
+                tracking_no=invoice.tracking_no,
+                delivery_id=delivery.id,
+                delivery_uuid=delivery.uuid,
+                delivery_no=invoice.delivery_no or delivery.delivery_no,
+                invoice_no=invoice.invoice_no,
+                invoice_draft_no=invoice.invoice_draft_no,
+                official_invoice_no=invoice.official_invoice_no,
+                customer_name=customer.name,
+                invoice_date=invoice.invoice_date,
+                delivery_date=invoice.delivery_date,
+                due_date=invoice.due_date,
+                status=invoice.status,
+                subtotal=float(invoice.subtotal),
+                tax_total=float(invoice.tax_total),
+                grand_total=float(invoice.grand_total),
+                item_count=item_count,
+            )
+        )
+    return result
 
 
 @router.get("", response_model=list[DeliveryResponse])
@@ -121,6 +162,26 @@ def list_delivery_items_by_uuid(delivery_uuid: str, db: Session = Depends(get_db
     delivery = _get_delivery_or_404(db, delivery_uuid)
     rows = db.query(DeliveryItem).filter(DeliveryItem.delivery_id == delivery.id).order_by(DeliveryItem.created_at.asc()).all()
     return [DeliveryItemResponse.model_validate(row) for row in rows]
+
+
+@router.get(
+    "/{delivery_id}/invoices",
+    response_model=list[InvoiceSummaryRow],
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def list_delivery_invoices(delivery_id: str, db: Session = Depends(get_db)) -> list[InvoiceSummaryRow]:
+    delivery = _get_delivery_or_404(db, delivery_id)
+    return _delivery_invoice_rows(db, delivery)
+
+
+@router.get(
+    "/uuid/{delivery_uuid}/invoices",
+    response_model=list[InvoiceSummaryRow],
+    responses={404: {"model": ApiErrorResponse, "description": "Not Found"}},
+)
+def list_delivery_invoices_by_uuid(delivery_uuid: str, db: Session = Depends(get_db)) -> list[InvoiceSummaryRow]:
+    delivery = _get_delivery_or_404(db, delivery_uuid)
+    return _delivery_invoice_rows(db, delivery)
 
 
 @router.post(
