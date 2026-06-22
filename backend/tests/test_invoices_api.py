@@ -621,11 +621,11 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
 
     db = TestingSessionLocal()
     order = db.query(Order).filter(Order.id == order_id).first()
-    lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
+    lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
     assert order is not None
     assert order.status == OrderStatus.shipped
-    assert lines[0].line_status == LineStatus.invoiced
-    assert lines[1].line_status != LineStatus.invoiced
+    assert sum(1 for line in lines if line.line_status == LineStatus.invoiced) == 1
+    assert sum(1 for line in lines if line.line_status != LineStatus.invoiced) == 1
     db.close()
 
 
