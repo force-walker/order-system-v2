@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -36,12 +37,19 @@ def _client() -> TestClient:
 
 def _seed_purchased_order() -> str:
     db = TestingSessionLocal()
-    customer = Customer(customer_code="CUST-DEL-001", name="Delivery Customer", active=True, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
+    suffix = uuid4().hex[:8]
+    customer = Customer(
+        customer_code=f"CUST-DEL-{suffix}",
+        name="Delivery Customer",
+        active=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
     db.add(customer)
     db.flush()
 
     product = Product(
-        sku="SKU-DEL-001",
+        sku=f"SKU-DEL-{suffix}",
         name="Delivery Product",
         order_uom="count",
         purchase_uom="count",
@@ -118,3 +126,28 @@ def test_ship_transition_creates_delivery_and_items():
     db.close()
     assert delivery is not None
     assert delivery_item is not None
+
+
+def test_build_delivery_from_order_and_pdf():
+    order_id = _seed_purchased_order()
+    client = _client()
+
+    shipped = client.post(
+        f"/api/v1/orders/{order_id}/bulk-transition",
+        json={"from_status": "purchased", "to_status": "shipped"},
+    )
+    assert shipped.status_code == 200
+
+    built = client.post("/api/v1/deliveries/from-order", json={"order_id": order_id})
+    assert built.status_code == 200
+    delivery_id = built.json()["id"]
+    assert built.json()["delivery_no"].startswith("DLV-")
+
+    refreshed = client.post(f"/api/v1/deliveries/{delivery_id}/refresh")
+    assert refreshed.status_code == 200
+    assert refreshed.json()["id"] == delivery_id
+
+    pdf = client.get(f"/api/v1/deliveries/{delivery_id}/pdf")
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert len(pdf.content) > 0

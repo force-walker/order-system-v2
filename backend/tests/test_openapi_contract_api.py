@@ -77,6 +77,10 @@ def test_openapi_error_contracts_for_core_apis():
     # deliveries
     assert "404" in _responses("/api/v1/deliveries/{delivery_id}", "get")
     assert "404" in _responses("/api/v1/deliveries/{delivery_id}/items", "get")
+    assert "422" in _responses("/api/v1/deliveries/from-order", "post")
+    assert "409" in _responses("/api/v1/deliveries/from-order", "post")
+    assert "200" in _responses("/api/v1/deliveries/{delivery_id}/pdf", "get")
+    assert "404" in _responses("/api/v1/deliveries/{delivery_id}/pdf", "get")
 
     # invoices
     assert "409" in _responses("/api/v1/invoices", "post")
@@ -229,8 +233,13 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert "/api/v1/orders/uuid/{order_uuid}/items/{item_uuid}" in spec["paths"]
     assert "/api/v1/deliveries/{delivery_id}" in spec["paths"]
     assert "/api/v1/deliveries/{delivery_id}/items" in spec["paths"]
+    assert "/api/v1/deliveries/from-order" in spec["paths"]
+    assert "/api/v1/deliveries/{delivery_id}/refresh" in spec["paths"]
+    assert "/api/v1/deliveries/{delivery_id}/pdf" in spec["paths"]
+    assert "/api/v1/deliveries/uuid/{order_uuid}/from-order" in spec["paths"]
     assert "/api/v1/deliveries/uuid/{delivery_uuid}" in spec["paths"]
     assert "/api/v1/deliveries/uuid/{delivery_uuid}/items" in spec["paths"]
+    assert "/api/v1/deliveries/uuid/{delivery_uuid}/pdf" in spec["paths"]
     assert "/api/v1/invoices/uuid/{invoice_uuid}" in spec["paths"]
     assert "/api/v1/invoices/uuid/{invoice_uuid}/items" in spec["paths"]
     assert "/api/v1/invoices/uuid/{invoice_uuid}/items/{invoice_item_uuid}" in spec["paths"]
