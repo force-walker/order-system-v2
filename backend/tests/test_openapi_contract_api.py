@@ -85,8 +85,12 @@ def test_openapi_error_contracts_for_core_apis():
     # invoices
     assert "409" in _responses("/api/v1/invoices", "post")
     assert "422" in _responses("/api/v1/invoices", "post")
+    assert "404" in _responses("/api/v1/invoices/from-delivery", "post")
+    assert "422" in _responses("/api/v1/invoices/from-delivery", "post")
     assert "409" in _responses("/api/v1/invoices/generate", "post")
     assert "422" in _responses("/api/v1/invoices/generate", "post")
+    assert "404" in _responses("/api/v1/invoices/generate-from-delivery", "post")
+    assert "422" in _responses("/api/v1/invoices/generate-from-delivery", "post")
     assert "404" in _responses("/api/v1/invoices/{invoice_id}", "get")
     assert "404" in _responses("/api/v1/invoices/{invoice_id}/items", "get")
     assert "404" in _responses("/api/v1/invoices/{invoice_id}/neighbors", "get")
@@ -155,7 +159,7 @@ def test_openapi_phase2_query_filters_are_exposed():
     spec = client.get("/openapi.json").json()
 
     invoice_list_params = {p["name"] for p in spec["paths"]["/api/v1/invoices"]["get"]["parameters"]}
-    assert {"order_id", "order_uuid", "status"}.issubset(invoice_list_params)
+    assert {"order_id", "order_uuid", "delivery_id", "delivery_uuid", "status"}.issubset(invoice_list_params)
 
     purchase_list_params = {p["name"] for p in spec["paths"]["/api/v1/purchase-results"]["get"]["parameters"]}
     assert {"allocation_id", "customer_id", "product_id", "supplier_id", "sort_by", "sort_order", "limit", "offset"}.issubset(purchase_list_params)
@@ -216,6 +220,12 @@ def test_openapi_phase2_query_filters_are_exposed():
     invoice_item_props = spec["components"]["schemas"]["InvoiceItemResponse"]["properties"]
     assert {"uuid", "unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable", "invoice_line_no"}.issubset(invoice_item_props)
 
+    invoice_response_props = spec["components"]["schemas"]["InvoiceResponse"]["properties"]
+    assert {"delivery_id", "delivery_uuid", "delivery_no"}.issubset(invoice_response_props)
+
+    invoice_report_props = spec["components"]["schemas"]["InvoiceReportResponse"]["properties"]
+    assert {"delivery_id", "delivery_uuid", "delivery_no"}.issubset(invoice_report_props)
+
     invoice_report_line_props = spec["components"]["schemas"]["InvoiceReportLine"]["properties"]
     assert {"invoice_item_uuid", "unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable", "invoice_line_no"}.issubset(invoice_report_line_props)
 
@@ -243,6 +253,8 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert "/api/v1/invoices/uuid/{invoice_uuid}" in spec["paths"]
     assert "/api/v1/invoices/uuid/{invoice_uuid}/items" in spec["paths"]
     assert "/api/v1/invoices/uuid/{invoice_uuid}/items/{invoice_item_uuid}" in spec["paths"]
+    assert "/api/v1/invoices/from-delivery" in spec["paths"]
+    assert "/api/v1/invoices/generate-from-delivery" in spec["paths"]
 
     system_settings_props = spec["components"]["schemas"]["SystemSettingsResponse"]["properties"]
     assert {"jp_gross_margin_pct", "jp_gross_margin_rate"}.issubset(system_settings_props)

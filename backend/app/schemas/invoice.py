@@ -24,6 +24,25 @@ class InvoiceCreateRequest(BaseModel):
         return value
 
 
+class InvoiceCreateFromDeliveryRequest(BaseModel):
+    delivery_id: str | int
+    invoice_date: date
+    due_date: date | None = None
+
+    @field_validator("delivery_id")
+    @classmethod
+    def validate_delivery_id(cls, value: str | int) -> str | int:
+        if isinstance(value, int):
+            if value <= 0:
+                raise ValueError("delivery_id must be positive")
+            return value
+        if value.isdigit() and int(value) <= 0:
+            raise ValueError("delivery_id must be positive")
+        if not value:
+            raise ValueError("delivery_id is required")
+        return value
+
+
 class InvoiceGenerateRequest(BaseModel):
     order_id: str | int
     invoice_date: date
@@ -33,6 +52,17 @@ class InvoiceGenerateRequest(BaseModel):
     @classmethod
     def validate_order_id(cls, value: str | int) -> str | int:
         return InvoiceCreateRequest.validate_order_id(value)
+
+
+class InvoiceGenerateFromDeliveryRequest(BaseModel):
+    delivery_id: str | int
+    invoice_date: date
+    due_date: date | None = None
+
+    @field_validator("delivery_id")
+    @classmethod
+    def validate_delivery_id(cls, value: str | int) -> str | int:
+        return InvoiceCreateFromDeliveryRequest.validate_delivery_id(value)
 
 
 class InvoiceDraftFromPurchaseResultsRequest(BaseModel):
@@ -52,6 +82,8 @@ class InvoiceResponse(BaseModel):
     uuid: str
     legacy_id: int | None = None
     tracking_no: str | None = None
+    delivery_id: str | None = None
+    delivery_uuid: str | None = None
     delivery_no: str | None = None
     invoice_no: str
     invoice_draft_no: str | None = None
@@ -102,6 +134,8 @@ class InvoiceDraftListRow(BaseModel):
     invoice_uuid: str
     invoice_item_uuid: str
     tracking_no: str | None = None
+    delivery_id: str | None = None
+    delivery_uuid: str | None = None
     delivery_no: str | None = None
     invoice_no: str
     invoice_draft_no: str | None = None
@@ -165,6 +199,8 @@ class InvoiceReportResponse(BaseModel):
     invoice_id: str
     invoice_uuid: str
     tracking_no: str | None = None
+    delivery_id: str | None = None
+    delivery_uuid: str | None = None
     delivery_no: str | None = None
     invoice_no: str
     invoice_draft_no: str | None = None
@@ -185,6 +221,8 @@ class InvoiceSummaryRow(BaseModel):
     invoice_id: str
     invoice_uuid: str
     tracking_no: str | None = None
+    delivery_id: str | None = None
+    delivery_uuid: str | None = None
     delivery_no: str | None = None
     invoice_no: str
     invoice_draft_no: str | None = None

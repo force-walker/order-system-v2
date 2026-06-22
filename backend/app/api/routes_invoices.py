@@ -17,19 +17,21 @@ from app.core.numbering import (
     generate_official_invoice_no,
 )
 from app.db.session import get_db
-from app.models.entities import Customer, Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, SupplierAllocation
+from app.models.entities import Customer, Delivery, Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
     InvoiceBatchFinalizeRequest,
     InvoiceBatchFinalizeResponse,
     InvoiceBatchFinalizeResult,
     InvoiceCreateRequest,
+    InvoiceCreateFromDeliveryRequest,
     InvoiceDraftFromPurchaseResultsRequest,
     InvoiceDraftGenerateResult,
     InvoiceDraftListRow,
     InvoiceDraftRecalculateResponse,
     InvoiceFinalizeResponse,
     InvoiceGenerateRequest,
+    InvoiceGenerateFromDeliveryRequest,
     InvoiceItemResponse,
     InvoiceItemUpdateRequest,
     InvoiceNeighborsResponse,
@@ -66,6 +68,18 @@ def _get_order_or_404(db: Session, order_id: str | int) -> Order:
 
 def _get_order_by_uuid_or_404(db: Session, order_uuid: str) -> Order:
     return _get_order_or_404(db, order_uuid)
+
+
+def _get_delivery_or_404(db: Session, delivery_id: str | int) -> Delivery:
+    ident = str(delivery_id)
+    row = db.query(Delivery).filter(Delivery.id == ident).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "DELIVERY_NOT_FOUND", "message": "delivery not found"})
+    return row
+
+
+def _get_delivery_by_uuid_or_404(db: Session, delivery_uuid: str) -> Delivery:
+    return _get_delivery_or_404(db, delivery_uuid)
 
 
 def _get_invoice_or_404(db: Session, invoice_id: str | int) -> Invoice:
@@ -137,6 +151,45 @@ def _invoice_item_response(item: InvoiceItem) -> InvoiceItemResponse:
         gross_margin_unavailable=gross_margin_unavailable,
         created_at=item.created_at,
         updated_at=item.updated_at,
+    )
+
+
+def _resolve_delivery_for_invoice(db: Session, invoice: Invoice) -> Delivery | None:
+    if invoice.delivery_no:
+        delivery = db.query(Delivery).filter(Delivery.delivery_no == invoice.delivery_no).first()
+        if delivery is not None:
+            return delivery
+    if invoice.tracking_no:
+        delivery = db.query(Delivery).filter(Delivery.tracking_no == invoice.tracking_no).order_by(Delivery.created_at.desc()).first()
+        if delivery is not None:
+            return delivery
+    return None
+
+
+def _invoice_response(db: Session, invoice: Invoice) -> InvoiceResponse:
+    delivery = _resolve_delivery_for_invoice(db, invoice)
+    return InvoiceResponse(
+        id=invoice.id,
+        uuid=invoice.uuid,
+        legacy_id=invoice.legacy_id,
+        tracking_no=invoice.tracking_no,
+        delivery_id=(delivery.id if delivery is not None else None),
+        delivery_uuid=(delivery.uuid if delivery is not None else None),
+        delivery_no=invoice.delivery_no or (delivery.delivery_no if delivery is not None else None),
+        invoice_no=invoice.invoice_no,
+        invoice_draft_no=invoice.invoice_draft_no,
+        official_invoice_no=invoice.official_invoice_no,
+        customer_id=invoice.customer_id,
+        invoice_date=invoice.invoice_date,
+        delivery_date=invoice.delivery_date,
+        due_date=invoice.due_date,
+        subtotal=float(invoice.subtotal),
+        tax_total=float(invoice.tax_total),
+        grand_total=float(invoice.grand_total),
+        status=invoice.status,
+        is_locked=invoice.is_locked,
+        created_at=invoice.created_at,
+        updated_at=invoice.updated_at,
     )
 
 
@@ -357,13 +410,66 @@ def create_invoice(payload: InvoiceCreateRequest, db: Session = Depends(get_db))
     )
     db.commit()
     db.refresh(row)
-    return InvoiceResponse.model_validate(row)
+    return _invoice_response(db, row)
+
+
+@router.post(
+    "/from-delivery",
+    response_model=InvoiceResponse,
+    status_code=201,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def create_invoice_from_delivery(payload: InvoiceCreateFromDeliveryRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
+    _validate_due_date(payload.invoice_date, payload.due_date)
+    delivery = _get_delivery_or_404(db, payload.delivery_id)
+    order = _get_order_or_404(db, delivery.order_id)
+
+    row = Invoice(
+        invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",
+        customer_id=delivery.customer_id,
+        tracking_no=delivery.tracking_no or order.tracking_no,
+        delivery_no=delivery.delivery_no,
+        invoice_date=payload.invoice_date,
+        delivery_date=delivery.delivery_date,
+        due_date=payload.due_date,
+        subtotal=0,
+        tax_total=0,
+        grand_total=0,
+        status=InvoiceStatus.draft,
+        is_locked=False,
+    )
+    db.add(row)
+    db.flush()
+    ensure_invoice_legacy_id(db, row)
+    _assign_invoice_header_numbers(db, row, order)
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=row.id,
+        action=AuditAction.CREATE,
+        after={
+            "status": row.status.value,
+            "is_locked": row.is_locked,
+            "subtotal": float(row.subtotal),
+            "grand_total": float(row.grand_total),
+            "source_delivery_id": delivery.id,
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    return _invoice_response(db, row)
 
 
 @router.get("", response_model=list[InvoiceResponse])
 def list_invoices(
     order_id: str | None = Query(default=None),
     order_uuid: str | None = Query(default=None),
+    delivery_id: str | None = Query(default=None),
+    delivery_uuid: str | None = Query(default=None),
     status: InvoiceStatus | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> list[InvoiceResponse]:
@@ -380,10 +486,26 @@ def list_invoices(
             query = query.filter(Invoice.tracking_no == order.tracking_no)
         else:
             query = query.filter(Invoice.customer_id == order.customer_id, Invoice.delivery_date == order.delivery_date)
+    if delivery_id is not None:
+        delivery = _get_delivery_or_404(db, delivery_id)
+        if delivery.delivery_no is not None:
+            query = query.filter(Invoice.delivery_no == delivery.delivery_no)
+        elif delivery.tracking_no is not None:
+            query = query.filter(Invoice.tracking_no == delivery.tracking_no)
+        else:
+            query = query.filter(Invoice.customer_id == delivery.customer_id, Invoice.delivery_date == delivery.delivery_date)
+    if delivery_uuid is not None:
+        delivery = _get_delivery_by_uuid_or_404(db, delivery_uuid)
+        if delivery.delivery_no is not None:
+            query = query.filter(Invoice.delivery_no == delivery.delivery_no)
+        elif delivery.tracking_no is not None:
+            query = query.filter(Invoice.tracking_no == delivery.tracking_no)
+        else:
+            query = query.filter(Invoice.customer_id == delivery.customer_id, Invoice.delivery_date == delivery.delivery_date)
     if status is not None:
         query = query.filter(Invoice.status == status)
     rows = query.order_by(Invoice.created_at.desc()).all()
-    return [InvoiceResponse.model_validate(row) for row in rows]
+    return [_invoice_response(db, row) for row in rows]
 
 
 @router.get("/draft-list", response_model=list[InvoiceDraftListRow])
@@ -402,6 +524,7 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
 
     result: list[InvoiceDraftListRow] = []
     for inv, item, customer, product, order in rows:
+        delivery = _resolve_delivery_for_invoice(db, inv)
         gross_margin_pct, gross_margin_unavailable = _draft_item_metrics(item)
         line_amount = float(item.line_amount)
         unit_cost_basis = float(item.unit_cost_basis) if item.unit_cost_basis is not None else None
@@ -414,7 +537,9 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
                 invoice_uuid=inv.uuid,
                 invoice_item_uuid=item.uuid,
                 tracking_no=inv.tracking_no,
-                delivery_no=inv.delivery_no or order.delivery_no,
+                delivery_id=(delivery.id if delivery is not None else None),
+                delivery_uuid=(delivery.uuid if delivery is not None else None),
+                delivery_no=inv.delivery_no or (delivery.delivery_no if delivery is not None else order.delivery_no),
                 invoice_no=inv.invoice_no,
                 invoice_draft_no=inv.invoice_draft_no,
                 official_invoice_no=inv.official_invoice_no,
@@ -446,7 +571,7 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
 )
 def get_invoice(invoice_id: str, db: Session = Depends(get_db)) -> InvoiceResponse:
     row = _get_invoice_or_404(db, invoice_id)
-    return InvoiceResponse.model_validate(row)
+    return _invoice_response(db, row)
 
 
 @router.get(
@@ -456,7 +581,7 @@ def get_invoice(invoice_id: str, db: Session = Depends(get_db)) -> InvoiceRespon
 )
 def get_invoice_by_uuid(invoice_uuid: str, db: Session = Depends(get_db)) -> InvoiceResponse:
     row = _get_invoice_by_uuid_or_404(db, invoice_uuid)
-    return InvoiceResponse.model_validate(row)
+    return _invoice_response(db, row)
 
 
 @router.get(
@@ -508,6 +633,7 @@ def get_invoice_neighbors(invoice_id: str, db: Session = Depends(get_db)) -> Inv
 )
 def get_invoice_report(invoice_id: str, db: Session = Depends(get_db)) -> InvoiceReportResponse:
     invoice = _get_invoice_or_404(db, invoice_id)
+    delivery = _resolve_delivery_for_invoice(db, invoice)
     customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
     if customer is None:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
@@ -527,7 +653,9 @@ def get_invoice_report(invoice_id: str, db: Session = Depends(get_db)) -> Invoic
         invoice_id=invoice.id,
         invoice_uuid=invoice.uuid,
         tracking_no=invoice.tracking_no,
-        delivery_no=invoice.delivery_no,
+        delivery_id=(delivery.id if delivery is not None else None),
+        delivery_uuid=(delivery.uuid if delivery is not None else None),
+        delivery_no=invoice.delivery_no or (delivery.delivery_no if delivery is not None else None),
         invoice_no=invoice.invoice_no,
         invoice_draft_no=invoice.invoice_draft_no,
         official_invoice_no=invoice.official_invoice_no,
@@ -569,6 +697,7 @@ def get_invoice_report(invoice_id: str, db: Session = Depends(get_db)) -> Invoic
 )
 def get_invoice_report_by_uuid(invoice_uuid: str, db: Session = Depends(get_db)) -> InvoiceReportResponse:
     invoice = _get_invoice_by_uuid_or_404(db, invoice_uuid)
+    delivery = _resolve_delivery_for_invoice(db, invoice)
     customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
     if customer is None:
         raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
@@ -588,7 +717,9 @@ def get_invoice_report_by_uuid(invoice_uuid: str, db: Session = Depends(get_db))
         invoice_id=invoice.id,
         invoice_uuid=invoice.uuid,
         tracking_no=invoice.tracking_no,
-        delivery_no=invoice.delivery_no,
+        delivery_id=(delivery.id if delivery is not None else None),
+        delivery_uuid=(delivery.uuid if delivery is not None else None),
+        delivery_no=invoice.delivery_no or (delivery.delivery_no if delivery is not None else None),
         invoice_no=invoice.invoice_no,
         invoice_draft_no=invoice.invoice_draft_no,
         official_invoice_no=invoice.official_invoice_no,
@@ -997,7 +1128,110 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
     )
     db.commit()
     db.refresh(invoice)
-    return InvoiceResponse.model_validate(invoice)
+    return _invoice_response(db, invoice)
+
+
+@router.post(
+    "/generate-from-delivery",
+    response_model=InvoiceResponse,
+    status_code=201,
+    responses={
+        **INVOICE_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def generate_invoice_from_delivery(payload: InvoiceGenerateFromDeliveryRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
+    _validate_due_date(payload.invoice_date, payload.due_date)
+    delivery = _get_delivery_or_404(db, payload.delivery_id)
+    order = _get_order_or_404(db, delivery.order_id)
+
+    order_items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+    if not order_items:
+        raise HTTPException(status_code=422, detail={"code": "ORDER_ITEMS_NOT_FOUND", "message": "order has no items"})
+
+    invoice = Invoice(
+        invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",
+        customer_id=delivery.customer_id,
+        tracking_no=delivery.tracking_no or order.tracking_no,
+        delivery_no=delivery.delivery_no,
+        invoice_date=payload.invoice_date,
+        delivery_date=delivery.delivery_date,
+        due_date=payload.due_date,
+        subtotal=0,
+        tax_total=0,
+        grand_total=0,
+        status=InvoiceStatus.draft,
+        is_locked=False,
+    )
+    db.add(invoice)
+    db.flush()
+    ensure_invoice_legacy_id(db, invoice)
+    _assign_invoice_header_numbers(db, invoice, order)
+
+    subtotal = Decimal("0")
+    for item in order_items:
+        if item.pricing_basis == PricingBasis.uom_kg:
+            if item.actual_weight_kg is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "MISSING_ACTUAL_WEIGHT", "message": f"actual_weight_kg is required for order_item={item.id}"},
+                )
+            billable_qty = Decimal(str(item.actual_weight_kg))
+            unit_price = item.unit_price_uom_kg
+            billable_uom = "kg"
+        else:
+            billable_qty = Decimal(str(item.ordered_qty))
+            unit_price = item.unit_price_uom_count
+            billable_uom = "count"
+
+        if unit_price is None:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "MISSING_UNIT_PRICE", "message": f"unit price is required for order_item={item.id}"},
+            )
+
+        sales_unit_price = _amount(Decimal(str(unit_price)))
+        line_amount = _amount(billable_qty * sales_unit_price)
+        subtotal += line_amount
+
+        invoice_item = InvoiceItem(
+            invoice_id=invoice.id,
+            order_item_id=item.id,
+            billable_qty=float(billable_qty),
+            billable_uom=billable_uom,
+            invoice_line_status="uninvoiced",
+            sales_unit_price=float(sales_unit_price),
+            unit_cost_basis=None,
+            source_purchase_unit_cost_jpy=None,
+            line_amount=float(line_amount),
+            tax_amount=0,
+        )
+        db.add(invoice_item)
+        db.flush()
+        ensure_invoice_item_number(db, invoice, invoice_item)
+
+    invoice.subtotal = float(_amount(subtotal))
+    invoice.tax_total = 0
+    invoice.grand_total = float(_amount(subtotal))
+
+    write_audit_log(
+        db,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        action=AuditAction.CREATE,
+        after={
+            "status": invoice.status.value,
+            "is_locked": invoice.is_locked,
+            "subtotal": float(invoice.subtotal),
+            "grand_total": float(invoice.grand_total),
+            "source_delivery_id": delivery.id,
+            "generated_item_count": len(order_items),
+        },
+    )
+    db.commit()
+    db.refresh(invoice)
+    return _invoice_response(db, invoice)
 
 
 @router.post(
