@@ -12,6 +12,7 @@ from app.main import app
 from app.models.entities import (
     AuditLog,
     Customer,
+    Delivery,
     Invoice,
     InvoiceNumberSequence,
     InvoiceItem,
@@ -220,6 +221,28 @@ def _add_extra_order_items(order_id: int, count: int) -> None:
     db.close()
 
 
+def _seed_delivery_for_order(order_id: str) -> str:
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).first()
+    assert order is not None
+    order.status = OrderStatus.shipped
+    order.tracking_no = order.tracking_no or f"{date.today().strftime('%Y%m%d')}-{order.id.replace('-', '')[:5].zfill(5)}"
+    order.delivery_no = order.delivery_no or f"DLV-{date.today().strftime('%Y%m%d')}-{order.id.replace('-', '')[:5].zfill(5)}-01"
+    delivery = Delivery(
+        delivery_no=order.delivery_no,
+        tracking_no=order.tracking_no,
+        order_id=order.id,
+        customer_id=order.customer_id,
+        delivery_date=order.delivery_date,
+        shipped_date=order.delivery_date,
+    )
+    db.add(delivery)
+    db.commit()
+    delivery_id = delivery.id
+    db.close()
+    return delivery_id
+
+
 def test_create_invoice_invalid_date_range_is_422():
     order_id = _seed_order()
     client = _client()
@@ -257,6 +280,8 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert got.status_code == 200
     assert got.json()["id"] == invoice_id
     assert got.json()["uuid"] == created.json()["uuid"]
+    assert got.json()["delivery_id"] is None
+    assert got.json()["delivery_uuid"] is None
 
     got_by_uuid = client.get(f"/api/v1/invoices/uuid/{created.json()['uuid']}")
     assert got_by_uuid.status_code == 200
@@ -273,6 +298,8 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert report_by_uuid.status_code == 200
     assert report_by_uuid.json()["invoice_id"] == invoice_id
     assert report_by_uuid.json()["delivery_no"].startswith("DLV-")
+    assert report_by_uuid.json()["delivery_id"] is not None
+    assert report_by_uuid.json()["delivery_uuid"] is not None
 
     db = TestingSessionLocal()
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -357,6 +384,8 @@ def test_generate_invoice_from_order_items_success():
     assert res.status_code == 201
     body = res.json()
     assert body["uuid"]
+    assert body["delivery_id"] is None
+    assert body["delivery_uuid"] is None
     assert body["delivery_no"] is None
     assert body["invoice_draft_no"].startswith("IVD-")
     assert body["invoice_no"] == body["invoice_draft_no"]
@@ -375,6 +404,38 @@ def test_generate_invoice_from_order_items_success():
     items_by_uuid = client.get(f"/api/v1/invoices/uuid/{body['uuid']}/items")
     assert items_by_uuid.status_code == 200
     assert len(items_by_uuid.json()) == 2
+
+
+def test_create_and_generate_invoice_from_delivery_success():
+    order_id = _seed_order(with_items=True)
+    delivery_id = _seed_delivery_for_order(order_id)
+    client = _client()
+
+    created = client.post(
+        "/api/v1/invoices/from-delivery",
+        json={"delivery_id": delivery_id, "invoice_date": str(date.today())},
+    )
+    assert created.status_code == 201
+    assert created.json()["delivery_id"] == delivery_id
+    assert created.json()["delivery_uuid"] == delivery_id
+    assert created.json()["delivery_no"].startswith("DLV-")
+
+    generated = client.post(
+        "/api/v1/invoices/generate-from-delivery",
+        json={"delivery_id": delivery_id, "invoice_date": str(date.today())},
+    )
+    assert generated.status_code == 201
+    body = generated.json()
+    assert body["delivery_id"] == delivery_id
+    assert body["delivery_uuid"] == delivery_id
+    assert body["delivery_no"].startswith("DLV-")
+    assert float(body["subtotal"]) == 1850.0
+
+    filtered = client.get(f"/api/v1/invoices?delivery_id={delivery_id}")
+    assert filtered.status_code == 200
+    ids = {row["id"] for row in filtered.json()}
+    assert created.json()["id"] in ids
+    assert generated.json()["id"] in ids
 
 
 def test_generate_invoice_without_items_is_422():
