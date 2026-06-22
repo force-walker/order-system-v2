@@ -13,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.entities import Customer, Order, OrderItem, Product, Supplier, SupplierAllocation
+from app.models.entities import Customer, Delivery, DeliveryItem, Order, OrderItem, Product, Supplier, SupplierAllocation
 from app.schemas.report import PurchaseConfirmationPdfRequest, ShippingReportRow, ShippingReportSortMode
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
@@ -168,27 +168,30 @@ def shipping_report(
     alloc = _latest_allocation_subquery(db)
 
     query = (
-        db.query(OrderItem, Order, Customer, Product, alloc.c.final_supplier_id, alloc.c.final_qty, Supplier)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Customer, Order.customer_id == Customer.id)
-        .join(Product, OrderItem.product_id == Product.id)
-        .outerjoin(alloc, alloc.c.order_item_id == OrderItem.id)
+        db.query(DeliveryItem, Delivery, Customer, Product, alloc.c.final_supplier_id, alloc.c.final_qty, Supplier)
+        .join(Delivery, DeliveryItem.delivery_id == Delivery.id)
+        .join(Customer, Delivery.customer_id == Customer.id)
+        .join(Product, DeliveryItem.product_id == Product.id)
+        .outerjoin(alloc, alloc.c.order_item_id == DeliveryItem.order_item_id)
         .outerjoin(Supplier, Supplier.id == alloc.c.final_supplier_id)
-        .filter(OrderItem.shipped_date == shipped_date)
+        .filter(Delivery.shipped_date == shipped_date)
     )
 
     if mode == ShippingReportSortMode.supplier_product:
-        query = query.order_by(Supplier.name.asc().nulls_last(), Product.name.asc(), Customer.name.asc(), OrderItem.id.asc())
+        query = query.order_by(Supplier.name.asc().nulls_last(), Product.name.asc(), Customer.name.asc(), DeliveryItem.id.asc())
     else:
-        query = query.order_by(Customer.name.asc(), Supplier.name.asc().nulls_last(), Product.name.asc(), OrderItem.id.asc())
+        query = query.order_by(Customer.name.asc(), Supplier.name.asc().nulls_last(), Product.name.asc(), DeliveryItem.id.asc())
 
     rows = query.all()
     result: list[ShippingReportRow] = []
-    for item, _order, customer, product, _supplier_id, final_qty, supplier in rows:
-        qty = float(final_qty) if final_qty is not None else float(item.ordered_qty)
+    for item, delivery, customer, product, _supplier_id, final_qty, supplier in rows:
+        qty = float(final_qty) if final_qty is not None else float(item.delivered_qty)
         result.append(
             ShippingReportRow(
-                order_item_id=item.id,
+                delivery_id=delivery.id,
+                delivery_item_id=item.id,
+                delivery_no=delivery.delivery_no,
+                order_item_id=item.order_item_id,
                 shipped_date=item.shipped_date,
                 supplier_name=(supplier.name if supplier is not None else None),
                 customer_name=customer.name,

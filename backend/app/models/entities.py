@@ -345,6 +345,43 @@ class InvoiceItem(Base):
         return self.id
 
 
+class Delivery(Base):
+    __tablename__ = "deliveries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    delivery_no: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    tracking_no: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), unique=True, index=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    delivery_date: Mapped[date] = mapped_column(Date, index=True)
+    shipped_date: Mapped[date] = mapped_column(Date, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    @property
+    def uuid(self) -> str:
+        return self.id
+
+
+class DeliveryItem(Base):
+    __tablename__ = "delivery_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    delivery_id: Mapped[str] = mapped_column(ForeignKey("deliveries.id"), index=True)
+    order_item_id: Mapped[str] = mapped_column(ForeignKey("order_items.id"), unique=True, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    delivery_line_no: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    delivered_qty: Mapped[float] = mapped_column(Numeric(12, 3))
+    delivered_uom: Mapped[str] = mapped_column(String(32))
+    shipped_date: Mapped[date] = mapped_column(Date, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    @property
+    def uuid(self) -> str:
+        return self.id
+
+
 class BatchJobStatus(str, enum.Enum):
     queued = "queued"
     running = "running"

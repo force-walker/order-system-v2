@@ -5,12 +5,13 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.models.entities import Invoice, InvoiceItem, Order, OrderItem
+from app.models.entities import Delivery, DeliveryItem, Invoice, InvoiceItem, Order, OrderItem
 
 HK_TZ = ZoneInfo("Asia/Hong_Kong")
 
 _TRACKING_RE = re.compile(r"^(?P<date>\d{8})-(?P<seq>\d{5})$")
 _DELIVERY_RE = re.compile(r"^DLV-(?P<date>\d{8})-(?P<seq>\d{5})-(?P<branch>\d{2})$")
+_DELIVERY_LINE_RE = re.compile(r"^DLI-(?P<seq>\d{5})-(?P<branch>\d{2})-(?P<line>\d{4})$")
 _ORDER_LINE_RE = re.compile(r"^ODL-(?P<seq>\d{5})-(?P<line>\d{4})$")
 _INVOICE_DRAFT_RE = re.compile(r"^IVD-(?P<date>\d{8})-(?P<seq>\d{5})-(?P<branch>\d{2})$")
 _INVOICE_LINE_RE = re.compile(r"^IVL-(?P<seq>\d{5})-(?P<branch>\d{2})-(?P<line>\d{4})$")
@@ -95,7 +96,7 @@ def generate_delivery_no(db: Session, order: Order) -> str:
     prefix = f"DLV-{date_code}-{seq}-"
     existing = [
         value
-        for (value,) in db.query(Order.delivery_no).filter(Order.delivery_no.like(f"{prefix}%")).all()
+        for (value,) in db.query(Delivery.delivery_no).filter(Delivery.delivery_no.like(f"{prefix}%")).all()
         if value is not None
     ]
     branch = _max_sequence(existing, _DELIVERY_RE, "branch") + 1
@@ -107,6 +108,25 @@ def ensure_order_delivery_number(db: Session, order: Order, *, now_hk: datetime 
         return
     ensure_order_header_numbers(db, order, now_hk=now_hk)
     order.delivery_no = generate_delivery_no(db, order)
+
+
+def _delivery_branch_parts(delivery: Delivery) -> tuple[str, str]:
+    match = _DELIVERY_RE.match(delivery.delivery_no or "")
+    if match:
+        return match.group("seq"), match.group("branch")
+    _date_code, seq = _tracking_parts(delivery.tracking_no, None)
+    return seq, "01"
+
+
+def generate_delivery_line_no(db: Session, delivery: Delivery) -> str:
+    seq, branch = _delivery_branch_parts(delivery)
+    existing = [
+        value
+        for (value,) in db.query(DeliveryItem.delivery_line_no).filter(DeliveryItem.delivery_id == delivery.id).all()
+        if value is not None
+    ]
+    next_line = _max_sequence(existing, _DELIVERY_LINE_RE, "line") + 1
+    return f"DLI-{seq}-{branch}-{next_line:04d}"
 
 
 def generate_order_line_no(db: Session, order: Order) -> str:

@@ -6,6 +6,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
+from app.core.deliveries import ensure_delivery_document
 from app.core.invoice_pdf import InvoicePdfDocument, InvoicePdfLine, build_invoice_pdf
 from app.core.invoice_pricing import compute_draft_margin, compute_hkd_purchase_unit_cost, get_system_settings_or_404
 from app.core.numbering import (
@@ -255,6 +256,7 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
             order.status = target_order_status
             if order.status in {OrderStatus.shipped, OrderStatus.invoiced}:
                 ensure_order_delivery_number(db, order)
+                ensure_delivery_document(db, order)
                 invoice.delivery_no = order.delivery_no
             order.updated_by = "system_api"
             write_audit_log(
