@@ -32,7 +32,7 @@ def write_audit_log(
     db: Session,
     *,
     entity_type: str,
-    entity_id: int,
+    entity_id: str | int,
     action: str,
     actor: str = DEFAULT_AUDIT_ACTOR,
     reason_code: str | None = None,
@@ -45,7 +45,7 @@ def write_audit_log(
     db.add(
         AuditLog(
             entity_type=entity_type,
-            entity_id=entity_id,
+            entity_id=str(entity_id),
             action=action,
             before_json=(json.dumps(before, ensure_ascii=False) if before is not None else None),
             after_json=(json.dumps(after, ensure_ascii=False) if after is not None else None),

@@ -15,7 +15,7 @@ class AuditLogItem(BaseModel):
     actor: AuditActor
     action: str
     entityType: str
-    entityId: int
+    entityId: str
     reasonCode: str | None = None
     before: dict | None = None
     after: dict | None = None

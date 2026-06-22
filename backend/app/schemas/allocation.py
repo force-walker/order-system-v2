@@ -25,7 +25,7 @@ class AllocationSplitRequest(BaseModel):
 
 class AllocationResponse(BaseModel):
     id: int
-    order_item_id: int
+    order_item_id: str
     suggested_supplier_id: int | None
     suggested_qty: float | None
     final_supplier_id: int | None

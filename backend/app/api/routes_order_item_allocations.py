@@ -19,7 +19,15 @@ from app.schemas.order_item_allocation import (
 router = APIRouter(prefix="/api/v1/order-item-allocations", tags=["order-item-allocations"])
 
 
-def _current_allocation(db: Session, order_item_id: int) -> SupplierAllocation | None:
+def _get_order_item_by_identifier(db: Session, order_item_id: str | int) -> OrderItem | None:
+    ident = str(order_item_id)
+    row = db.query(OrderItem).filter(OrderItem.id == ident).first()
+    if row is None and ident.isdigit():
+        row = db.query(OrderItem).filter(OrderItem.legacy_id == int(ident)).first()
+    return row
+
+
+def _current_allocation(db: Session, order_item_id: str) -> SupplierAllocation | None:
     return (
         db.query(SupplierAllocation)
         .filter(SupplierAllocation.order_item_id == order_item_id, SupplierAllocation.is_split_child.is_(False))
@@ -92,7 +100,7 @@ def list_order_item_allocation_work_items(
 def suggest_allocations(payload: AllocationSuggestRequest, db: Session = Depends(get_db)) -> list[AllocationSuggestion]:
     suggestions: list[AllocationSuggestion] = []
     for order_item_id in payload.order_item_ids:
-        item = db.query(OrderItem).filter(OrderItem.id == order_item_id).first()
+        item = _get_order_item_by_identifier(db, order_item_id)
         if item is None:
             raise HTTPException(status_code=404, detail={"code": "ORDER_ITEM_NOT_FOUND", "message": f"order_item not found: {order_item_id}"})
 
@@ -131,7 +139,7 @@ def bulk_save_allocations(payload: BulkAllocationSaveRequest, db: Session = Depe
     succeeded = 0
 
     for row in payload.items:
-        item = db.query(OrderItem).filter(OrderItem.id == row.order_item_id).first()
+        item = _get_order_item_by_identifier(db, row.order_item_id)
         if item is None:
             errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ORDER_ITEM_NOT_FOUND", message="order_item not found"))
             continue

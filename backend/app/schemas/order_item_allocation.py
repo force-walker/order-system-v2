@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class OrderItemAllocationWorkItem(BaseModel):
-    order_item_id: int
+    order_item_id: str
     allocation_id: int | None = None
     order_no: str
     product_id: int
@@ -18,18 +18,18 @@ class OrderItemAllocationWorkItem(BaseModel):
 
 
 class AllocationSuggestion(BaseModel):
-    order_item_id: int
+    order_item_id: str
     suggested_supplier_id: int | None
     suggested_qty: float | None
     reason: str
 
 
 class AllocationSuggestRequest(BaseModel):
-    order_item_ids: list[int] = Field(min_length=1, max_length=500)
+    order_item_ids: list[str | int] = Field(min_length=1, max_length=500)
 
 
 class BulkAllocationSaveItem(BaseModel):
-    order_item_id: int = Field(gt=0)
+    order_item_id: str | int
     supplier_id: int | None = Field(default=None, gt=0)
     allocated_qty: float | None = Field(default=None, gt=0)
 
@@ -40,7 +40,7 @@ class BulkAllocationSaveRequest(BaseModel):
 
 
 class BulkAllocationSaveError(BaseModel):
-    order_item_id: int
+    order_item_id: str
     code: str
     message: str
 

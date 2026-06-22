@@ -86,7 +86,8 @@ def test_invoice_item_insert_success():
     db.add(item)
     db.commit()
     db.refresh(item)
-    assert item.id > 0
+    assert isinstance(item.id, str)
+    assert len(item.id) == 36
 
 
 def test_invoice_item_sales_unit_price_non_negative():

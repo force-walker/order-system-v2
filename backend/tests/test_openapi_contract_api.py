@@ -206,13 +206,13 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert {"invoice_item_uuid", "unit_cost_basis", "gross_margin_pct", "gross_margin_unavailable", "invoice_line_no"}.issubset(invoice_report_line_props)
 
     invoice_draft_list_row_props = spec["components"]["schemas"]["InvoiceDraftListRow"]["properties"]
-    assert {"invoice_uuid", "invoice_item_uuid", "tracking_no", "invoice_no", "invoice_draft_no", "official_invoice_no", "invoice_line_no", "invoice_date", "delivery_date", "status"}.issubset(invoice_draft_list_row_props)
+    assert {"invoice_uuid", "invoice_item_uuid", "tracking_no", "delivery_no", "invoice_no", "invoice_draft_no", "official_invoice_no", "invoice_line_no", "invoice_date", "delivery_date", "status"}.issubset(invoice_draft_list_row_props)
 
     invoice_response_props = spec["components"]["schemas"]["InvoiceResponse"]["properties"]
-    assert {"uuid", "tracking_no", "invoice_draft_no", "official_invoice_no"}.issubset(invoice_response_props)
+    assert {"uuid", "tracking_no", "delivery_no", "invoice_draft_no", "official_invoice_no"}.issubset(invoice_response_props)
 
     order_response_props = spec["components"]["schemas"]["OrderResponse"]["properties"]
-    assert {"uuid", "tracking_no"}.issubset(order_response_props)
+    assert {"uuid", "tracking_no", "delivery_no"}.issubset(order_response_props)
 
     assert "/api/v1/orders/uuid/{order_uuid}" in spec["paths"]
     assert "/api/v1/orders/uuid/{order_uuid}/items" in spec["paths"]

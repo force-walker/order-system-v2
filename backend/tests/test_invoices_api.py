@@ -272,12 +272,18 @@ def test_create_finalize_unlock_reset_invoice_flow():
     report_by_uuid = client.get(f"/api/v1/invoices/uuid/{created.json()['uuid']}/report")
     assert report_by_uuid.status_code == 200
     assert report_by_uuid.json()["invoice_id"] == invoice_id
+    assert report_by_uuid.json()["delivery_no"].startswith("DLV-")
 
     db = TestingSessionLocal()
     order = db.query(Order).filter(Order.id == order_id).first()
-    lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.created_at.asc()).all()
     assert order is not None
+    assert invoice is not None
     assert order.status == OrderStatus.invoiced
+    assert order.delivery_no is not None
+    assert order.delivery_no.startswith("DLV-")
+    assert invoice.delivery_no == order.delivery_no
     assert all(line.line_status == LineStatus.invoiced for line in lines)
     db.close()
 
@@ -351,6 +357,7 @@ def test_generate_invoice_from_order_items_success():
     assert res.status_code == 201
     body = res.json()
     assert body["uuid"]
+    assert body["delivery_no"] is None
     assert body["invoice_draft_no"].startswith("IVD-")
     assert body["invoice_no"] == body["invoice_draft_no"]
     assert body["official_invoice_no"] is None

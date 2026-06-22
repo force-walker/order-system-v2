@@ -135,9 +135,10 @@ class Product(Base):
 class Order(Base):
     __tablename__ = "orders"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    legacy_id: Mapped[int | None] = mapped_column(unique=True, index=True, nullable=True)
     tracking_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
+    delivery_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     order_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
     order_datetime: Mapped[datetime] = mapped_column(DateTime, index=True)
@@ -149,6 +150,10 @@ class Order(Base):
     updated_by: Mapped[str] = mapped_column(String(64), default="system_api", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    @property
+    def uuid(self) -> str:
+        return self.id
 
 
 class OrderItem(Base):
@@ -164,9 +169,9 @@ class OrderItem(Base):
         CheckConstraint("price_ceiling IS NULL OR price_ceiling >= 0", name="ck_order_items_price_ceiling_non_negative"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
-    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    legacy_id: Mapped[int | None] = mapped_column(unique=True, index=True, nullable=True)
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), index=True)
     order_line_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     ordered_qty: Mapped[float] = mapped_column(Numeric(12, 3))
@@ -186,6 +191,10 @@ class OrderItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
+    @property
+    def uuid(self) -> str:
+        return self.id
+
 
 class SupplierAllocation(Base):
     __tablename__ = "supplier_allocations"
@@ -195,7 +204,7 @@ class SupplierAllocation(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"), index=True)
+    order_item_id: Mapped[str] = mapped_column(ForeignKey("order_items.id"), index=True)
     suggested_supplier_id: Mapped[int | None] = mapped_column(index=True, nullable=True)
     suggested_qty: Mapped[float | None] = mapped_column(Numeric(12, 3), nullable=True)
     final_supplier_id: Mapped[int | None] = mapped_column(index=True)
@@ -272,10 +281,11 @@ class Invoice(Base):
         CheckConstraint("grand_total >= 0", name="ck_invoices_grand_total_non_negative"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    legacy_id: Mapped[int | None] = mapped_column(unique=True, index=True, nullable=True)
     invoice_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     tracking_no: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
+    delivery_no: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
     invoice_draft_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     official_invoice_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
@@ -289,6 +299,10 @@ class Invoice(Base):
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    @property
+    def uuid(self) -> str:
+        return self.id
 
 
 class InvoiceLineStatus(str, enum.Enum):
@@ -306,10 +320,10 @@ class InvoiceItem(Base):
         Index("ix_invoice_items_order_item_id", "order_item_id"),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
-    invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"))
-    order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    legacy_id: Mapped[int | None] = mapped_column(unique=True, index=True, nullable=True)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id"))
+    order_item_id: Mapped[str] = mapped_column(ForeignKey("order_items.id"))
     invoice_line_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     billable_qty: Mapped[float] = mapped_column(Numeric(12, 3))
     billable_uom: Mapped[str] = mapped_column(String(32))
@@ -325,6 +339,10 @@ class InvoiceItem(Base):
     tax_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    @property
+    def uuid(self) -> str:
+        return self.id
 
 
 class BatchJobStatus(str, enum.Enum):
@@ -413,7 +431,7 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     entity_type: Mapped[str] = mapped_column(String(64), index=True)
-    entity_id: Mapped[int] = mapped_column(index=True)
+    entity_id: Mapped[str] = mapped_column(String(64), index=True)
     action: Mapped[str] = mapped_column(String(64))
     before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     after_json: Mapped[str | None] = mapped_column(Text, nullable=True)

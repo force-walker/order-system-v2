@@ -46,7 +46,7 @@ def _to_item(r: AuditLog) -> AuditLogItem:
 @router.get("", response_model=AuditLogListResponse)
 def list_audit_logs(
     entityType: str | None = Query(default=None),
-    entityId: int | None = Query(default=None),
+    entityId: str | None = Query(default=None),
     actorId: str | None = Query(default=None),
     action: str | None = Query(default=None),
     from_ts: datetime | None = Query(default=None, alias="from"),
@@ -62,8 +62,8 @@ def list_audit_logs(
     q = db.query(AuditLog)
     if entityType:
         q = q.filter(AuditLog.entity_type == entityType)
-    if entityId:
-        q = q.filter(AuditLog.entity_id == entityId)
+    if entityId is not None:
+        q = q.filter(AuditLog.entity_id == str(entityId))
     if actorId:
         q = q.filter(AuditLog.changed_by == actorId)
     if action:
@@ -99,7 +99,7 @@ def get_audit_log(
 @router.get("/entities/{entityType}/{entityId}", response_model=AuditLogListResponse)
 def get_entity_timeline(
     entityType: str,
-    entityId: int,
+    entityId: str,
     from_ts: datetime | None = Query(default=None, alias="from"),
     to_ts: datetime | None = Query(default=None, alias="to"),
     page: int = Query(default=1, ge=1),
