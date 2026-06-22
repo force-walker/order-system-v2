@@ -1,6 +1,23 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+class DeliveryBuildRequest(BaseModel):
+    order_id: str | int
+
+    @field_validator("order_id")
+    @classmethod
+    def validate_order_id(cls, value: str | int) -> str | int:
+        if isinstance(value, int):
+            if value <= 0:
+                raise ValueError("order_id must be positive")
+            return value
+        if value.isdigit() and int(value) <= 0:
+            raise ValueError("order_id must be positive")
+        if not value:
+            raise ValueError("order_id is required")
+        return value
 
 
 class DeliveryResponse(BaseModel):
