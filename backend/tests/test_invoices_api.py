@@ -438,6 +438,46 @@ def test_create_and_generate_invoice_from_delivery_success():
     assert generated.json()["id"] in ids
 
 
+def test_generate_invoice_from_shipped_order_resolves_delivery_entity():
+    order_id = _seed_order(with_items=True)
+    delivery_id = _seed_delivery_for_order(order_id)
+    client = _client()
+
+    res = client.post(
+        "/api/v1/invoices/generate",
+        json={"order_id": order_id, "invoice_date": str(date.today())},
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["delivery_id"] == delivery_id
+    assert body["delivery_uuid"] == delivery_id
+    assert body["delivery_no"].startswith("DLV-")
+
+
+def test_generate_draft_from_purchase_results_for_shipped_order_resolves_delivery_entity():
+    order_id = _seed_order(with_items=True)
+    delivery_id = _seed_delivery_for_order(order_id)
+    _seed_system_settings()
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
+    client = _client()
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert draft.status_code == 201
+
+    invoice = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}")
+    assert invoice.status_code == 200
+    assert invoice.json()["delivery_id"] == delivery_id
+    assert invoice.json()["delivery_uuid"] == delivery_id
+    assert invoice.json()["delivery_no"].startswith("DLV-")
+
+
 def test_generate_invoice_without_items_is_422():
     order_id = _seed_order(with_items=False)
     client = _client()
