@@ -1,6 +1,6 @@
 import { ServiceError, parseApiErrorPayload } from 'shared/error';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? '15000');
 
 type RequestOptions = {

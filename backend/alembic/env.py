@@ -9,6 +9,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.db.base import Base
 from app.models import entities  # noqa: F401
+from app.models import auth  # noqa: F401
 
 config = context.config
 

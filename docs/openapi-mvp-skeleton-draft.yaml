@@ -3,6 +3,37 @@ info:
   title: Order System v2 API
   version: 0.1.0
 paths:
+  /api/v1/auth/register:
+    post:
+      tags:
+      - auth
+      summary: Register
+      operationId: register_api_v1_auth_register_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /health:
     get:
       summary: Health
@@ -103,8 +134,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RefreshRequest'
-        required: true
+              anyOf:
+              - $ref: '#/components/schemas/RefreshRequest'
+              - type: 'null'
+              title: Payload
       responses:
         '200':
           description: Successful Response
@@ -115,12 +148,20 @@ paths:
                   type: boolean
                 type: object
                 title: Response Logout Api V1 Auth Logout Post
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+      security:
+      - HTTPBearer: []
   /api/v1/auth/me:
     get:
       tags:
@@ -1336,6 +1377,25 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    RegisterRequest:
+      properties:
+        user_id:
+          type: string
+          maxLength: 128
+          minLength: 3
+          pattern: ^[a-zA-Z0-9_.@+-]+$
+          title: User Id
+        password:
+          type: string
+          maxLength: 128
+          minLength: 12
+          title: Password
+      additionalProperties: false
+      type: object
+      required:
+      - user_id
+      - password
+      title: RegisterRequest
     AllocationOverrideRequest:
       properties:
         final_supplier_id:
@@ -1984,17 +2044,19 @@ components:
         user_id:
           type: string
           maxLength: 128
-          minLength: 1
+          minLength: 3
+          pattern: ^[a-zA-Z0-9_.@+-]+$
           title: User Id
-        role:
+        password:
           type: string
-          maxLength: 32
+          maxLength: 128
           minLength: 1
-          title: Role
+          title: Password
+      additionalProperties: false
       type: object
       required:
       - user_id
-      - role
+      - password
       title: LoginRequest
     MeResponse:
       properties:
@@ -2401,8 +2463,10 @@ components:
       properties:
         refresh_token:
           type: string
+          maxLength: 2048
           minLength: 1
           title: Refresh Token
+      additionalProperties: false
       type: object
       required:
       - refresh_token

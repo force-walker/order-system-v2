@@ -1,15 +1,8 @@
 import type { EntityId } from 'shared/entityId';
-import { apiRequest } from 'shared/apiClient';
+import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClient';
 import { parseApiErrorPayload } from 'shared/error';
 import type { InvoiceDetailView, InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceStatus, InvoiceSummaryRow } from 'features/orders/types/order';
 import { markOrdersStatusDirty } from './ordersService';
-
-const TOKEN_STORAGE_KEY = 'osv2_access_token';
-const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
-const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
-
-type ApiLoginRequest = { user_id: string; role: string };
-type ApiTokenResponse = { access_token: string; refresh_token: string };
 
 type ApiInvoiceSummary = {
   id: EntityId;
@@ -104,34 +97,6 @@ type ApiInvoiceBatchFinalizeResponse = {
 };
 
 const INVOICE_STATUSES: InvoiceStatus[] = ['draft', 'finalized', 'sent', 'cancelled'];
-
-const ensureDevToken = async (): Promise<string> => {
-  const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
-  if (cached) return cached;
-
-  const loginBody: ApiLoginRequest = { user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE };
-  const res = await apiRequest('/api/v1/auth/login', {
-    method: 'POST',
-    body: loginBody,
-  });
-  if (!res.ok) throw await parseApiErrorPayload(res);
-
-  const data = (await res.json()) as ApiTokenResponse;
-  localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
-  return data.access_token;
-};
-
-const fetchWithAuth = async (path: string, init?: { method?: string; body?: unknown }) => {
-  const token = await ensureDevToken();
-  const res = await apiRequest(path, {
-    method: init?.method,
-    body: init?.body,
-    authToken: token,
-  });
-
-  if (res.status === 401) localStorage.removeItem(TOKEN_STORAGE_KEY);
-  return res;
-};
 
 const listInvoicesByStatus = async (status: InvoiceStatus): Promise<InvoiceDraftSummary[]> => {
   const res = await fetchWithAuth(`/api/v1/invoices?status=${status}`, { method: 'GET' });
@@ -237,8 +202,6 @@ export const finalizeInvoiceItemLine = async (invoiceId: EntityId, invoiceItemId
     taxAmount: r.tax_amount,
   };
 };
-
-
 
 export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]> => {
   const rowsRes = await fetchWithAuth('/api/v1/invoices/draft-list', { method: 'GET' });

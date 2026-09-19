@@ -1,4 +1,6 @@
 import { Link, matchPath, Outlet, useLocation } from 'react-router-dom';
+import { LogoutButton } from 'features/auth/LogoutButton';
+import { useAuth } from 'features/auth/AuthContext';
 
 const branchName = import.meta.env.VITE_APP_BRANCH ?? 'local';
 const commitSha = import.meta.env.VITE_APP_COMMIT_SHA ?? 'dev';
@@ -52,6 +54,7 @@ const navigation = [
 ] as const;
 
 export const AppLayout = () => {
+  const { user } = useAuth();
   const location = useLocation();
   // Prefer the most specific section, including its detail/edit pages.
   const activePath = navigation.reduce<string | undefined>((selected, [path]) =>
@@ -65,6 +68,8 @@ export const AppLayout = () => {
         <div>
           <h1>Order System v2 (Mockup)</h1>
           <p className="branch-badge">branch: {branchName}</p>
+          <p>{user?.user_id}</p>
+          <LogoutButton />
         </div>
         <nav className="nav">
           {navigation.map(([path, label]) => (

@@ -20,6 +20,11 @@ type ApiErrorPayload = {
 };
 
 const CODE_MESSAGES: Record<string, string> = {
+  INVALID_CREDENTIALS: 'ユーザーIDまたはパスワードが正しくありません。',
+  USER_ALREADY_EXISTS: 'このユーザーIDは登録済みです。',
+  AUTH_REQUIRED: '認証の有効期限が切れました。ログインしてください。',
+  EMAIL_VERIFICATION_REQUIRED: 'メールアドレスの確認が必要です。管理者に連絡してください。',
+  EMAIL_VERIFICATION_UNAVAILABLE: 'メール確認が必須の設定ですが、確認機能が未構成です。管理者に連絡してください。',
   login_failed: 'ログインに失敗しました。設定を確認してください。',
   list_orders_failed: '注文一覧の取得に失敗しました。',
   create_order_failed: '注文作成に失敗しました。',

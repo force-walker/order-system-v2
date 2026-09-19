@@ -14,7 +14,7 @@ import type {
   ProductOption,
   ProductUpdateRequest,
 } from 'features/orders/types/order';
-import { apiJson, apiRequest } from 'shared/apiClient';
+import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClient';
 import { parseApiErrorPayload, ServiceError } from 'shared/error';
 import {
   toApiCustomerUpdate,
@@ -26,21 +26,16 @@ import {
   toProductDetail,
   toProductOption,
   type ApiCustomerResponse,
-  type ApiLoginRequest,
   type ApiOrderCreateRequest,
   type ApiOrderResponse,
   type ApiProductResponse,
-  type ApiTokenResponse,
 } from './ordersDto';
 
 const DEBUG_ORDER_ITEM_FIELDS = (import.meta.env.VITE_DEBUG_ORDER_ITEM_FIELDS ?? 'true') === 'true';
 
 const STORAGE_KEY = 'osv2_mock_orders';
-const TOKEN_STORAGE_KEY = 'osv2_access_token';
 const ORDER_STATUS_REFRESH_KEY = 'osv2_order_status_refresh';
 const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true';
-const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
-const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
 
 type ApiOrderItemResponse = {
   id: EntityId;
@@ -99,6 +94,8 @@ const writeOrders = (orders: OrderDetail[]) => {
 
 export const invalidateOrderCaches = () => {
   apiOrderCache.clear();
+  customerNameCache.clear();
+  productCache.clear();
 };
 
 export const markOrdersStatusDirty = () => {
@@ -135,32 +132,6 @@ const toListItem = (o: OrderDetail): OrderSummary => ({
   status: o.status,
   items: o.items,
 });
-
-const ensureDevToken = async (): Promise<string> => {
-  const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
-  if (cached) return cached;
-
-  const loginBody: ApiLoginRequest = { user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE };
-  const data = await apiJson<ApiTokenResponse>('/api/v1/auth/login', {
-    method: 'POST',
-    body: loginBody,
-  });
-
-  localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
-  return data.access_token;
-};
-
-const fetchWithAuth = async (path: string, init?: { method?: string; body?: unknown }) => {
-  const token = await ensureDevToken();
-  const res = await apiRequest(path, {
-    method: init?.method,
-    body: init?.body,
-    authToken: token,
-  });
-
-  if (res.status === 401) localStorage.removeItem(TOKEN_STORAGE_KEY);
-  return res;
-};
 
 const loadCustomersApi = async (includeInactive = false): Promise<CustomerOption[]> => {
   const query = includeInactive ? '?include_inactive=true' : '';

@@ -86,8 +86,7 @@ POST /api/v1/auth/refresh
 
 ```bash
 VITE_API_BASE_URL=http://127.0.0.1:8000
-VITE_DEV_LOGIN_USER=frontend-dev-admin
-VITE_DEV_LOGIN_ROLE=admin
+ログインには登録済みのユーザーIDとパスワードを使用します。開発用自動ログインはありません。
 ```
 
 ## 5) Contract reminder

@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './AppLayout';
+import { AuthProvider, ProtectedRoute } from 'features/auth/AuthContext';
+import { AuthPage } from 'features/auth/AuthPage';
 import { OrderCreatePage } from 'features/orders/pages/OrderCreatePage';
 import { OrderListPage } from 'features/orders/pages/OrderListPage';
 import { OrderItemDetailPage } from 'features/orders/pages/OrderItemDetailPage';
@@ -44,8 +46,11 @@ export const App = () => {
   }, []);
 
   return (
-    <Routes>
+    <AuthProvider><Routes>
+      <Route path="/login" element={<AuthPage key="login" />} />
+      <Route path="/register" element={<AuthPage key="register" register />} />
       <Route path="/" element={<Navigate to="/orders/new" replace />} />
+      <Route element={<ProtectedRoute />}>
       <Route element={<AppLayout />}>
         <Route path="/orders" element={<OrderListPage />} />
         <Route path="/orders/new" element={<OrderCreatePage />} />
@@ -75,7 +80,8 @@ export const App = () => {
         <Route path="/suppliers/:supplierId/edit" element={<SupplierEditPage />} />
         <Route path="/settings/system" element={<SystemSettingsPage />} />
       </Route>
+      </Route>
       <Route path="*" element={<Navigate to="/orders/new" replace />} />
-    </Routes>
+    </Routes></AuthProvider>
   );
 };

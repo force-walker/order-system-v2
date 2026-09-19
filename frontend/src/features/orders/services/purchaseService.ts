@@ -1,6 +1,7 @@
 import type { EntityId } from 'shared/entityId';
-import { apiRequest } from 'shared/apiClient';
+import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClient';
 import { parseApiErrorPayload } from 'shared/error';
+import { currentUser } from 'shared/authSession';
 import type {
   PurchaseResultCreateRequest,
   PurchaseResultFilter,
@@ -8,13 +9,6 @@ import type {
   PurchaseResultResponse,
   PurchaseResultStatus,
 } from 'features/orders/types/order';
-
-const TOKEN_STORAGE_KEY = 'osv2_access_token';
-const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
-const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
-
-type ApiLoginRequest = { user_id: string; role: string };
-type ApiTokenResponse = { access_token: string; refresh_token: string };
 
 type ApiPurchaseResultResponse = {
   id: number;
@@ -47,34 +41,6 @@ type ApiPurchaseResultResponse = {
   defer_reason?: string | null;
   deferred_by?: string | null;
   deferred_at?: string | null;
-};
-
-const ensureDevToken = async (): Promise<string> => {
-  const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
-  if (cached) return cached;
-
-  const loginBody: ApiLoginRequest = { user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE };
-  const res = await apiRequest('/api/v1/auth/login', {
-    method: 'POST',
-    body: loginBody,
-  });
-  if (!res.ok) throw await parseApiErrorPayload(res);
-
-  const data = (await res.json()) as ApiTokenResponse;
-  localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
-  return data.access_token;
-};
-
-const fetchWithAuth = async (path: string, init?: { method?: string; body?: unknown }) => {
-  const token = await ensureDevToken();
-  const res = await apiRequest(path, {
-    method: init?.method,
-    body: init?.body,
-    authToken: token,
-  });
-
-  if (res.status === 401) localStorage.removeItem(TOKEN_STORAGE_KEY);
-  return res;
 };
 
 const toItem = (row: ApiPurchaseResultResponse): PurchaseResultItem => ({
@@ -141,9 +107,10 @@ export const listPurchaseWorkQueue = async (): Promise<PurchaseResultResponse> =
 };
 
 export const deferPurchaseResult = async (resultId: number, deferReason: string): Promise<PurchaseResultItem> => {
+  const user = await currentUser();
   const res = await fetchWithAuth(`/api/v1/purchase-results/${resultId}/defer`, {
     method: 'POST',
-    body: { defer_reason: deferReason, deferred_by: DEV_LOGIN_USER },
+    body: { defer_reason: deferReason, deferred_by: user.user_id },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
   return toItem((await res.json()) as ApiPurchaseResultResponse);

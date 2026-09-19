@@ -6,7 +6,7 @@ import type { CustomerOption, ProductOption } from 'features/orders/types/order'
 import { toActionableMessage } from 'shared/error';
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
+import { apiRequestWithAuth as apiRequest } from 'shared/authenticatedApiClient';
 
 type CheckResult = {
   health: string;
@@ -33,8 +33,8 @@ export const OrderCreatePage = () => {
   const runConnectivityCheck = async () => {
     setChecking(true);
     try {
-      const healthRes = await fetch(`${API_BASE_URL}/health`);
-      const customerRes = await fetch(`${API_BASE_URL}/api/v1/customers`, { method: 'GET' });
+      const healthRes = await apiRequest('/health');
+      const customerRes = await apiRequest('/api/v1/customers');
       setCheckResult({
         health: `health: ${healthRes.status}`,
         customers: `customers: ${customerRes.status}`,

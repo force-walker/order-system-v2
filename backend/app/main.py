@@ -1,6 +1,6 @@
 from time import perf_counter
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -22,6 +22,7 @@ from app.api.routes_reports import router as reports_router
 from app.api.routes_supplier_product_mappings import router as supplier_product_mappings_router
 from app.api.routes_suppliers import router as suppliers_router
 from app.api.routes_system_settings import router as system_settings_router
+from app.core.auth import get_auth_context
 from app.core.exception_mapping import map_integrity_error
 from app.core.metrics import api_request_duration_ms, api_request_errors_total, api_requests_total, inflight_requests
 
@@ -95,6 +96,7 @@ async def metrics_middleware(request: Request, call_next):
     if status.startswith("4") or status.startswith("5"):
         api_request_errors_total.labels(status_family=f"{status[0]}xx").inc()
 
+    response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -109,18 +111,18 @@ def health_v1() -> dict[str, str]:
 
 
 app.include_router(auth_router)
-app.include_router(metrics_router)
-app.include_router(audit_router)
-app.include_router(products_router)
-app.include_router(customers_router)
-app.include_router(deliveries_router)
-app.include_router(suppliers_router)
-app.include_router(system_settings_router)
-app.include_router(supplier_product_mappings_router)
-app.include_router(order_item_allocations_router)
-app.include_router(orders_router)
-app.include_router(allocations_router)
-app.include_router(purchase_results_router)
-app.include_router(invoices_router)
-app.include_router(reports_router)
-app.include_router(batch_router)
+app.include_router(metrics_router, dependencies=[Depends(get_auth_context)])
+app.include_router(audit_router, dependencies=[Depends(get_auth_context)])
+app.include_router(products_router, dependencies=[Depends(get_auth_context)])
+app.include_router(customers_router, dependencies=[Depends(get_auth_context)])
+app.include_router(deliveries_router, dependencies=[Depends(get_auth_context)])
+app.include_router(suppliers_router, dependencies=[Depends(get_auth_context)])
+app.include_router(system_settings_router, dependencies=[Depends(get_auth_context)])
+app.include_router(supplier_product_mappings_router, dependencies=[Depends(get_auth_context)])
+app.include_router(order_item_allocations_router, dependencies=[Depends(get_auth_context)])
+app.include_router(orders_router, dependencies=[Depends(get_auth_context)])
+app.include_router(allocations_router, dependencies=[Depends(get_auth_context)])
+app.include_router(purchase_results_router, dependencies=[Depends(get_auth_context)])
+app.include_router(invoices_router, dependencies=[Depends(get_auth_context)])
+app.include_router(reports_router, dependencies=[Depends(get_auth_context)])
+app.include_router(batch_router, dependencies=[Depends(get_auth_context)])

@@ -1,4 +1,4 @@
-import { apiRequest } from 'shared/apiClient';
+import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClient';
 import { parseApiErrorPayload } from 'shared/error';
 import type { ImportFormat } from 'features/imports/types/importFormat';
 import type {
@@ -12,9 +12,6 @@ import type {
   SupplierProductMappingUpdateRequest,
   SupplierUpdateRequest,
 } from 'features/suppliers/types/supplier';
-
-type ApiLoginRequest = { user_id: string; role: string };
-type ApiTokenResponse = { access_token: string; refresh_token: string };
 
 type ApiSupplier = {
   id: number;
@@ -70,10 +67,6 @@ export type SupplierImportUpsertResult = {
   }>;
 };
 
-const TOKEN_STORAGE_KEY = 'osv2_access_token';
-const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
-const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
-
 const SUPPLIER_IMPORT_FORMAT_MOCK: ImportFormat = {
   entity: 'suppliers',
   fields: [
@@ -81,33 +74,6 @@ const SUPPLIER_IMPORT_FORMAT_MOCK: ImportFormat = {
     { name: 'name', label: 'Name', required: true, requiredScope: 'create', description: '仕入先名', example: 'テスト仕入先' },
     { name: 'active', label: 'Active', required: false, requiredScope: 'never', description: '有効フラグ', example: true },
   ],
-};
-
-const ensureDevToken = async (): Promise<string> => {
-  const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
-  if (cached) return cached;
-
-  const loginBody: ApiLoginRequest = { user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE };
-  const res = await apiRequest('/api/v1/auth/login', {
-    method: 'POST',
-    body: loginBody,
-  });
-  if (!res.ok) throw await parseApiErrorPayload(res);
-
-  const data = (await res.json()) as ApiTokenResponse;
-  localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
-  return data.access_token;
-};
-
-const fetchWithAuth = async (path: string, init?: { method?: string; body?: unknown }) => {
-  const token = await ensureDevToken();
-  const res = await apiRequest(path, {
-    method: init?.method ?? 'GET',
-    body: init?.body,
-    authToken: token,
-  });
-  if (res.status === 401) localStorage.removeItem(TOKEN_STORAGE_KEY);
-  return res;
 };
 
 const toSupplier = (row: ApiSupplier): Supplier => ({

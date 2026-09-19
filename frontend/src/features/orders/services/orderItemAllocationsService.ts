@@ -1,5 +1,5 @@
 import type { EntityId } from 'shared/entityId';
-import { apiRequest } from 'shared/apiClient';
+import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClient';
 import { parseApiErrorPayload } from 'shared/error';
 import { listOrders } from 'features/orders/services/ordersService';
 import { listSuppliers } from 'features/suppliers/services/suppliersService';
@@ -53,9 +53,6 @@ export type SupplierFilterOption = {
   label: string;
 };
 
-type ApiLoginRequest = { user_id: string; role: string };
-type ApiTokenResponse = { access_token: string; refresh_token: string };
-
 type ApiWorkItem = {
   order_item_id: EntityId;
   allocation_id: number | null;
@@ -88,37 +85,6 @@ type ApiBulkSaveResponse = {
   succeeded: number;
   failed: number;
   errors: ApiBulkSaveError[];
-};
-
-const TOKEN_STORAGE_KEY = 'osv2_access_token';
-const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admin';
-const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
-
-const ensureDevToken = async (): Promise<string> => {
-  const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
-  if (cached) return cached;
-
-  const loginBody: ApiLoginRequest = { user_id: DEV_LOGIN_USER, role: DEV_LOGIN_ROLE };
-  const res = await apiRequest('/api/v1/auth/login', {
-    method: 'POST',
-    body: loginBody,
-  });
-  if (!res.ok) throw await parseApiErrorPayload(res);
-
-  const data = (await res.json()) as ApiTokenResponse;
-  localStorage.setItem(TOKEN_STORAGE_KEY, data.access_token);
-  return data.access_token;
-};
-
-const fetchWithAuth = async (path: string, init?: { method?: string; body?: unknown }) => {
-  const token = await ensureDevToken();
-  const res = await apiRequest(path, {
-    method: init?.method ?? 'GET',
-    body: init?.body,
-    authToken: token,
-  });
-  if (res.status === 401) localStorage.removeItem(TOKEN_STORAGE_KEY);
-  return res;
 };
 
 export const listSupplierFilterOptions = async (): Promise<SupplierFilterOption[]> => {
