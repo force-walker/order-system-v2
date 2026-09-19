@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
@@ -40,20 +41,20 @@ export const PurchasePage = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rows, setRows] = useState<OrderItemAllocationWorkItem[]>([]);
   const [queueItems, setQueueItems] = useState<PurchaseResultItem[]>([]);
-  const [queueResultMessage, setQueueResultMessage] = useState<Record<number, string>>({});
-  const [queueDraftInvoiceId, setQueueDraftInvoiceId] = useState<Record<number, number>>({});
-  const [orderIdByAllocationId, setOrderIdByAllocationId] = useState<Record<number, number>>({});
+  const [queueResultMessage, setQueueResultMessage] = useState<Record<EntityId, string>>({});
+  const [queueDraftInvoiceId, setQueueDraftInvoiceId] = useState<Record<EntityId, EntityId>>({});
+  const [orderIdByAllocationId, setOrderIdByAllocationId] = useState<Record<EntityId, EntityId>>({});
   const [purchaseResultByAllocationId, setPurchaseResultByAllocationId] = useState<Record<number, PurchaseResultItem>>({});
   const [suppliers, setSuppliers] = useState<SupplierFilterOption[]>([]);
   const [unitsByProductId, setUnitsByProductId] = useState<Record<number, UnitPair>>({});
-  const [editByItemId, setEditByItemId] = useState<Record<number, RowEdit>>({});
+  const [editByItemId, setEditByItemId] = useState<Record<EntityId, RowEdit>>({});
   const [saving, setSaving] = useState(false);
   const [customerFilter, setCustomerFilter] = useState('');
   const [productFilter, setProductFilter] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('customerName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
+  const [lastSelectedId, setLastSelectedId] = useState<EntityId | null>(null);
 
   const supplierNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -96,9 +97,9 @@ export const PurchasePage = () => {
       setPurchaseResultByAllocationId(persistedByAllocationId);
 
       const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
-      const orderMap: Record<number, number> = {};
+      const orderMap: Record<EntityId, EntityId> = {};
       allocated.forEach((r) => {
-        if (typeof r.allocationId === 'number' && typeof r.orderId === 'number') {
+        if (typeof r.allocationId === 'number' && r.orderId != null) {
           orderMap[r.allocationId] = r.orderId;
         }
       });
@@ -229,7 +230,7 @@ export const PurchasePage = () => {
     });
   };
 
-  const onRowCheckboxChange = (orderItemId: number, checked: boolean, shiftKey: boolean) => {
+  const onRowCheckboxChange = (orderItemId: EntityId, checked: boolean, shiftKey: boolean) => {
     const targetIndex = sortedRows.findIndex((row) => row.orderItemId === orderItemId);
 
     setEditByItemId((prev) => {
@@ -255,7 +256,7 @@ export const PurchasePage = () => {
 
   const selectedCount = useMemo(() => rows.filter((r) => editByItemId[r.orderItemId]?.selected).length, [rows, editByItemId]);
 
-  const createDraftForOrder = async (orderId: number, markerId: number) => {
+  const createDraftForOrder = async (orderId: EntityId, markerId: EntityId) => {
     const invoiceNo = `DRAFT-${markerId}-${Date.now()}`;
     const invoiceDate = new Date().toISOString().slice(0, 10);
     const invoiceId = await generateDraftInvoiceFromPurchase({ invoiceNo, orderId, invoiceDate });
@@ -324,7 +325,7 @@ export const PurchasePage = () => {
         new Set(
           selectedRows
             .map((r) => r.orderId)
-            .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+            .filter((id): id is EntityId => id != null),
         ),
       );
 

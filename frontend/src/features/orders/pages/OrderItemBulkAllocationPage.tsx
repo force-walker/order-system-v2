@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
@@ -33,9 +34,9 @@ export const OrderItemBulkAllocationPage = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [items, setItems] = useState<OrderItemAllocationWorkItem[]>([]);
-  const [editById, setEditById] = useState<Record<number, RowEdit>>({});
+  const [editById, setEditById] = useState<Record<EntityId, RowEdit>>({});
   const [suppliers, setSuppliers] = useState<SupplierFilterOption[]>([]);
-  const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
+  const [lastSelectedId, setLastSelectedId] = useState<EntityId | null>(null);
 
   const [unallocatedOnly, setUnallocatedOnly] = useState(false);
   const [deliveryDate, setDeliveryDate] = useState('');
@@ -288,16 +289,15 @@ export const OrderItemBulkAllocationPage = () => {
 
     try {
       const result = await bulkSaveOrderItemAllocations(payload);
-      const errorById = new Map(result.errors.map((e) => [e.orderItemId, `${e.code}: ${e.message}`]));
+      const errorById = new Map(result.errors.map((e) => [String(e.orderItemId), `${e.code}: ${e.message}`]));
 
       await load();
 
       setEditById((prev) => {
         const next = { ...prev };
         Object.entries(next).forEach(([id, row]) => {
-          const nId = Number(id);
-          const rowError = errorById.get(nId);
-          next[nId] = { ...row, rowError, selected: Boolean(rowError) };
+          const rowError = errorById.get(id);
+          next[id] = { ...row, rowError, selected: Boolean(rowError) };
         });
         return next;
       });
@@ -351,7 +351,7 @@ export const OrderItemBulkAllocationPage = () => {
     navigate('/purchases');
   };
 
-  const onRowCheckboxChange = (orderItemId: number, checked: boolean, shiftKey: boolean) => {
+  const onRowCheckboxChange = (orderItemId: EntityId, checked: boolean, shiftKey: boolean) => {
     const targetIndex = sortedItems.findIndex((row) => row.orderItemId === orderItemId);
 
     setEditById((prev) => {

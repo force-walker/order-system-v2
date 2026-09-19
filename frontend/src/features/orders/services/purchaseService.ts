@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 import { apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload } from 'shared/error';
 import type {
@@ -18,7 +19,7 @@ type ApiTokenResponse = { access_token: string; refresh_token: string };
 type ApiPurchaseResultResponse = {
   id: number;
   allocation_id: number;
-  order_id?: number | null;
+  order_id?: EntityId | null;
   supplier_id: number | null;
   supplier_name?: string | null;
   customer_id?: number | null;
@@ -154,7 +155,7 @@ export const undeferPurchaseResult = async (resultId: number): Promise<PurchaseR
   return toItem((await res.json()) as ApiPurchaseResultResponse);
 };
 
-export const generateDraftInvoiceFromPurchase = async (payload: { invoiceNo: string; orderId: number; invoiceDate: string }): Promise<number> => {
+export const generateDraftInvoiceFromPurchase = async (payload: { invoiceNo: string; orderId: EntityId; invoiceDate: string }): Promise<EntityId> => {
   const res = await fetchWithAuth('/api/v1/invoices/generate-draft-from-purchase-results', {
     method: 'POST',
     body: {
@@ -164,7 +165,7 @@ export const generateDraftInvoiceFromPurchase = async (payload: { invoiceNo: str
     },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
-  const data = (await res.json()) as { id: number };
+  const data = (await res.json()) as { id: EntityId };
   return data.id;
 };
 

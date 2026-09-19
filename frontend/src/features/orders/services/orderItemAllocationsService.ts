@@ -1,12 +1,13 @@
+import type { EntityId } from 'shared/entityId';
 import { apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload } from 'shared/error';
 import { listOrders } from 'features/orders/services/ordersService';
 import { listSuppliers } from 'features/suppliers/services/suppliersService';
 
 export type OrderItemAllocationWorkItem = {
-  orderItemId: number;
+  orderItemId: EntityId;
   allocationId: number | null;
-  orderId: number | null;
+  orderId: EntityId | null;
   orderNo: string;
   customerName: string;
   productId: number;
@@ -22,20 +23,20 @@ export type OrderItemAllocationWorkItem = {
 };
 
 export type AllocationSuggestion = {
-  orderItemId: number;
+  orderItemId: EntityId;
   suggestedSupplierId: number | null;
   suggestedQty: number | null;
   reason: string;
 };
 
 export type BulkSaveAllocationItem = {
-  orderItemId: number;
+  orderItemId: EntityId;
   supplierId: number | null;
   allocatedQty: number | null;
 };
 
 export type BulkSaveAllocationError = {
-  orderItemId: number;
+  orderItemId: EntityId;
   code: string;
   message: string;
 };
@@ -56,7 +57,7 @@ type ApiLoginRequest = { user_id: string; role: string };
 type ApiTokenResponse = { access_token: string; refresh_token: string };
 
 type ApiWorkItem = {
-  order_item_id: number;
+  order_item_id: EntityId;
   allocation_id: number | null;
   order_no: string;
   product_id: number;
@@ -70,14 +71,14 @@ type ApiWorkItem = {
 };
 
 type ApiSuggestion = {
-  order_item_id: number;
+  order_item_id: EntityId;
   suggested_supplier_id: number | null;
   suggested_qty: number | null;
   reason: string;
 };
 
 type ApiBulkSaveError = {
-  order_item_id: number;
+  order_item_id: EntityId;
   code: string;
   message: string;
 };
@@ -164,7 +165,7 @@ export const listOrderItemAllocationWorkItems = async (params: {
   }));
 };
 
-export const suggestOrderItemAllocations = async (orderItemIds: number[]): Promise<AllocationSuggestion[]> => {
+export const suggestOrderItemAllocations = async (orderItemIds: EntityId[]): Promise<AllocationSuggestion[]> => {
   const res = await fetchWithAuth('/api/v1/order-item-allocations/suggestions', {
     method: 'POST',
     body: { order_item_ids: orderItemIds },
@@ -180,7 +181,7 @@ export const suggestOrderItemAllocations = async (orderItemIds: number[]): Promi
   }));
 };
 
-export const generateOrderItemLabelsPdf = async (orderItemIds: number[]): Promise<Blob> => {
+export const generateOrderItemLabelsPdf = async (orderItemIds: EntityId[]): Promise<Blob> => {
   const res = await fetchWithAuth('/api/v1/orders/item-labels/pdf', {
     method: 'POST',
     body: { order_item_ids: orderItemIds },

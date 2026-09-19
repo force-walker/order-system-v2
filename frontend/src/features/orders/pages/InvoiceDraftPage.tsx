@@ -1,3 +1,5 @@
+import type { EntityId } from 'shared/entityId';
+import { compareIds, newestInvoiceFirst } from 'shared/entityId';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
@@ -25,9 +27,9 @@ type ToastPayload = {
   message: string;
 };
 
-type RowSelect = Record<number, boolean>;
-type PriceInputMap = Record<number, string>;
-type SavingMap = Record<number, boolean>;
+type RowSelect = Record<EntityId, boolean>;
+type PriceInputMap = Record<EntityId, string>;
+type SavingMap = Record<EntityId, boolean>;
 
 const formatNumber = (value: number | undefined) => {
   if (value === undefined) return '-';
@@ -88,7 +90,7 @@ export const InvoiceDraftPage = () => {
         if (customerQuery && !row.customerName.toLowerCase().includes(customerQuery)) return false;
         return true;
       })
-      .sort((a, b) => (a.invoiceId === b.invoiceId ? a.invoiceItemId - b.invoiceItemId : b.invoiceId - a.invoiceId));
+      .sort((a, b) => newestInvoiceFirst(a, b) || compareIds(a.invoiceItemId, b.invoiceItemId));
   }, [rows, customerFilter, dateFilter, statusFilter]);
 
   const draftInvoiceIds = useMemo(() => [...new Set(rows.filter((row) => row.status === 'draft').map((row) => row.invoiceId))], [rows]);

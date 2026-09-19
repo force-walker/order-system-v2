@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
@@ -12,14 +13,14 @@ export const InvoiceDraftDetailPage = () => {
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftItem[]>([]);
   const [finalizing, setFinalizing] = useState(false);
-  const [finalizingRowId, setFinalizingRowId] = useState<number | null>(null);
+  const [finalizingRowId, setFinalizingRowId] = useState<EntityId | null>(null);
 
   const load = async () => {
     if (!invoiceId) return;
     setLoading(true);
     setError('');
     try {
-      const items = await getInvoiceDraftItems(Number(invoiceId));
+      const items = await getInvoiceDraftItems(invoiceId ?? '');
       setRows(items);
     } catch (e) {
       setError(toActionableMessage(e, '請求ドラフト明細の取得に失敗しました。'));
@@ -36,7 +37,7 @@ export const InvoiceDraftDetailPage = () => {
     if (!invoiceId) return;
     setFinalizing(true);
     try {
-      await finalizeInvoiceDraft(Number(invoiceId));
+      await finalizeInvoiceDraft(invoiceId ?? '');
       navigate('/invoices/drafts');
     } catch (e) {
       setError(toActionableMessage(e, '請求確定に失敗しました。'));
@@ -45,12 +46,12 @@ export const InvoiceDraftDetailPage = () => {
     }
   };
 
-  const onFinalizeLine = async (invoiceItemId: number) => {
+  const onFinalizeLine = async (invoiceItemId: EntityId) => {
     if (!invoiceId) return;
     setFinalizingRowId(invoiceItemId);
     setError('');
     try {
-      const updated = await finalizeInvoiceItemLine(Number(invoiceId), invoiceItemId);
+      const updated = await finalizeInvoiceItemLine(invoiceId ?? '', invoiceItemId);
       setRows((prev) => prev.map((r) => (r.id === invoiceItemId ? updated : r)));
     } catch (e) {
       setError(toActionableMessage(e, '明細行の確定に失敗しました。'));

@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 import { apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload } from 'shared/error';
 import type { InvoiceDetailView, InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceStatus, InvoiceSummaryRow } from 'features/orders/types/order';
@@ -11,7 +12,7 @@ type ApiLoginRequest = { user_id: string; role: string };
 type ApiTokenResponse = { access_token: string; refresh_token: string };
 
 type ApiInvoiceSummary = {
-  id: number;
+  id: EntityId;
   invoice_no: string;
   customer_id: number;
   invoice_date: string;
@@ -23,9 +24,9 @@ type ApiInvoiceSummary = {
 };
 
 type ApiInvoiceItem = {
-  id: number;
-  invoice_id: number;
-  order_item_id: number;
+  id: EntityId;
+  invoice_id: EntityId;
+  order_item_id: EntityId;
   billable_qty: number;
   billable_uom: string;
   invoice_line_status: 'uninvoiced' | 'partially_invoiced' | 'invoiced' | 'cancelled';
@@ -39,8 +40,8 @@ type ApiInvoiceItem = {
 };
 
 type ApiInvoiceDraftListRow = {
-  invoice_id: number;
-  invoice_item_id: number;
+  invoice_id: EntityId;
+  invoice_item_id: EntityId;
   invoice_no: string;
   invoice_date: string;
   delivery_date: string;
@@ -59,8 +60,8 @@ type ApiInvoiceDraftListRow = {
 };
 
 type ApiInvoiceReportLine = {
-  invoice_item_id: number;
-  order_item_id: number;
+  invoice_item_id: EntityId;
+  order_item_id: EntityId;
   product_name: string;
   billable_qty: number;
   billable_uom: string;
@@ -73,7 +74,7 @@ type ApiInvoiceReportLine = {
 };
 
 type ApiInvoiceReport = {
-  invoice_id: number;
+  invoice_id: EntityId;
   invoice_no: string;
   status: InvoiceStatus;
   customer_id: number;
@@ -88,7 +89,7 @@ type ApiInvoiceReport = {
 };
 
 type ApiInvoiceBatchFinalizeResult = {
-  invoice_id: number;
+  invoice_id: EntityId;
   ok: boolean;
   status?: InvoiceStatus | null;
   is_locked?: boolean | null;
@@ -147,7 +148,7 @@ const listInvoicesByStatus = async (status: InvoiceStatus): Promise<InvoiceDraft
       }
     }),
   );
-  const countMap = new Map<number, number>(itemCounts);
+  const countMap = new Map<EntityId, number>(itemCounts);
 
   return data.map((r) => ({
     id: r.id,
@@ -163,7 +164,7 @@ const listInvoicesByStatus = async (status: InvoiceStatus): Promise<InvoiceDraft
   }));
 };
 
-const getInvoiceReport = async (invoiceId: number): Promise<ApiInvoiceReport> => {
+const getInvoiceReport = async (invoiceId: EntityId): Promise<ApiInvoiceReport> => {
   const reportRes = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/report`, { method: 'GET' });
   if (!reportRes.ok) throw await parseApiErrorPayload(reportRes);
   return (await reportRes.json()) as ApiInvoiceReport;
@@ -184,7 +185,7 @@ export const listInvoiceDrafts = async (): Promise<InvoiceDraftSummary[]> => {
       }
     }),
   );
-  const countMap = new Map<number, number>(itemCounts);
+  const countMap = new Map<EntityId, number>(itemCounts);
 
   return data.map((r) => ({
     id: r.id,
@@ -200,7 +201,7 @@ export const listInvoiceDrafts = async (): Promise<InvoiceDraftSummary[]> => {
   }));
 };
 
-export const getInvoiceDraftItems = async (invoiceId: number): Promise<InvoiceDraftItem[]> => {
+export const getInvoiceDraftItems = async (invoiceId: EntityId): Promise<InvoiceDraftItem[]> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/items`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiInvoiceItem[];
@@ -220,7 +221,7 @@ export const getInvoiceDraftItems = async (invoiceId: number): Promise<InvoiceDr
   }));
 };
 
-export const finalizeInvoiceItemLine = async (invoiceId: number, invoiceItemId: number): Promise<InvoiceDraftItem> => {
+export const finalizeInvoiceItemLine = async (invoiceId: EntityId, invoiceItemId: EntityId): Promise<InvoiceDraftItem> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/items/${invoiceItemId}/finalize`, { method: 'POST' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const r = (await res.json()) as ApiInvoiceItem;
@@ -265,8 +266,8 @@ export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]>
   }));
 };
 export const updateInvoiceDraftItem = async (
-  invoiceId: number,
-  invoiceItemId: number,
+  invoiceId: EntityId,
+  invoiceItemId: EntityId,
   payload: { billableQty: number; salesUnitPrice: number },
 ): Promise<InvoiceDraftItem> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/items/${invoiceItemId}`, {
@@ -294,13 +295,13 @@ export const updateInvoiceDraftItem = async (
   };
 };
 
-export const finalizeInvoiceDraft = async (invoiceId: number): Promise<void> => {
+export const finalizeInvoiceDraft = async (invoiceId: EntityId): Promise<void> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/finalize`, { method: 'POST' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   markOrdersStatusDirty();
 };
 
-export const finalizeInvoiceDraftsBatch = async (invoiceIds: number[]) => {
+export const finalizeInvoiceDraftsBatch = async (invoiceIds: EntityId[]) => {
   const deduped = [...new Set(invoiceIds)];
   const res = await fetchWithAuth('/api/v1/invoices/finalize-batch', {
     method: 'POST',
@@ -327,7 +328,7 @@ export const listInvoiceSummaries = async (): Promise<InvoiceSummaryRow[]> => {
       }
     }),
   );
-  const reportById = new Map<number, ApiInvoiceReport | null>(reports);
+  const reportById = new Map<EntityId, ApiInvoiceReport | null>(reports);
 
   return all.map((r) => ({
     invoiceId: r.id,
@@ -343,7 +344,7 @@ export const listInvoiceSummaries = async (): Promise<InvoiceSummaryRow[]> => {
   }));
 };
 
-export const getInvoiceDetailView = async (invoiceId: number): Promise<InvoiceDetailView> => {
+export const getInvoiceDetailView = async (invoiceId: EntityId): Promise<InvoiceDetailView> => {
   const report = await getInvoiceReport(invoiceId);
 
   return {
@@ -370,7 +371,7 @@ export const getInvoiceDetailView = async (invoiceId: number): Promise<InvoiceDe
   };
 };
 
-export const generateInvoicePdf = async (invoiceId: number): Promise<Blob> => {
+export const generateInvoicePdf = async (invoiceId: EntityId): Promise<Blob> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/pdf`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   return await res.blob();

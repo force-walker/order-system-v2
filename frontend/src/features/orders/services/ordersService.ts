@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 import { mockOrders } from 'features/orders/mocks/orders';
 import type { ImportFormat } from 'features/imports/types/importFormat';
 import type {
@@ -42,8 +43,8 @@ const DEV_LOGIN_USER = import.meta.env.VITE_DEV_LOGIN_USER ?? 'frontend-dev-admi
 const DEV_LOGIN_ROLE = import.meta.env.VITE_DEV_LOGIN_ROLE ?? 'admin';
 
 type ApiOrderItemResponse = {
-  id: number;
-  order_id: number;
+  id: EntityId;
+  order_id: EntityId;
   product_id: number;
   ordered_qty: number;
   order_uom_type: 'uom_count' | 'uom_kg';
@@ -72,7 +73,7 @@ type ApiImportFormatResponse = {
   fields: ApiImportFormatField[];
 };
 
-const apiOrderCache = new Map<number, OrderDetail>();
+const apiOrderCache = new Map<EntityId, OrderDetail>();
 const customerNameCache = new Map<number, string>();
 const productCache = new Map<number, ProductOption>();
 
@@ -248,7 +249,7 @@ const listOrdersApi = async (staleDeliveryOnly = false): Promise<OrderSummary[]>
   return details.map(toListItem);
 };
 
-const listOrderItemsApi = async (orderId: number) => {
+const listOrderItemsApi = async (orderId: EntityId) => {
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}/items`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiOrderItemResponse[];
@@ -318,7 +319,7 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
   return detail;
 };
 
-const updateOrderHeaderApi = async (orderId: number, payload: CreateOrderRequest) => {
+const updateOrderHeaderApi = async (orderId: EntityId, payload: CreateOrderRequest) => {
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}`, {
     method: 'PATCH',
     body: {
@@ -332,7 +333,7 @@ const updateOrderHeaderApi = async (orderId: number, payload: CreateOrderRequest
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
 
-const createOrderItemApi = async (orderId: number, item: CreateOrderRequest['items'][number]) => {
+const createOrderItemApi = async (orderId: EntityId, item: CreateOrderRequest['items'][number]) => {
   const itemPayload = {
     product_id: item.productId,
     ordered_qty: item.quantity,
@@ -358,7 +359,7 @@ const createOrderItemApi = async (orderId: number, item: CreateOrderRequest['ite
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
 
-const updateOrderItemApi = async (orderId: number, item: CreateOrderRequest['items'][number]) => {
+const updateOrderItemApi = async (orderId: EntityId, item: CreateOrderRequest['items'][number]) => {
   const itemPayload = {
     ordered_qty: item.quantity,
     order_uom_type: item.pricingBasis,
@@ -383,7 +384,7 @@ const updateOrderItemApi = async (orderId: number, item: CreateOrderRequest['ite
   if (!res.ok) throw await parseApiErrorPayload(res);
 };
 
-const deleteOrderItemApi = async (orderId: number, itemId: number) => {
+const deleteOrderItemApi = async (orderId: EntityId, itemId: EntityId) => {
   const res = await fetchWithAuth(`/api/v1/orders/${orderId}/items/${itemId}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 204) throw await parseApiErrorPayload(res);
 };
@@ -407,7 +408,7 @@ const listOrdersMock = async (staleDeliveryOnly = false): Promise<OrderSummary[]
 const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail> => {
   await sleep(300);
   const current = readOrders();
-  const nextId = current.length === 0 ? 1 : Math.max(...current.map((o) => o.id)) + 1;
+  const nextId = current.length === 0 ? 1 : Math.max(0, ...current.map((o) => o.id).filter((id): id is number => typeof id === 'number')) + 1;
   const newOrder: OrderDetail = {
     id: nextId,
     customerId: payload.customerId,
@@ -437,10 +438,10 @@ const createOrderMock = async (payload: CreateOrderRequest): Promise<OrderDetail
   return newOrder;
 };
 
-export const updateOrder = async (orderId: number, payload: CreateOrderRequest): Promise<OrderDetail> => {
+export const updateOrder = async (orderId: EntityId, payload: CreateOrderRequest): Promise<OrderDetail> => {
   if (USE_MOCK) {
     const current = readOrders();
-    const target = current.find((o) => o.id === orderId);
+    const target = current.find((o) => String(o.id) === String(orderId));
     if (!target) throw new ServiceError('注文が見つかりません', { code: 'ORDER_NOT_FOUND', status: 404 });
     target.customerId = payload.customerId;
     target.customerName = payload.customerName;
@@ -470,7 +471,7 @@ export const updateOrder = async (orderId: number, payload: CreateOrderRequest):
   customerNameCache.set(payload.customerId, payload.customerName);
 
   const existingMap = new Map(existingItems.map((i) => [i.id, i]));
-  const incomingIds = new Set<number>();
+  const incomingIds = new Set<EntityId>();
 
   for (const item of payload.items) {
     if (item.id && existingMap.has(item.id)) {
@@ -834,9 +835,9 @@ export const getCustomerImportFormat = async (): Promise<ImportFormat> => {
 export const listOrders = async (staleDeliveryOnly = false): Promise<OrderSummary[]> =>
   (USE_MOCK ? listOrdersMock(staleDeliveryOnly) : listOrdersApi(staleDeliveryOnly));
 
-export const getOrder = async (orderId: number): Promise<OrderDetail | null> => {
+export const getOrder = async (orderId: EntityId): Promise<OrderDetail | null> => {
   if (USE_MOCK) {
-    return readOrders().find((o) => o.id === orderId) ?? null;
+    return readOrders().find((o) => String(o.id) === String(orderId)) ?? null;
   }
 
   await Promise.all([loadCustomersApi(), loadProductsApi()]);
@@ -854,11 +855,11 @@ export const getOrder = async (orderId: number): Promise<OrderDetail | null> => 
   return detail;
 };
 
-export const getOrderItem = async (orderId: number, itemId: number) => {
+export const getOrderItem = async (orderId: EntityId, itemId: EntityId) => {
   await sleep(100);
   const order = await getOrder(orderId);
   if (!order) return null;
-  const item = order.items.find((i) => i.id === itemId);
+  const item = order.items.find((i) => String(i.id) === String(itemId));
   if (!item) return null;
   return { order, item };
 };
@@ -885,14 +886,14 @@ export type OrderBulkCancelResult = {
   total: number;
   succeeded: number;
   failed: number;
-  errors: Array<{ orderId: number; code: string; message: string }>;
+  errors: Array<{ orderId: EntityId; code: string; message: string }>;
 };
 
-export const bulkCancelOrders = async (orderIds: number[], reasonCode = 'stale_delivery'): Promise<OrderBulkCancelResult> => {
+export const bulkCancelOrders = async (orderIds: EntityId[], reasonCode = 'stale_delivery'): Promise<OrderBulkCancelResult> => {
   if (USE_MOCK) {
     const rows = readOrders();
     let succeeded = 0;
-    const errors: Array<{ orderId: number; code: string; message: string }> = [];
+    const errors: Array<{ orderId: EntityId; code: string; message: string }> = [];
     for (const id of orderIds) {
       const o = rows.find((x) => x.id === id);
       if (!o) {
@@ -920,7 +921,7 @@ export const bulkCancelOrders = async (orderIds: number[], reasonCode = 'stale_d
     total: number;
     succeeded: number;
     failed: number;
-    errors: Array<{ order_id: number; code: string; message: string }>;
+    errors: Array<{ order_id: EntityId; code: string; message: string }>;
   };
 
   return {

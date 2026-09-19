@@ -1,3 +1,5 @@
+import type { EntityId } from 'shared/entityId';
+import { newestInvoiceFirst } from 'shared/entityId';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
@@ -25,7 +27,7 @@ export const InvoiceDetailPage = () => {
       setError('');
       try {
         const [detail, list] = await Promise.all([
-          getInvoiceDetailView(Number(invoiceId)),
+          getInvoiceDetailView(invoiceId ?? ''),
           listInvoiceSummaries(),
         ]);
         setData(detail);
@@ -54,10 +56,10 @@ export const InvoiceDetailPage = () => {
   };
 
   const nav = useMemo(() => {
-    if (!data) return { prevId: null as number | null, nextId: null as number | null };
-    const sorted = [...summaries].sort((a, b) => b.invoiceId - a.invoiceId);
+    if (!data) return { prevId: null as EntityId | null, nextId: null as EntityId | null };
+    const sorted = [...summaries].sort(newestInvoiceFirst);
     const idx = sorted.findIndex((r) => r.invoiceId === data.invoiceId);
-    if (idx < 0) return { prevId: null as number | null, nextId: null as number | null };
+    if (idx < 0) return { prevId: null as EntityId | null, nextId: null as EntityId | null };
     return {
       nextId: sorted[idx - 1]?.invoiceId ?? null,
       prevId: sorted[idx + 1]?.invoiceId ?? null,

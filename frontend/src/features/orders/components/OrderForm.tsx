@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
@@ -14,7 +15,7 @@ type Props = {
 
 type ItemForm = {
   clientKey: string;
-  id?: number;
+  id?: EntityId;
   productId: string;
   productName: string;
   quantity: string;

@@ -1,3 +1,5 @@
+import type { EntityId } from 'shared/entityId';
+import { newestInvoiceFirst } from 'shared/entityId';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
@@ -13,7 +15,7 @@ export const InvoiceListPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceSummaryRow[]>([]);
-  const [pdfGeneratingId, setPdfGeneratingId] = useState<number | null>(null);
+  const [pdfGeneratingId, setPdfGeneratingId] = useState<EntityId | null>(null);
   const [pdfError, setPdfError] = useState('');
 
   useEffect(() => {
@@ -31,9 +33,9 @@ export const InvoiceListPage = () => {
     void load();
   }, []);
 
-  const sorted = useMemo(() => [...rows].sort((a, b) => b.invoiceId - a.invoiceId), [rows]);
+  const sorted = useMemo(() => [...rows].sort(newestInvoiceFirst), [rows]);
 
-  const onGeneratePdf = async (invoiceId: number) => {
+  const onGeneratePdf = async (invoiceId: EntityId) => {
     setPdfGeneratingId(invoiceId);
     setPdfError('');
     try {

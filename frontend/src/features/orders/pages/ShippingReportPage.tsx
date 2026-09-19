@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { generatePurchaseConfirmationPdf, getShippingReport, type ShippingReportMode, type ShippingReportRow } from 'features/orders/services/shippingReportService';
@@ -9,7 +10,7 @@ export const ShippingReportPage = () => {
   const [rows, setRows] = useState<ShippingReportRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [pdfGenerating, setPdfGenerating] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<EntityId[]>([]);
   const [error, setError] = useState('');
   const [pdfError, setPdfError] = useState('');
 
@@ -48,12 +49,12 @@ export const ShippingReportPage = () => {
     else setSelectedIds([]);
   };
 
-  const toggleOne = (id: number, checked: boolean) => {
+  const toggleOne = (id: EntityId, checked: boolean) => {
     setSelectedIds((prev) => (checked ? Array.from(new Set([...prev, id])) : prev.filter((x) => x !== id)));
   };
 
   const generatePdf = async () => {
-    const normalizedIds = selectedIds.filter((id) => Number.isFinite(id) && id > 0);
+    const normalizedIds = selectedIds.filter((id) => String(id).trim() !== '');
     if (normalizedIds.length === 0) {
       setPdfError('PDF生成対象がありません。行を選択してください。');
       return;

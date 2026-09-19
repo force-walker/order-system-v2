@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { OrderForm } from 'features/orders/components/OrderForm';
@@ -16,13 +16,13 @@ export const OrderEditPage = () => {
   const [error, setError] = useState('');
 
   const load = async () => {
-    if (!orderIdNum) {
+    if (!orderIdValue) {
       setError('不正な注文IDです');
       return;
     }
 
     setError('');
-    const [customerRows, productRows, order] = await Promise.all([listCustomers(), listProducts(), getOrder(orderIdNum)]);
+    const [customerRows, productRows, order] = await Promise.all([listCustomers(), listProducts(), getOrder(orderIdValue)]);
     setCustomers(customerRows);
     setProducts(productRows);
 
@@ -56,11 +56,11 @@ export const OrderEditPage = () => {
     clearDirtyOrderStatus();
   };
 
-  const orderIdNum = useMemo(() => Number(orderId), [orderId]);
+  const orderIdValue = orderId ?? '';
 
   useEffect(() => {
     load().catch((e) => setError(toActionableMessage(e, '注文編集情報の取得に失敗しました')));
-  }, [orderIdNum]);
+  }, [orderIdValue]);
 
   useEffect(() => {
     const reloadIfDirty = () => {
@@ -74,10 +74,10 @@ export const OrderEditPage = () => {
       window.removeEventListener('focus', reloadIfDirty);
       window.removeEventListener('pageshow', reloadIfDirty);
     };
-  }, [orderIdNum]);
+  }, [orderIdValue]);
 
   const handleSubmit = async (payload: CreateOrderRequest) => {
-    const updated = await updateOrder(orderIdNum, payload);
+    const updated = await updateOrder(orderIdValue, payload);
     sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `注文を更新しました（ID: ${updated.id}）` }));
     navigate('/orders');
   };

@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 import { apiRequest } from 'shared/apiClient';
 import { parseApiErrorPayload } from 'shared/error';
 
@@ -38,7 +39,7 @@ const fetchWithAuth = async (path: string, init?: { method?: string; body?: unkn
 export type ShippingReportMode = 'supplier_product' | 'customer';
 
 export type ShippingReportRow = {
-  orderItemId: number;
+  orderItemId: EntityId;
   shippedDate: string;
   supplierName: string;
   customerName: string;
@@ -48,7 +49,7 @@ export type ShippingReportRow = {
 };
 
 type ApiShippingReportRow = {
-  order_item_id: number;
+  order_item_id: EntityId;
   shipped_date: string;
   supplier_name: string;
   customer_name: string;
@@ -74,7 +75,7 @@ export const getShippingReport = async (shippedDate: string, mode: ShippingRepor
   }));
 };
 
-export const generatePurchaseConfirmationPdf = async (selectedIds: number[]): Promise<Blob> => {
+export const generatePurchaseConfirmationPdf = async (selectedIds: EntityId[]): Promise<Blob> => {
   const res = await fetchWithAuth('/api/v1/reports/purchase-confirmation/pdf', {
     method: 'POST',
     body: { selected_ids: selectedIds, sort: 'product_desc' },

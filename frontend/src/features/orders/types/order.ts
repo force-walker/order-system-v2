@@ -1,3 +1,4 @@
+import type { EntityId } from 'shared/entityId';
 export type OrderStatus =
   | 'new'
   | 'confirmed'
@@ -8,7 +9,7 @@ export type OrderStatus =
   | 'cancelled';
 
 export type OrderItem = {
-  id: number;
+  id: EntityId;
   productId?: number;
   productName: string;
   quantity: number;
@@ -24,7 +25,7 @@ export type OrderItem = {
 };
 
 export type OrderSummary = {
-  id: number;
+  id: EntityId;
   customerId?: number;
   orderNo: string;
   customerName: string;
@@ -48,7 +49,7 @@ export type CreateOrderRequest = {
   shippedDate?: string;
   note?: string;
   items: Array<{
-    id?: number;
+    id?: EntityId;
     productId?: number;
     productName: string;
     quantity: number;
@@ -145,7 +146,7 @@ export type PurchaseResultStatus = 'not_filled' | 'filled' | 'partially_filled' 
 export type PurchaseResultItem = {
   id: number;
   allocationId: number;
-  orderId?: number;
+  orderId?: EntityId;
   supplierId?: number;
   supplierName?: string;
   customerId?: number;
@@ -208,8 +209,8 @@ export type PurchaseResultCreateRequest = {
 export type InvoiceStatus = 'draft' | 'finalized' | 'sent' | 'cancelled';
 
 export type InvoiceDraftItem = {
-  id: number;
-  orderItemId: number;
+  id: EntityId;
+  orderItemId: EntityId;
   billableQty: number;
   billableUom: string;
   invoiceLineStatus: 'uninvoiced' | 'partially_invoiced' | 'invoiced' | 'cancelled';
@@ -223,7 +224,7 @@ export type InvoiceDraftItem = {
 };
 
 export type InvoiceDraftSummary = {
-  id: number;
+  id: EntityId;
   invoiceNo: string;
   customerId: number;
   invoiceDate: string;
@@ -236,8 +237,8 @@ export type InvoiceDraftSummary = {
 };
 
 export type InvoiceDraftListRow = {
-  invoiceId: number;
-  invoiceItemId: number;
+  invoiceId: EntityId;
+  invoiceItemId: EntityId;
   invoiceNo: string;
   invoiceDate: string;
   deliveryDate: string;
@@ -256,7 +257,7 @@ export type InvoiceDraftListRow = {
 };
 
 export type InvoiceSummaryRow = {
-  invoiceId: number;
+  invoiceId: EntityId;
   invoiceNo: string;
   customerName: string;
   invoiceDate: string;
@@ -269,7 +270,7 @@ export type InvoiceSummaryRow = {
 };
 
 export type InvoiceDetailLine = {
-  invoiceItemId: number;
+  invoiceItemId: EntityId;
   productName: string;
   billableQty: number;
   billableUom: string;
@@ -281,7 +282,7 @@ export type InvoiceDetailLine = {
 };
 
 export type InvoiceDetailView = {
-  invoiceId: number;
+  invoiceId: EntityId;
   invoiceNo: string;
   customerName: string;
   invoiceDate: string;

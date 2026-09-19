@@ -1,3 +1,5 @@
+import type { EntityId } from 'shared/entityId';
+import { newestOrderFirst } from 'shared/entityId';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
@@ -21,7 +23,7 @@ type ToastPayload = {
   message: string;
 };
 
-type RowSelect = Record<number, boolean>;
+type RowSelect = Record<EntityId, boolean>;
 
 export const OrderListPage = () => {
   const [orders, setOrders] = useState<OrderSummary[] | null>(null);
@@ -32,14 +34,14 @@ export const OrderListPage = () => {
   const [toast, setToast] = useState<ToastPayload | null>(null);
   const [staleOnly, setStaleOnly] = useState(false);
   const [selectedByOrderId, setSelectedByOrderId] = useState<RowSelect>({});
-  const [lastSelectedOrderId, setLastSelectedOrderId] = useState<number | null>(null);
+  const [lastSelectedOrderId, setLastSelectedOrderId] = useState<EntityId | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
   const load = async () => {
     try {
       const data = await listOrders(staleOnly);
-      const sorted = [...data].sort((a, b) => b.id - a.id);
+      const sorted = [...data].sort(newestOrderFirst);
       setOrders(sorted);
       setSelectedByOrderId((prev) => Object.fromEntries(sorted.map((o) => [o.id, prev[o.id] ?? false])));
       clearDirtyOrderStatus();
@@ -104,7 +106,7 @@ export const OrderListPage = () => {
     } else if (sortMode === 'deliveryDesc') {
       sorted.sort((a, b) => b.deliveryDate.localeCompare(a.deliveryDate));
     } else {
-      sorted.sort((a, b) => b.id - a.id);
+      sorted.sort(newestOrderFirst);
     }
     return sorted;
   }, [orders, statusFilter, keyword, sortMode]);
@@ -124,7 +126,7 @@ export const OrderListPage = () => {
     });
   };
 
-  const onRowSelect = (orderId: number, checked: boolean, shiftKey: boolean) => {
+  const onRowSelect = (orderId: EntityId, checked: boolean, shiftKey: boolean) => {
     const idx = filteredOrders.findIndex((o) => o.id === orderId);
     setSelectedByOrderId((prev) => {
       const next = { ...prev };

@@ -16,7 +16,8 @@ export type ApiCustomerCreateRequest = components['schemas']['CustomerCreateRequ
 export type ApiCustomerUpdateRequest = components['schemas']['CustomerUpdateRequest'];
 export type ApiProductCreateRequest = components['schemas']['ProductCreateRequest'];
 export type ApiProductUpdateRequest = components['schemas']['ProductUpdateRequest'];
-export type ApiOrderResponse = components['schemas']['OrderResponse'];
+// The runtime API uses UUIDs; retain numeric IDs for legacy/mock responses.
+export type ApiOrderResponse = Omit<components['schemas']['OrderResponse'], 'id'> & { id: import('shared/entityId').EntityId };
 export type ApiOrderCreateRequest = components['schemas']['OrderCreateRequest'];
 export type ApiTokenResponse = components['schemas']['TokenResponse'];
 export type ApiLoginRequest = components['schemas']['LoginRequest'];

@@ -27,8 +27,8 @@ export const OrderItemDetailPage = () => {
   const [error, setError] = useState('');
 
   const load = async () => {
-    const oid = Number(orderId);
-    const iid = Number(itemId);
+    const oid = orderId;
+    const iid = itemId;
 
     if (!oid || !iid) {
       setError('不正なIDです');
