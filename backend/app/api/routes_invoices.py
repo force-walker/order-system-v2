@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.api.order_lookup import get_order_or_404 as _get_order_or_404
 from app.core.audit import AuditAction, write_audit_log
 from app.core.deliveries import ensure_delivery_document
 from app.core.invoice_pdf import InvoicePdfDocument, InvoicePdfLine, build_invoice_pdf
@@ -55,15 +56,6 @@ def _validate_due_date(invoice_date, due_date) -> None:
     if due_date is not None and due_date < invoice_date:
         raise HTTPException(status_code=422, detail={"code": "INVALID_DATE_RANGE", "message": "due_date must be on or after invoice_date"})
 
-
-def _get_order_or_404(db: Session, order_id: str | int) -> Order:
-    ident = str(order_id)
-    order = db.query(Order).filter(Order.id == ident).first()
-    if order is None and ident.isdigit():
-        order = db.query(Order).filter(Order.legacy_id == int(ident)).first()
-    if order is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
-    return order
 
 
 def _get_order_by_uuid_or_404(db: Session, order_uuid: str) -> Order:

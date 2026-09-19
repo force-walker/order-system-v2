@@ -11,6 +11,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
 
+from app.api.order_lookup import get_order_or_404 as _get_order_or_404
 from app.core.audit import AuditAction, write_audit_log
 from app.core.deliveries import ensure_delivery_document
 from app.db.session import get_db
@@ -48,15 +49,6 @@ def _get_delivery_or_404(db: Session, delivery_id: str) -> Delivery:
         raise HTTPException(status_code=404, detail={"code": "DELIVERY_NOT_FOUND", "message": "delivery not found"})
     return row
 
-
-def _get_order_or_404(db: Session, order_id: str | int) -> Order:
-    ident = str(order_id)
-    row = db.query(Order).filter(Order.id == ident).first()
-    if row is None and ident.isdigit():
-        row = db.query(Order).filter(Order.legacy_id == int(ident)).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
-    return row
 
 
 def _assert_order_deliverable(order: Order) -> None:
