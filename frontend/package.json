@@ -9,6 +9,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "preview": "vite preview",
+    "sync:openapi": "../scripts/sync-openapi.sh",
     "gen:types": "openapi-typescript ../docs/openapi-mvp-skeleton-draft.yaml -o src/generated/openapi.ts",
     "gen:types:check": "openapi-typescript ../docs/openapi-mvp-skeleton-draft.yaml -o src/generated/openapi.ts --check"
   },

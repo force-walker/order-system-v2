@@ -78,6 +78,13 @@ git diff --check
 bash -n start-dev.sh stop-dev.sh
 ```
 
+After changing backend routes or schemas, synchronize the committed API contract and frontend types:
+
+```bash
+cd frontend
+npm run sync:openapi
+```
+
 ## Project rules
 
 - Check `git status --short --branch` before editing.

@@ -7,6 +7,7 @@
 - Selection state, allocation error mapping, shipping PDF selections and purchase/order associations retain UUIDs.
 - Lists compare dates/document numbers rather than subtracting UUIDs. Invoice list and previous/next navigation share the same ordering.
 - No database migration or business-data mutation is part of this repair.
+- The committed OpenAPI YAML and generated TypeScript declarations are exported from the FastAPI runtime with `npm run sync:openapi`; UUID response fields must not be hand-maintained as integers.
 
 Regression tests: `UuidRoutes.test.tsx` and `uuidServices.test.ts` cover routes, editing, invoice finalization IDs, allocation payloads/errors, PDF selections and ordering. These use mocked services/API responses, not live business records.
 

@@ -1,14 +1,39 @@
-from fastapi.testclient import TestClient
+from pathlib import Path
+import yaml
 
 from app.main import app
 
 
-client = TestClient(app)
+RUNTIME_SPEC = app.openapi()
+
+
+UUID_SCHEMA_FIELDS = {
+    "OrderResponse": ("id", "uuid"),
+    "OrderItemResponse": ("id", "uuid", "order_id"),
+    "InvoiceResponse": ("id", "uuid"),
+    "InvoiceItemResponse": ("id", "uuid", "invoice_id", "order_item_id"),
+    "DeliveryResponse": ("id", "uuid", "order_id"),
+    "DeliveryItemResponse": ("id", "uuid", "delivery_id", "order_item_id"),
+    "ShippingReportRow": ("delivery_id", "delivery_item_id", "order_item_id"),
+}
+
+
+def test_committed_openapi_matches_runtime_uuid_contract():
+    committed_path = Path(__file__).parents[2] / "docs/openapi-mvp-skeleton-draft.yaml"
+    committed = yaml.safe_load(committed_path.read_text(encoding="utf-8"))
+    runtime = RUNTIME_SPEC
+    assert committed == runtime
+
+    for schema_name, field_names in UUID_SCHEMA_FIELDS.items():
+        committed_properties = committed["components"]["schemas"][schema_name]["properties"]
+        runtime_properties = runtime["components"]["schemas"][schema_name]["properties"]
+        for field_name in field_names:
+            assert committed_properties[field_name] == runtime_properties[field_name]
+            assert committed_properties[field_name]["type"] == "string"
 
 
 def _responses(path: str, method: str) -> dict:
-    spec = client.get("/openapi.json").json()
-    return spec["paths"][path][method]["responses"]
+    return RUNTIME_SPEC["paths"][path][method]["responses"]
 
 
 def test_openapi_error_contracts_for_core_apis():
@@ -134,7 +159,7 @@ def test_openapi_error_contracts_for_core_apis():
     assert "422" in _responses("/api/v1/auth/login", "post")
     assert "401" in _responses("/api/v1/auth/me", "get")
 
-    spec = client.get("/openapi.json").json()
+    spec = RUNTIME_SPEC
     assert "/api/v1/invoices/draft-list" in spec["paths"]
     assert "ApiErrorResponse" in spec["components"]["schemas"]
     assert "details" in spec["components"]["schemas"]["ApiErrorDetail"]["properties"]
@@ -157,7 +182,7 @@ def test_openapi_error_contracts_for_core_apis():
 
 
 def test_openapi_phase2_query_filters_are_exposed():
-    spec = client.get("/openapi.json").json()
+    spec = RUNTIME_SPEC
 
     invoice_list_params = {p["name"] for p in spec["paths"]["/api/v1/invoices"]["get"]["parameters"]}
     assert {"order_id", "order_uuid", "delivery_id", "delivery_uuid", "status"}.issubset(invoice_list_params)
