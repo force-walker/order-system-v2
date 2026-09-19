@@ -8,8 +8,11 @@
 
 body { margin: 0; }
 
+/* Keep navigation aligned when pages gain or lose a vertical scrollbar. */
+html { overflow-y: scroll; }
+
 .page {
-  max-width: 1520px;
+  max-width: 96vw;
   margin: 0 auto;
   padding: 20px;
 }
