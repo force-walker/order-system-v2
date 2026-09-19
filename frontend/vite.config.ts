@@ -9,6 +9,13 @@ export default defineConfig({
     },
   },
   server: {
+    host: process.env.ORDER_SYSTEM_DEV_HOST ?? '127.0.0.1',
     port: 5173,
+    strictPort: true,
+    headers: { 'Cache-Control': 'no-store' },
+    proxy: {
+      '/api': 'http://127.0.0.1:8000',
+      '/health': 'http://127.0.0.1:8000',
+    },
   },
 });
