@@ -863,6 +863,24 @@ export const getOrderItem = async (orderId: number, itemId: number) => {
   return { order, item };
 };
 
+export const confirmOrder = async (orderId: string | number): Promise<void> => {
+  if (USE_MOCK) {
+    const rows = readOrders();
+    const order = rows.find((row) => String(row.id) === String(orderId));
+    if (!order || order.status !== 'new' || order.items.length === 0) {
+      throw new ServiceError('明細のある新規注文だけを確定できます。', { status: 409 });
+    }
+    order.status = 'confirmed';
+    writeOrders(rows);
+  } else {
+    const res = await fetchWithAuth(`/api/v1/orders/${encodeURIComponent(String(orderId))}/bulk-transition`, {
+      method: 'POST', body: { from_status: 'new', to_status: 'confirmed' },
+    });
+    if (!res.ok) throw await parseApiErrorPayload(res);
+  }
+  markOrdersStatusDirty();
+};
+
 export type OrderBulkCancelResult = {
   total: number;
   succeeded: number;

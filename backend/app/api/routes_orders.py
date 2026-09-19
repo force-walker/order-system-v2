@@ -430,6 +430,7 @@ def update_order_by_uuid(order_uuid: str, payload: OrderUpdateRequest, db: Sessi
 
 
 _TRANSITION_RULES: dict[tuple[OrderStatus, OrderStatus], tuple[LineStatus, LineStatus]] = {
+    (OrderStatus.new, OrderStatus.confirmed): (LineStatus.open, LineStatus.open),
     (OrderStatus.confirmed, OrderStatus.allocated): (LineStatus.open, LineStatus.allocated),
     (OrderStatus.allocated, OrderStatus.purchased): (LineStatus.allocated, LineStatus.purchased),
     (OrderStatus.purchased, OrderStatus.shipped): (LineStatus.purchased, LineStatus.shipped),

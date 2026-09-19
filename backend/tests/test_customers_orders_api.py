@@ -560,6 +560,43 @@ def test_order_bulk_transition_success_and_no_target_lines():
     assert no_target.json()["detail"]["code"] == "ORDER_STATUS_MISMATCH"
 
 
+def test_new_order_confirm_preserves_lines_and_rejects_repeated_confirm():
+    from app.models.entities import AuditLog
+    order_id = _seed_order_with_open_line()
+    with TestingSessionLocal() as db:
+        db.get(Order, order_id).status = OrderStatus.new
+        db.commit()
+    client = _client()
+    url = f"/api/v1/orders/{order_id}/bulk-transition"
+    payload = {"from_status": "new", "to_status": "confirmed"}
+    assert client.post(url, json=payload).status_code == 200
+    with TestingSessionLocal() as db:
+        assert db.get(Order, order_id).status == OrderStatus.confirmed
+        line = db.query(OrderItem).filter_by(order_id=order_id).one()
+        assert line.line_status == LineStatus.open
+        assert line.ordered_qty == 2
+        assert db.query(AuditLog).filter_by(entity_id=order_id, action="bulk_transition").count() == 1
+    assert client.post(url, json=payload).status_code == 409
+    assert any(row['id'] == order_id and row['status'] == 'confirmed' for row in client.get('/api/v1/orders').json())
+
+
+def test_new_order_confirm_rejects_empty_or_allocated_lines():
+    for empty in (True, False):
+        order_id = _seed_order_with_open_line()
+        with TestingSessionLocal() as db:
+            db.get(Order, order_id).status = OrderStatus.new
+            lines = db.query(OrderItem).filter_by(order_id=order_id)
+            if empty:
+                lines.delete()
+            else:
+                lines.one().line_status = LineStatus.allocated
+            db.commit()
+        response = _client().post(f'/api/v1/orders/{order_id}/bulk-transition', json={"from_status": "new", "to_status": "confirmed"})
+        assert response.status_code == 409
+        with TestingSessionLocal() as db:
+            assert db.get(Order, order_id).status == OrderStatus.new
+
+
 def test_order_bulk_transition_invalid_pair():
     order_id = _seed_order_with_open_line()
     client = _client()

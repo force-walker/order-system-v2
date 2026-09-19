@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
-import { bulkCancelOrders, clearDirtyOrderStatus, hasDirtyOrderStatus, listOrders } from 'features/orders/services/ordersService';
+import { bulkCancelOrders, confirmOrder, clearDirtyOrderStatus, hasDirtyOrderStatus, listOrders } from 'features/orders/services/ordersService';
 import type { OrderStatus, OrderSummary } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 import { useFocusNavigation } from 'shared/useFocusNavigation';
@@ -142,6 +142,31 @@ export const OrderListPage = () => {
     setLastSelectedOrderId(orderId);
   };
 
+  const confirmTargets = filteredOrders.filter((order) => selectedByOrderId[order.id] && order.status === 'new');
+  const executeConfirm = async () => {
+    if (!confirmTargets.length || submitting) return;
+    if (!window.confirm(`選択した新規注文 ${confirmTargets.length} 件を確定します。新規以外は変更しません。よろしいですか？`)) return;
+    setSubmitting(true);
+    let succeeded = 0;
+    const failures: string[] = [];
+    try {
+      for (const order of confirmTargets) {
+        try {
+          await confirmOrder(order.id);
+          succeeded++;
+        } catch (e) {
+          failures.push(`${order.orderNo}: ${toActionableMessage(e, '確定に失敗しました')}`);
+        }
+      }
+      setToast(failures.length
+        ? { type: 'error', message: `確定成功 ${succeeded}件 / 失敗 ${failures.length}件。${failures.slice(0, 3).join('、')}` }
+        : { type: 'success', message: `${succeeded}件の注文を確定しました。` });
+      await load();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const executeBulkCancel = async () => {
     const targetIds = visibleIds.filter((id) => selectedByOrderId[id]);
     if (targetIds.length === 0) {
@@ -188,8 +213,11 @@ export const OrderListPage = () => {
           <p className="subtle">新しい注文順で表示しています。</p>
         </div>
         <div className="list-controls">
+          <button type="button" onClick={() => void executeConfirm()} disabled={submitting || confirmTargets.length === 0}>
+            選択した新規注文を確定 ({confirmTargets.length})
+          </button>
           <button type="button" className="danger" onClick={() => void executeBulkCancel()} disabled={submitting}>
-            {submitting ? 'Cancel実行中...' : '選択注文を一括Cancel'}
+            選択注文を一括Cancel
           </button>
         </div>
       </div>
