@@ -113,7 +113,7 @@ def test_ship_transition_creates_delivery_and_items():
     assert listed.status_code == 200
     assert len(listed.json()) == 1
     delivery_id = listed.json()[0]["id"]
-    assert listed.json()[0]["delivery_no"].startswith("DLV-")
+    assert listed.json()[0]["delivery_no"].startswith("DEL-")
 
     items = client.get(f"/api/v1/deliveries/{delivery_id}/items")
     assert items.status_code == 200
@@ -141,7 +141,7 @@ def test_build_delivery_from_order_and_pdf():
     built = client.post("/api/v1/deliveries/from-order", json={"order_id": order_id})
     assert built.status_code == 200
     delivery_id = built.json()["id"]
-    assert built.json()["delivery_no"].startswith("DLV-")
+    assert built.json()["delivery_no"].startswith("DEL-")
 
     refreshed = client.post(f"/api/v1/deliveries/{delivery_id}/refresh")
     assert refreshed.status_code == 200
@@ -180,7 +180,7 @@ def test_list_delivery_invoices():
     assert listed.json()[0]["invoice_id"] == invoice.json()["id"]
     assert listed.json()[0]["delivery_id"] == delivery_id
     assert listed.json()[0]["delivery_uuid"] == delivery_uuid
-    assert listed.json()[0]["delivery_no"].startswith("DLV-")
+    assert listed.json()[0]["delivery_no"].startswith("DEL-")
 
     listed_by_uuid = client.get(f"/api/v1/deliveries/uuid/{delivery_uuid}/invoices")
     assert listed_by_uuid.status_code == 200

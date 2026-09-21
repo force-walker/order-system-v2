@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class DeliveryBuildRequest(BaseModel):
@@ -23,6 +23,7 @@ class DeliveryBuildRequest(BaseModel):
 class DeliveryResponse(BaseModel):
     id: str
     uuid: str
+    document_seq: int | None = Field(default=None, description="Immutable permanent Delivery sequence")
     order_id: str
     customer_id: int
     tracking_no: str | None = None
@@ -41,7 +42,9 @@ class DeliveryItemResponse(BaseModel):
     delivery_id: str
     order_item_id: str
     product_id: int
-    delivery_line_no: str
+    delivery_line_no: str = Field(deprecated=True, description="Deprecated compatibility field; new rows mirror line_ref, not the legacy value format")
+    line_no: int | None = Field(default=None, description="Immutable business line number within the Delivery")
+    line_ref: str | None = Field(default=None, description="Authoritative globally unique human-readable line reference")
     delivered_qty: float
     delivered_uom: str
     shipped_date: date

@@ -54,6 +54,41 @@ def _seed_customer(code: str = "CUST-001") -> int:
     return cid
 
 
+def _create_order_with_required_item(client: TestClient, header: dict):
+    """Use the atomic aggregate endpoint while retaining the old test response shape."""
+    db = TestingSessionLocal()
+    suffix = uuid4().hex[:8]
+    product = Product(
+        sku=f"SKU-CREATE-{suffix}",
+        name="Create Order Product",
+        order_uom="count",
+        purchase_uom="count",
+        invoice_uom="count",
+        pricing_basis_default=PricingBasis.uom_count,
+        active=True,
+    )
+    db.add(product)
+    db.commit()
+    product_id = product.id
+    db.close()
+    response = client.post(
+        "/api/v1/orders/with-items",
+        json={
+            **header,
+            "items": [{
+                "product_id": product_id,
+                "ordered_qty": 1,
+                "order_uom_type": "uom_count",
+                "pricing_basis": "uom_count",
+                "unit_price_uom_count": 10,
+            }],
+        },
+    )
+    if response.status_code == 201:
+        response._content = __import__("json").dumps(response.json()["order"]).encode()
+    return response
+
+
 def test_list_customers():
     _seed_customer("CUST-LIST")
     client = _client()
@@ -143,7 +178,7 @@ def test_customer_delete_in_use_is_409_and_no_ref_is_204():
     client = _client()
 
     in_use_cid = _seed_customer("CUST-INUSE")
-    create_order = client.post("/api/v1/orders", json={"customer_id": in_use_cid, "delivery_date": str(date.today())})
+    create_order = _create_order_with_required_item(client, {"customer_id": in_use_cid, "delivery_date": str(date.today())})
     assert create_order.status_code == 201
 
     blocked = client.delete(f"/api/v1/customers/{in_use_cid}")
@@ -271,7 +306,7 @@ def test_create_order_success_and_list():
         "note": "first order",
     }
     client = _client()
-    create_res = client.post("/api/v1/orders", json=payload)
+    create_res = _create_order_with_required_item(client, payload)
     assert create_res.status_code == 201
     assert create_res.json()["uuid"]
     assert create_res.json()["tracking_no"] is not None
@@ -307,7 +342,7 @@ def test_create_order_uses_default_delivery_date_when_omitted():
     cid = _seed_customer("CUST-ORDER-DEFAULT-DATE")
     client = _client()
 
-    created = client.post("/api/v1/orders", json={"customer_id": cid, "note": "default delivery"})
+    created = _create_order_with_required_item(client, {"customer_id": cid, "note": "default delivery"})
     assert created.status_code == 201
     # for test determinism we only assert non-nullness
     assert created.json()["delivery_date"] is not None
@@ -317,9 +352,9 @@ def test_create_order_allows_shipped_date_different_from_delivery_date():
     cid = _seed_customer("CUST-SHIP-DIFF")
     client = _client()
 
-    created = client.post(
-        "/api/v1/orders",
-        json={"customer_id": cid, "delivery_date": "2026-04-15", "shipped_date": "2026-04-14"},
+    created = _create_order_with_required_item(
+        client,
+        {"customer_id": cid, "delivery_date": "2026-04-15", "shipped_date": "2026-04-14"},
     )
     assert created.status_code == 201
     assert created.json()["delivery_date"] == "2026-04-15"
@@ -332,7 +367,7 @@ def test_create_order_customer_not_found():
         "delivery_date": str(date.today()),
     }
     client = _client()
-    res = client.post("/api/v1/orders", json=payload)
+    res = _create_order_with_required_item(client, payload)
     assert res.status_code == 404
     assert res.json()["detail"]["code"] == "CUSTOMER_NOT_FOUND"
 
@@ -344,10 +379,10 @@ def test_create_order_auto_numbering_generates_unique_order_no():
         "delivery_date": str(date.today()),
     }
     client = _client()
-    first = client.post("/api/v1/orders", json=payload)
+    first = _create_order_with_required_item(client, payload)
     assert first.status_code == 201
 
-    second = client.post("/api/v1/orders", json=payload)
+    second = _create_order_with_required_item(client, payload)
     assert second.status_code == 201
     assert first.json()["tracking_no"] != second.json()["tracking_no"]
     assert first.json()["order_no"] != second.json()["order_no"]
@@ -358,44 +393,16 @@ def test_create_order_auto_numbering_generates_unique_order_no():
 def test_order_bulk_transition_to_shipped_assigns_delivery_no():
     cid = _seed_customer("CUST-SHIP-NO")
     client = _client()
-    created = client.post("/api/v1/orders", json={"customer_id": cid, "delivery_date": str(date.today())})
+    created = _create_order_with_required_item(client, {"customer_id": cid, "delivery_date": str(date.today())})
     assert created.status_code == 201
     order_id = created.json()["id"]
 
     db = TestingSessionLocal()
-    product = Product(
-        sku=f"SKU-SHIP-{uuid4().hex[:8]}",
-        name="Ship Product",
-        order_uom="count",
-        purchase_uom="count",
-        invoice_uom="count",
-        is_catch_weight=False,
-        weight_capture_required=False,
-        pricing_basis_default=PricingBasis.uom_count,
-        active=True,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-    db.add(product)
-    db.flush()
-
-    line = OrderItem(
-        order_id=order_id,
-        product_id=product.id,
-        ordered_qty=1,
-        pricing_basis=PricingBasis.uom_count,
-        order_uom_type=PricingBasis.uom_count,
-        unit_price_uom_count=10,
-        unit_price_uom_kg=None,
-        line_status=LineStatus.purchased,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-    db.add(line)
-
     order = db.query(Order).filter(Order.id == order_id).first()
     assert order is not None
     order.status = OrderStatus.purchased
+    for line in db.query(OrderItem).filter(OrderItem.order_id == order_id):
+        line.line_status = LineStatus.purchased
     db.commit()
     db.close()
 
@@ -409,7 +416,7 @@ def test_order_bulk_transition_to_shipped_assigns_delivery_no():
     assert detail.status_code == 200
     assert detail.json()["status"] == "shipped"
     assert detail.json()["tracking_no"] is not None
-    assert detail.json()["delivery_no"].startswith("DLV-")
+    assert detail.json()["delivery_no"].startswith("DEL-")
 
 
 def test_update_order_header_success_and_not_found():
@@ -417,9 +424,9 @@ def test_update_order_header_success_and_not_found():
     cid2 = _seed_customer("CUST-ORD-UPD-2")
     client = _client()
 
-    created = client.post(
-        "/api/v1/orders",
-        json={"customer_id": cid, "delivery_date": str(date.today()), "note": "before"},
+    created = _create_order_with_required_item(
+        client,
+        {"customer_id": cid, "delivery_date": str(date.today()), "note": "before"},
     )
     assert created.status_code == 201
     oid = created.json()["id"]
@@ -441,7 +448,7 @@ def test_update_order_header_success_and_not_found():
 def test_update_order_by_uuid_success():
     cid = _seed_customer("CUST-ORD-UPD-UUID")
     client = _client()
-    created = client.post("/api/v1/orders", json={"customer_id": cid, "delivery_date": str(date.today()), "note": "before"})
+    created = _create_order_with_required_item(client, {"customer_id": cid, "delivery_date": str(date.today()), "note": "before"})
     assert created.status_code == 201
 
     ok = client.patch(
@@ -456,10 +463,7 @@ def test_update_order_by_uuid_success():
 def test_update_order_customer_not_found():
     cid = _seed_customer("CUST-ORD-UPD-NF")
     client = _client()
-    created = client.post(
-        "/api/v1/orders",
-        json={"customer_id": cid, "delivery_date": str(date.today())},
-    )
+    created = _create_order_with_required_item(client, {"customer_id": cid, "delivery_date": str(date.today())})
     oid = created.json()["id"]
 
     bad = client.patch(f"/api/v1/orders/{oid}", json={"customer_id": 999999})

@@ -10,6 +10,8 @@ export type OrderStatus =
 
 export type OrderItem = {
   id: EntityId;
+  lineNo?: number;
+  lineRef?: string;
   productId?: number;
   productName: string;
   quantity: number;
@@ -50,6 +52,8 @@ export type CreateOrderRequest = {
   note?: string;
   items: Array<{
     id?: EntityId;
+    lineNo?: number;
+    lineRef?: string;
     productId?: number;
     productName: string;
     quantity: number;
@@ -210,6 +214,8 @@ export type InvoiceStatus = 'draft' | 'finalized' | 'sent' | 'cancelled';
 
 export type InvoiceDraftItem = {
   id: EntityId;
+  lineNo?: number;
+  lineRef?: string;
   orderItemId: EntityId;
   billableQty: number;
   billableUom: string;
@@ -240,6 +246,8 @@ export type InvoiceDraftListRow = {
   invoiceId: EntityId;
   invoiceItemId: EntityId;
   invoiceNo: string;
+  lineNo?: number;
+  lineRef?: string;
   invoiceDate: string;
   deliveryDate: string;
   status: InvoiceStatus;

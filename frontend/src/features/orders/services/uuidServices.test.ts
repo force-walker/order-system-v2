@@ -12,6 +12,59 @@ const itemId = '57048d30-023a-4886-a623-3ef334c8d51c';
 beforeEach(() => { request.mockReset(); });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
+it('creates the order header and items with one atomic request', async () => {
+  vi.stubEnv('VITE_USE_MOCK', 'false');
+  vi.stubEnv('VITE_DEBUG_ORDER_ITEM_FIELDS', 'false');
+  vi.resetModules();
+  const { createOrder } = await import('./ordersService');
+  const order = {
+    id,
+    customer_id: 1,
+    order_no: 'ORD-TEST',
+    order_datetime: '2026-09-20T00:00:00Z',
+    delivery_date: '2026-09-20',
+    shipped_date: null,
+    status: 'new',
+    note: null,
+    created_at: '2026-09-20T00:00:00Z',
+  };
+  const item = {
+    id: itemId,
+    order_id: id,
+    product_id: 5,
+    ordered_qty: 2,
+    order_uom_type: 'uom_count',
+    estimated_weight_kg: null,
+    target_price: null,
+    price_ceiling: null,
+    stockout_policy: null,
+    pricing_basis: 'uom_count',
+    unit_price_uom_count: 100,
+    unit_price_uom_kg: null,
+    note: null,
+    comment: null,
+  };
+  request.mockResolvedValueOnce(Response.json({ order, items: [item] }));
+
+  const created = await createOrder({
+    customerId: 1,
+    customerName: 'Test Customer',
+    deliveryDate: '2026-09-20',
+    items: [{ productId: 5, productName: 'Test Product', quantity: 2, unit: 'count', unitPrice: 100, pricingBasis: 'uom_count' }],
+  });
+
+  expect(created.id).toBe(id);
+  expect(created.items).toHaveLength(1);
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(request).toHaveBeenCalledWith('/api/v1/orders/with-items', {
+    method: 'POST',
+    body: expect.objectContaining({
+      customer_id: 1,
+      items: [expect.objectContaining({ product_id: 5, ordered_qty: 2 })],
+    }),
+  });
+});
+
 it('updates an existing UUID line without deleting and recreating it', async () => {
   vi.stubEnv('VITE_USE_MOCK', 'false');
   vi.stubEnv('VITE_DEBUG_ORDER_ITEM_FIELDS', 'false');

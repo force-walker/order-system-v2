@@ -2458,6 +2458,7 @@ paths:
       - orders
       summary: Create Order
       operationId: create_order_api_v1_orders_post
+      deprecated: true
       security:
       - HTTPBearer: []
       requestBody:
@@ -2783,6 +2784,45 @@ paths:
                 $ref: '#/components/schemas/ApiErrorResponse'
         '404':
           description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+      security:
+      - HTTPBearer: []
+  /api/v1/orders/with-items:
+    post:
+      tags:
+      - orders
+      summary: Create Order With Items
+      operationId: create_order_with_items_api_v1_orders_with_items_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderWithItemsCreateRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderWithItemsCreateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '409':
+          description: Conflict
           content:
             application/json:
               schema:
@@ -3661,6 +3701,7 @@ paths:
       - invoices
       summary: Create Invoice
       operationId: create_invoice_api_v1_invoices_post
+      deprecated: true
       security:
       - HTTPBearer: []
       requestBody:
@@ -3795,6 +3836,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+      deprecated: true
       security:
       - HTTPBearer: []
   /api/v1/invoices/draft-list:
@@ -5948,6 +5990,21 @@ components:
         delivery_line_no:
           type: string
           title: Delivery Line No
+          description: Deprecated compatibility field; new rows mirror line_ref, not
+            the legacy value format
+          deprecated: true
+        line_no:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Line No
+          description: Immutable business line number within the Delivery
+        line_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Line Ref
+          description: Authoritative globally unique human-readable line reference
         delivered_qty:
           type: number
           title: Delivered Qty
@@ -5988,6 +6045,12 @@ components:
         uuid:
           type: string
           title: Uuid
+        document_seq:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Document Seq
+          description: Immutable permanent Delivery sequence
         order_id:
           type: string
           title: Order Id
@@ -6317,6 +6380,18 @@ components:
           - type: string
           - type: 'null'
           title: Invoice Line No
+          description: Deprecated compatibility field; use line_ref
+          deprecated: true
+        line_no:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Line No
+        line_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Line Ref
         invoice_date:
           type: string
           format: date
@@ -6503,6 +6578,21 @@ components:
           - type: string
           - type: 'null'
           title: Invoice Line No
+          description: Deprecated compatibility field; new rows mirror line_ref, not
+            the legacy value format
+          deprecated: true
+        line_no:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Line No
+          description: Immutable business line number within the Invoice
+        line_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Line Ref
+          description: Authoritative globally unique human-readable line reference
         billable_qty:
           type: number
           title: Billable Qty
@@ -6628,6 +6718,18 @@ components:
           - type: string
           - type: 'null'
           title: Invoice Line No
+          description: Deprecated compatibility field; use line_ref
+          deprecated: true
+        line_no:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Line No
+        line_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Line Ref
         product_name:
           type: string
           title: Product Name
@@ -6804,6 +6906,19 @@ components:
           - type: integer
           - type: 'null'
           title: Legacy Id
+        document_seq:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Document Seq
+          description: Immutable permanent Invoice Draft sequence
+        official_document_seq:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Official Document Seq
+          description: Immutable official Invoice sequence allocated only on first
+            finalize
         tracking_no:
           anyOf:
           - type: string
@@ -7465,6 +7580,21 @@ components:
           - type: string
           - type: 'null'
           title: Order Line No
+          description: Deprecated compatibility field; new rows mirror line_ref, not
+            the legacy value format
+          deprecated: true
+        line_no:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Line No
+          description: Immutable business line number within the Order
+        line_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Line Ref
+          description: Authoritative globally unique human-readable line reference
         product_id:
           type: integer
           title: Product Id
@@ -7663,6 +7793,12 @@ components:
           - type: integer
           - type: 'null'
           title: Legacy Id
+        document_seq:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Document Seq
+          description: Immutable permanent Order sequence
         tracking_no:
           anyOf:
           - type: string
@@ -7769,6 +7905,56 @@ components:
           title: Note
       type: object
       title: OrderUpdateRequest
+    OrderWithItemsCreateRequest:
+      properties:
+        customer_id:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Customer Id
+        delivery_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Delivery Date
+        shipped_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Shipped Date
+        note:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Note
+        items:
+          items:
+            $ref: '#/components/schemas/OrderItemCreateRequest'
+          type: array
+          maxItems: 500
+          minItems: 1
+          title: Items
+      type: object
+      required:
+      - customer_id
+      - items
+      title: OrderWithItemsCreateRequest
+    OrderWithItemsCreateResponse:
+      properties:
+        order:
+          $ref: '#/components/schemas/OrderResponse'
+        items:
+          items:
+            $ref: '#/components/schemas/OrderItemResponse'
+          type: array
+          title: Items
+      type: object
+      required:
+      - order
+      - items
+      title: OrderWithItemsCreateResponse
     PricingBasis:
       type: string
       enum:

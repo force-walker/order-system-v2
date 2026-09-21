@@ -39,6 +39,8 @@ const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') === 'true';
 
 type ApiOrderItemResponse = {
   id: EntityId;
+  line_no?: number | null;
+  line_ref?: string | null;
   order_id: EntityId;
   product_id: number;
   ordered_qty: number;
@@ -52,6 +54,11 @@ type ApiOrderItemResponse = {
   unit_price_uom_kg: number | null;
   note: string | null;
   comment: string | null;
+};
+
+type ApiOrderWithItemsCreateResponse = {
+  order: ApiOrderResponse;
+  items: ApiOrderItemResponse[];
 };
 
 type ApiImportFormatField = {
@@ -182,6 +189,8 @@ const mapApiOrderItem = (item: ApiOrderItemResponse) => {
   const unitPrice = pricingBasis === 'uom_kg' ? item.unit_price_uom_kg : item.unit_price_uom_count;
   return {
     id: item.id,
+    lineNo: item.line_no ?? undefined,
+    lineRef: item.line_ref ?? undefined,
     productId: item.product_id,
     productName: p?.name ?? `商品#${item.product_id}`,
     quantity: item.ordered_qty,
@@ -239,14 +248,8 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
     payload.orderNo,
   );
 
-  const res = await fetchWithAuth('/api/v1/orders', {
-    method: 'POST',
-    body: orderBody,
-  });
-  if (!res.ok) throw await parseApiErrorPayload(res);
-  const order = (await res.json()) as ApiOrderResponse;
-
-  const bulkPayload = {
+  const requestBody = {
+    ...orderBody,
     items: payload.items.map((i) => ({
       product_id: i.productId,
       ordered_qty: i.quantity,
@@ -264,22 +267,18 @@ const createOrderApi = async (payload: CreateOrderRequest): Promise<OrderDetail>
   };
 
   if (DEBUG_ORDER_ITEM_FIELDS) {
-    console.debug('[order-items][create][request]', bulkPayload);
+    console.debug('[orders][create-with-items][request]', requestBody);
   }
 
-  const itemRes = await fetchWithAuth(`/api/v1/orders/${order.id}/items/bulk`, {
+  const res = await fetchWithAuth('/api/v1/orders/with-items', {
     method: 'POST',
-    body: bulkPayload,
+    body: requestBody,
   });
-  if (!itemRes.ok) throw await parseApiErrorPayload(itemRes);
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const created = (await res.json()) as ApiOrderWithItemsCreateResponse;
+  const order = created.order;
 
-  const itemResult = (await itemRes.json()) as { failed: number };
-  if (DEBUG_ORDER_ITEM_FIELDS) {
-    console.debug('[order-items][create][response]', itemResult);
-  }
-  if (itemResult.failed > 0) throw new ServiceError(`明細登録で ${itemResult.failed} 件失敗しました`, { code: 'ORDER_ITEM_BULK_FAILED', status: 409 });
-
-  const items = await listOrderItemsApi(order.id);
+  const items = created.items.map(mapApiOrderItem);
   const detail: OrderDetail = {
     ...mapApiOrderToDetail(order),
     customerName: payload.customerName,

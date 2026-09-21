@@ -259,6 +259,7 @@ export const InvoiceDraftPage = () => {
                 </th>
                 <th>詳細</th>
                 <th>請求ヘッダー番号</th>
+                <th>明細参照</th>
                 <th>取引先名</th>
                 <th>請求日</th>
                 <th>納品日</th>
@@ -273,7 +274,7 @@ export const InvoiceDraftPage = () => {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="subtle">条件に合う請求データがありません。</td>
+                  <td colSpan={13} className="subtle">条件に合う請求データがありません。</td>
                 </tr>
               ) : (
                 filtered.map((row) => {
@@ -295,6 +296,7 @@ export const InvoiceDraftPage = () => {
                       </td>
                       <td><Link to={`/invoices/drafts/${row.invoiceId}`}>詳細</Link></td>
                       <td>{row.invoiceNo}</td>
+                      <td>{row.lineRef ?? '-'}</td>
                       <td>{row.customerName}</td>
                       <td>{row.invoiceDate}</td>
                       <td>{row.deliveryDate}</td>

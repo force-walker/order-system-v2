@@ -141,7 +141,7 @@ def get_delivery_by_uuid(delivery_uuid: str, db: Session = Depends(get_db)) -> D
 )
 def list_delivery_items(delivery_id: str, db: Session = Depends(get_db)) -> list[DeliveryItemResponse]:
     delivery = _get_delivery_or_404(db, delivery_id)
-    rows = db.query(DeliveryItem).filter(DeliveryItem.delivery_id == delivery.id).order_by(DeliveryItem.created_at.asc()).all()
+    rows = db.query(DeliveryItem).filter(DeliveryItem.delivery_id == delivery.id).order_by(DeliveryItem.line_no.asc(), DeliveryItem.created_at.asc()).all()
     return [DeliveryItemResponse.model_validate(row) for row in rows]
 
 
@@ -152,7 +152,7 @@ def list_delivery_items(delivery_id: str, db: Session = Depends(get_db)) -> list
 )
 def list_delivery_items_by_uuid(delivery_uuid: str, db: Session = Depends(get_db)) -> list[DeliveryItemResponse]:
     delivery = _get_delivery_or_404(db, delivery_uuid)
-    rows = db.query(DeliveryItem).filter(DeliveryItem.delivery_id == delivery.id).order_by(DeliveryItem.created_at.asc()).all()
+    rows = db.query(DeliveryItem).filter(DeliveryItem.delivery_id == delivery.id).order_by(DeliveryItem.line_no.asc(), DeliveryItem.created_at.asc()).all()
     return [DeliveryItemResponse.model_validate(row) for row in rows]
 
 
@@ -271,7 +271,7 @@ def get_delivery_pdf(delivery_id: str, db: Session = Depends(get_db)) -> Respons
         .join(Product, Product.id == DeliveryItem.product_id)
         .join(OrderItem, OrderItem.id == DeliveryItem.order_item_id)
         .filter(DeliveryItem.delivery_id == delivery.id)
-        .order_by(DeliveryItem.created_at.asc())
+        .order_by(DeliveryItem.line_no.asc(), DeliveryItem.created_at.asc())
         .all()
     )
     if not rows:
@@ -301,7 +301,7 @@ def get_delivery_pdf(delivery_id: str, db: Session = Depends(get_db)) -> Respons
             pdf.showPage()
             pdf.setFont(font, 10)
             y = height - 40
-        pdf.drawString(36, y, item.delivery_line_no)
+        pdf.drawString(36, y, item.line_ref or item.delivery_line_no)
         pdf.drawString(120, y, product.name)
         pdf.drawRightString(410, y, f"{float(item.delivered_qty):.3f}".rstrip("0").rstrip("."))
         pdf.drawString(430, y, item.delivered_uom)

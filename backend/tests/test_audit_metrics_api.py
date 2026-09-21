@@ -128,12 +128,22 @@ def test_audit_logs_are_written_for_mutating_operations():
     ).json()
 
     order = client.post(
-        "/api/v1/orders",
-        json={"customer_id": customer["id"], "delivery_date": datetime.now(UTC).date().isoformat()},
-    ).json()
+        "/api/v1/orders/with-items",
+        json={
+            "customer_id": customer["id"],
+            "delivery_date": datetime.now(UTC).date().isoformat(),
+            "items": [{
+                "product_id": product["id"],
+                "ordered_qty": 1,
+                "order_uom_type": "uom_count",
+                "pricing_basis": "uom_count",
+                "unit_price_uom_count": 10,
+            }],
+        },
+    ).json()["order"]
 
     invoice = client.post(
-        "/api/v1/invoices",
+        "/api/v1/invoices/generate",
         json={"invoice_no": "INV-AUD-1", "order_id": order["id"], "invoice_date": datetime.now(UTC).date().isoformat()},
     ).json()
 

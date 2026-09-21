@@ -81,6 +81,8 @@ class InvoiceResponse(BaseModel):
     id: str
     uuid: str
     legacy_id: int | None = None
+    document_seq: int | None = Field(default=None, description="Immutable permanent Invoice Draft sequence")
+    official_document_seq: int | None = Field(default=None, description="Immutable official Invoice sequence allocated only on first finalize")
     tracking_no: str | None = None
     delivery_id: str | None = None
     delivery_uuid: str | None = None
@@ -109,7 +111,9 @@ class InvoiceItemResponse(BaseModel):
     legacy_id: int | None = None
     invoice_id: str
     order_item_id: str
-    invoice_line_no: str | None = None
+    invoice_line_no: str | None = Field(default=None, deprecated=True, description="Deprecated compatibility field; new rows mirror line_ref, not the legacy value format")
+    line_no: int | None = Field(default=None, description="Immutable business line number within the Invoice")
+    line_ref: str | None = Field(default=None, description="Authoritative globally unique human-readable line reference")
     billable_qty: float
     billable_uom: str
     invoice_line_status: str
@@ -140,7 +144,9 @@ class InvoiceDraftListRow(BaseModel):
     invoice_no: str
     invoice_draft_no: str | None = None
     official_invoice_no: str | None = None
-    invoice_line_no: str | None = None
+    invoice_line_no: str | None = Field(default=None, deprecated=True, description="Deprecated compatibility field; use line_ref")
+    line_no: int | None = None
+    line_ref: str | None = None
     invoice_date: date
     delivery_date: date
     status: InvoiceStatus
@@ -183,7 +189,9 @@ class InvoiceReportLine(BaseModel):
     invoice_item_uuid: str
     invoice_item_legacy_id: int | None = None
     order_item_id: str
-    invoice_line_no: str | None = None
+    invoice_line_no: str | None = Field(default=None, deprecated=True, description="Deprecated compatibility field; use line_ref")
+    line_no: int | None = None
+    line_ref: str | None = None
     product_name: str
     billable_qty: float
     billable_uom: str

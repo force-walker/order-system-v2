@@ -119,7 +119,7 @@ def test_422_for_input_validation_errors():
     # business validation (date range)
     _, order_id = _seed_product_customer_order()
     inv_bad_date = client.post(
-        "/api/v1/invoices",
+        "/api/v1/invoices/generate",
         json={
             "invoice_no": "INV-BAD",
             "order_id": order_id,

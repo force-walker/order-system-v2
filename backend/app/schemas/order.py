@@ -63,6 +63,7 @@ class OrderResponse(BaseModel):
     id: str
     uuid: str
     legacy_id: int | None = None
+    document_seq: int | None = Field(default=None, description="Immutable permanent Order sequence")
     tracking_no: str | None = None
     delivery_no: str | None = None
     order_no: str
@@ -114,7 +115,9 @@ class OrderItemResponse(BaseModel):
     uuid: str
     legacy_id: int | None = None
     order_id: str
-    order_line_no: str | None = None
+    order_line_no: str | None = Field(default=None, deprecated=True, description="Deprecated compatibility field; new rows mirror line_ref, not the legacy value format")
+    line_no: int | None = Field(default=None, description="Immutable business line number within the Order")
+    line_ref: str | None = Field(default=None, description="Authoritative globally unique human-readable line reference")
     product_id: int
     ordered_qty: float
     order_uom_type: PricingBasis
@@ -144,6 +147,15 @@ class OrderItemsBulkCreateResponse(BaseModel):
     success: int
     failed: int
     errors: list[dict] = Field(default_factory=list)
+
+
+class OrderWithItemsCreateRequest(OrderCreateRequest):
+    items: list[OrderItemCreateRequest] = Field(min_length=1, max_length=500)
+
+
+class OrderWithItemsCreateResponse(BaseModel):
+    order: OrderResponse
+    items: list[OrderItemResponse]
 
 
 class PurchaseConfirmationPdfRequest(BaseModel):

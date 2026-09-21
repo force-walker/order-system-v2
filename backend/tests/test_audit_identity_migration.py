@@ -71,19 +71,44 @@ def test_existing_serial_generator_preserved(pg):
 
 def test_postgres_order_create_list_cancel_with_audit(pg):
     from app.db.base import Base
-    from app.models.entities import AuditLog, Customer
-    from app.api.routes_orders import create_order, list_orders, bulk_cancel_orders
-    from app.schemas.order import OrderCreateRequest, OrderBulkCancelRequest
+    from app.models.entities import AuditLog, Customer, PricingBasis, Product
+    from app.api.routes_orders import create_order_with_items, list_orders, bulk_cancel_orders
+    from app.schemas.order import OrderBulkCancelRequest, OrderItemCreateRequest, OrderWithItemsCreateRequest
 
     Base.metadata.create_all(pg)
+    # Current Order creation allocates permanent and compatibility sequences;
+    # this isolated audit-repair schema intentionally does not run later migrations.
+    for sequence in ("order_document_seq", "orders_legacy_id_seq", "order_items_legacy_id_seq"):
+        pg.execute(text(f"CREATE SEQUENCE {sequence} START WITH 1"))
     # Reproduce the actual deployed schema produced by the old UUID migration.
     pg.execute(text("ALTER TABLE audit_logs ALTER COLUMN id DROP DEFAULT"))
     migration().upgrade()
     with Session(bind=pg, join_transaction_mode="create_savepoint") as db:
         customer = Customer(customer_code="repair-test", name="Test only")
-        db.add(customer)
+        product = Product(
+            sku="repair-test-product",
+            name="Test only",
+            order_uom="count",
+            purchase_uom="count",
+            invoice_uom="count",
+            active=True,
+        )
+        db.add_all([customer, product])
         db.commit()
-        order = create_order(OrderCreateRequest(customer_id=customer.id), db)
+        created = create_order_with_items(
+            OrderWithItemsCreateRequest(
+                customer_id=customer.id,
+                items=[OrderItemCreateRequest(
+                    product_id=product.id,
+                    ordered_qty=1,
+                    order_uom_type=PricingBasis.uom_count,
+                    pricing_basis=PricingBasis.uom_count,
+                    unit_price_uom_count=10,
+                )],
+            ),
+            db,
+        )
+        order = created.order
         assert order.id in {o.id for o in list_orders(stale_delivery_only=False, db=db)}
         result = bulk_cancel_orders(OrderBulkCancelRequest(
             order_ids=[order.id], cancel_reason_code="customer_request"

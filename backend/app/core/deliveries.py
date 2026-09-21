@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.core.numbering import ensure_order_delivery_number, generate_delivery_line_no
+from app.core.numbering import ensure_delivery_header_numbers, ensure_delivery_item_number, ensure_order_delivery_number
 from app.models.entities import Delivery, DeliveryItem, Order, OrderItem, PricingBasis, Product
 
 
@@ -20,20 +20,34 @@ def ensure_delivery_document(db: Session, order: Order) -> Delivery:
     ensure_order_delivery_number(db, order)
     shipped_date = order.shipped_date or order.delivery_date
 
+    rows = (
+        db.query(OrderItem, Product)
+        .join(Product, Product.id == OrderItem.product_id)
+        .filter(OrderItem.order_id == order.id)
+        .order_by(OrderItem.line_no.asc(), OrderItem.created_at.asc())
+        .all()
+    )
+    if not rows:
+        raise ValueError("delivery cannot be created without at least one item")
+
     delivery = db.query(Delivery).filter(Delivery.order_id == order.id).first()
     if delivery is None:
         delivery = Delivery(
-            delivery_no=order.delivery_no or "",
+            delivery_no="pending",
             tracking_no=order.tracking_no,
             order_id=order.id,
             customer_id=order.customer_id,
             delivery_date=order.delivery_date,
             shipped_date=shipped_date,
         )
+        ensure_delivery_header_numbers(db, delivery)
         db.add(delivery)
         db.flush()
+        order.delivery_no = delivery.delivery_no
+        db.flush()
     else:
-        delivery.delivery_no = order.delivery_no or delivery.delivery_no
+        ensure_delivery_header_numbers(db, delivery)
+        order.delivery_no = delivery.delivery_no
         delivery.tracking_no = order.tracking_no
         delivery.customer_id = order.customer_id
         delivery.delivery_date = order.delivery_date
@@ -43,13 +57,6 @@ def ensure_delivery_document(db: Session, order: Order) -> Delivery:
         item.order_item_id: item
         for item in db.query(DeliveryItem).filter(DeliveryItem.delivery_id == delivery.id).all()
     }
-    rows = (
-        db.query(OrderItem, Product)
-        .join(Product, Product.id == OrderItem.product_id)
-        .filter(OrderItem.order_id == order.id)
-        .order_by(OrderItem.created_at.asc())
-        .all()
-    )
     for order_item, product in rows:
         delivered_qty = _delivered_qty(order_item)
         delivered_uom = _delivered_uom(order_item, product)
@@ -64,9 +71,9 @@ def ensure_delivery_document(db: Session, order: Order) -> Delivery:
                 delivered_uom=delivered_uom,
                 shipped_date=shipped_date,
             )
+            ensure_delivery_item_number(db, delivery, item)
             db.add(item)
             db.flush()
-            item.delivery_line_no = generate_delivery_line_no(db, delivery)
         else:
             item.product_id = order_item.product_id
             item.delivered_qty = delivered_qty

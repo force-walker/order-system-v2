@@ -963,7 +963,10 @@ export interface paths {
         /** List Orders */
         get: operations["list_orders_api_v1_orders_get"];
         put?: never;
-        /** Create Order */
+        /**
+         * Create Order
+         * @deprecated
+         */
         post: operations["create_order_api_v1_orders_post"];
         delete?: never;
         options?: never;
@@ -1069,6 +1072,23 @@ export interface paths {
         put?: never;
         /** Generate Order Item Labels Pdf */
         post: operations["generate_order_item_labels_pdf_api_v1_orders_item_labels_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/with-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Order With Items */
+        post: operations["create_order_with_items_api_v1_orders_with_items_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1329,7 +1349,10 @@ export interface paths {
         /** List Invoices */
         get: operations["list_invoices_api_v1_invoices_get"];
         put?: never;
-        /** Create Invoice */
+        /**
+         * Create Invoice
+         * @deprecated
+         */
         post: operations["create_invoice_api_v1_invoices_post"];
         delete?: never;
         options?: never;
@@ -1346,7 +1369,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Invoice From Delivery */
+        /**
+         * Create Invoice From Delivery
+         * @deprecated
+         */
         post: operations["create_invoice_from_delivery_api_v1_invoices_from_delivery_post"];
         delete?: never;
         options?: never;
@@ -2296,8 +2322,22 @@ export interface components {
             order_item_id: string;
             /** Product Id */
             product_id: number;
-            /** Delivery Line No */
+            /**
+             * Delivery Line No
+             * @deprecated
+             * @description Deprecated compatibility field; new rows mirror line_ref, not the legacy value format
+             */
             delivery_line_no: string;
+            /**
+             * Line No
+             * @description Immutable business line number within the Delivery
+             */
+            line_no?: number | null;
+            /**
+             * Line Ref
+             * @description Authoritative globally unique human-readable line reference
+             */
+            line_ref?: string | null;
             /** Delivered Qty */
             delivered_qty: number;
             /** Delivered Uom */
@@ -2324,6 +2364,11 @@ export interface components {
             id: string;
             /** Uuid */
             uuid: string;
+            /**
+             * Document Seq
+             * @description Immutable permanent Delivery sequence
+             */
+            document_seq?: number | null;
             /** Order Id */
             order_id: string;
             /** Customer Id */
@@ -2489,8 +2534,16 @@ export interface components {
             invoice_draft_no?: string | null;
             /** Official Invoice No */
             official_invoice_no?: string | null;
-            /** Invoice Line No */
+            /**
+             * Invoice Line No
+             * @deprecated
+             * @description Deprecated compatibility field; use line_ref
+             */
             invoice_line_no?: string | null;
+            /** Line No */
+            line_no?: number | null;
+            /** Line Ref */
+            line_ref?: string | null;
             /**
              * Invoice Date
              * Format: date
@@ -2589,8 +2642,22 @@ export interface components {
             invoice_id: string;
             /** Order Item Id */
             order_item_id: string;
-            /** Invoice Line No */
+            /**
+             * Invoice Line No
+             * @deprecated
+             * @description Deprecated compatibility field; new rows mirror line_ref, not the legacy value format
+             */
             invoice_line_no?: string | null;
+            /**
+             * Line No
+             * @description Immutable business line number within the Invoice
+             */
+            line_no?: number | null;
+            /**
+             * Line Ref
+             * @description Authoritative globally unique human-readable line reference
+             */
+            line_ref?: string | null;
             /** Billable Qty */
             billable_qty: number;
             /** Billable Uom */
@@ -2653,8 +2720,16 @@ export interface components {
             invoice_item_legacy_id?: number | null;
             /** Order Item Id */
             order_item_id: string;
-            /** Invoice Line No */
+            /**
+             * Invoice Line No
+             * @deprecated
+             * @description Deprecated compatibility field; use line_ref
+             */
             invoice_line_no?: string | null;
+            /** Line No */
+            line_no?: number | null;
+            /** Line Ref */
+            line_ref?: string | null;
             /** Product Name */
             product_name: string;
             /** Billable Qty */
@@ -2744,6 +2819,16 @@ export interface components {
             uuid: string;
             /** Legacy Id */
             legacy_id?: number | null;
+            /**
+             * Document Seq
+             * @description Immutable permanent Invoice Draft sequence
+             */
+            document_seq?: number | null;
+            /**
+             * Official Document Seq
+             * @description Immutable official Invoice sequence allocated only on first finalize
+             */
+            official_document_seq?: number | null;
             /** Tracking No */
             tracking_no?: string | null;
             /** Delivery Id */
@@ -3061,8 +3146,22 @@ export interface components {
             legacy_id?: number | null;
             /** Order Id */
             order_id: string;
-            /** Order Line No */
+            /**
+             * Order Line No
+             * @deprecated
+             * @description Deprecated compatibility field; new rows mirror line_ref, not the legacy value format
+             */
             order_line_no?: string | null;
+            /**
+             * Line No
+             * @description Immutable business line number within the Order
+             */
+            line_no?: number | null;
+            /**
+             * Line Ref
+             * @description Authoritative globally unique human-readable line reference
+             */
+            line_ref?: string | null;
             /** Product Id */
             product_id: number;
             /** Ordered Qty */
@@ -3144,6 +3243,11 @@ export interface components {
             uuid: string;
             /** Legacy Id */
             legacy_id?: number | null;
+            /**
+             * Document Seq
+             * @description Immutable permanent Order sequence
+             */
+            document_seq?: number | null;
             /** Tracking No */
             tracking_no?: string | null;
             /** Delivery No */
@@ -3197,6 +3301,25 @@ export interface components {
             shipped_date?: string | null;
             /** Note */
             note?: string | null;
+        };
+        /** OrderWithItemsCreateRequest */
+        OrderWithItemsCreateRequest: {
+            /** Customer Id */
+            customer_id: number;
+            /** Delivery Date */
+            delivery_date?: string | null;
+            /** Shipped Date */
+            shipped_date?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Items */
+            items: components["schemas"]["OrderItemCreateRequest"][];
+        };
+        /** OrderWithItemsCreateResponse */
+        OrderWithItemsCreateResponse: {
+            order: components["schemas"]["OrderResponse"];
+            /** Items */
+            items: components["schemas"]["OrderItemResponse"][];
         };
         /**
          * PricingBasis
@@ -7077,6 +7200,57 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    create_order_with_items_api_v1_orders_with_items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderWithItemsCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderWithItemsCreateResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

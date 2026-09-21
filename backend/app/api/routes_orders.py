@@ -34,6 +34,8 @@ from app.schemas.order import (
     OrderItemLabelPdfRequest,
     OrderItemUpdateRequest,
     OrderResponse,
+    OrderWithItemsCreateRequest,
+    OrderWithItemsCreateResponse,
     PurchaseConfirmationPdfRequest,
 )
 
@@ -682,32 +684,16 @@ def generate_order_item_labels_pdf(payload: OrderItemLabelPdfRequest, db: Sessio
         404: {"model": ApiErrorResponse, "description": "Not Found"},
         409: {"model": ApiErrorResponse, "description": "Conflict"},
     },
+    deprecated=True,
 )
 def create_order(payload: OrderCreateRequest, db: Session = Depends(get_db)) -> OrderResponse:
-    customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
-    if customer is None:
-        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
-
-    now_hk = _now_hk()
-    row = Order(
-        order_no=f"pending-{datetime.now(UTC).timestamp()}",
-        customer_id=payload.customer_id,
-        order_datetime=datetime.now(UTC),
-        delivery_date=(payload.delivery_date or _default_delivery_date_by_hk_time(now_hk)),
-        shipped_date=payload.shipped_date,
-        status=OrderStatus.new,
-        note=payload.note,
-        created_by="system_api",
-        updated_by="system_api",
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "code": "ORDER_ITEMS_REQUIRED",
+            "message": "header-only order creation is deprecated; use POST /api/v1/orders/with-items",
+        },
     )
-    db.add(row)
-    db.flush()
-    ensure_order_header_numbers(db, row, now_hk=now_hk)
-
-    write_audit_log(db, entity_type="order", entity_id=row.id, action=AuditAction.CREATE)
-    db.commit()
-    db.refresh(row)
-    return OrderResponse.model_validate(row)
 
 
 def _validate_order_item_pricing(payload: OrderItemCreateRequest | OrderItemUpdateRequest) -> None:
@@ -720,11 +706,99 @@ def _validate_order_item_pricing(payload: OrderItemCreateRequest | OrderItemUpda
             raise HTTPException(status_code=422, detail={"code": "VALIDATION_FAILED", "message": "unit_price_uom_kg is required"})
 
 
+def _new_order_item(order: Order, payload: OrderItemCreateRequest) -> OrderItem:
+    return OrderItem(
+        order_id=order.id,
+        product_id=payload.product_id,
+        ordered_qty=payload.ordered_qty,
+        order_uom_type=payload.order_uom_type,
+        estimated_weight_kg=payload.estimated_weight_kg,
+        target_price=payload.target_price,
+        price_ceiling=payload.price_ceiling,
+        stockout_policy=payload.stockout_policy,
+        pricing_basis=payload.pricing_basis,
+        unit_price_uom_count=payload.unit_price_uom_count,
+        unit_price_uom_kg=payload.unit_price_uom_kg,
+        note=payload.note,
+        comment=payload.comment,
+    )
+
+
+@router.post(
+    "/with-items",
+    response_model=OrderWithItemsCreateResponse,
+    status_code=201,
+    responses={
+        **ORDER_COMMON_ERROR_RESPONSES,
+        404: {"model": ApiErrorResponse, "description": "Not Found"},
+        409: {"model": ApiErrorResponse, "description": "Conflict"},
+    },
+)
+def create_order_with_items(
+    payload: OrderWithItemsCreateRequest,
+    db: Session = Depends(get_db),
+) -> OrderWithItemsCreateResponse:
+    customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+    if customer is None:
+        raise HTTPException(status_code=404, detail={"code": "CUSTOMER_NOT_FOUND", "message": "customer not found"})
+
+    product_ids = {item.product_id for item in payload.items}
+    found_product_ids = {
+        product_id
+        for (product_id,) in db.query(Product.id).filter(Product.id.in_(product_ids)).all()
+    }
+    for index, item in enumerate(payload.items):
+        if item.product_id not in found_product_ids:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "PRODUCT_NOT_FOUND",
+                    "message": "product not found",
+                    "index": index,
+                },
+            )
+        _validate_order_item_pricing(item)
+
+    now_hk = _now_hk()
+    order = Order(
+        order_no=f"pending-{datetime.now(UTC).timestamp()}",
+        customer_id=payload.customer_id,
+        order_datetime=datetime.now(UTC),
+        delivery_date=(payload.delivery_date or _default_delivery_date_by_hk_time(now_hk)),
+        shipped_date=payload.shipped_date,
+        status=OrderStatus.new,
+        note=payload.note,
+        created_by="system_api",
+        updated_by="system_api",
+    )
+    ensure_order_header_numbers(db, order, now_hk=now_hk)
+    db.add(order)
+    db.flush()
+
+    items: list[OrderItem] = []
+    for item_payload in payload.items:
+        item = _new_order_item(order, item_payload)
+        ensure_order_item_number(db, order, item)
+        db.add(item)
+        db.flush()
+        items.append(item)
+
+    write_audit_log(db, entity_type="order", entity_id=order.id, action=AuditAction.CREATE)
+    db.commit()
+    db.refresh(order)
+    for item in items:
+        db.refresh(item)
+    return OrderWithItemsCreateResponse(
+        order=OrderResponse.model_validate(order),
+        items=[OrderItemResponse.model_validate(item) for item in items],
+    )
+
+
 @router.get("/{order_id}/items", response_model=list[OrderItemResponse])
 def list_order_items(order_id: str, db: Session = Depends(get_db)) -> list[OrderItemResponse]:
     order = _get_order_by_identifier_or_404(db, order_id)
 
-    rows = db.query(OrderItem).filter(OrderItem.order_id == order.id).order_by(OrderItem.created_at.asc()).all()
+    rows = db.query(OrderItem).filter(OrderItem.order_id == order.id).order_by(OrderItem.line_no.asc(), OrderItem.created_at.asc()).all()
     return [OrderItemResponse.model_validate(r) for r in rows]
 
 
@@ -760,9 +834,9 @@ def create_order_item(order_id: str, payload: OrderItemCreateRequest, db: Sessio
         note=payload.note,
         comment=payload.comment,
     )
+    ensure_order_item_number(db, order, row)
     db.add(row)
     db.flush()
-    ensure_order_item_number(db, order, row)
     order.updated_by = "system_api"
     db.commit()
     db.refresh(row)
@@ -794,9 +868,9 @@ def create_order_item_by_order_uuid(order_uuid: str, payload: OrderItemCreateReq
         note=payload.note,
         comment=payload.comment,
     )
+    ensure_order_item_number(db, order, row)
     db.add(row)
     db.flush()
-    ensure_order_item_number(db, order, row)
     order.updated_by = "system_api"
     db.commit()
     db.refresh(row)
@@ -835,9 +909,9 @@ def bulk_create_order_items(order_id: str, payload: OrderItemsBulkCreateRequest,
             note=item.note,
             comment=item.comment,
         )
+        ensure_order_item_number(db, order, row)
         db.add(row)
         db.flush()
-        ensure_order_item_number(db, order, row)
         success += 1
 
     order.updated_by = "system_api"
@@ -888,7 +962,10 @@ def update_order_item_by_uuid(order_uuid: str, item_uuid: str, payload: OrderIte
 @router.delete("/{order_id}/items/{item_id}", status_code=204)
 def delete_order_item(order_id: str, item_id: str, db: Session = Depends(get_db)) -> None:
     order = _get_order_by_identifier_or_404(db, order_id)
+    db.query(Order).filter(Order.id == order.id).with_for_update().one()
     row = _get_order_item_by_identifier_or_404(db, order.id, item_id)
+    if db.query(OrderItem.id).filter(OrderItem.order_id == order.id).count() <= 1:
+        raise HTTPException(status_code=409, detail={"code": "LAST_ORDER_ITEM_DELETE_FORBIDDEN", "message": "an order must retain at least one item"})
 
     db.delete(row)
     order.updated_by = "system_api"
@@ -899,7 +976,10 @@ def delete_order_item(order_id: str, item_id: str, db: Session = Depends(get_db)
 @router.delete("/uuid/{order_uuid}/items/{item_uuid}", status_code=204)
 def delete_order_item_by_uuid(order_uuid: str, item_uuid: str, db: Session = Depends(get_db)) -> None:
     order = _get_order_by_uuid_or_404(db, order_uuid)
+    db.query(Order).filter(Order.id == order.id).with_for_update().one()
     row = _get_order_item_by_uuid_or_404(db, order.id, item_uuid)
+    if db.query(OrderItem.id).filter(OrderItem.order_id == order.id).count() <= 1:
+        raise HTTPException(status_code=409, detail={"code": "LAST_ORDER_ITEM_DELETE_FORBIDDEN", "message": "an order must retain at least one item"})
 
     db.delete(row)
     order.updated_by = "system_api"

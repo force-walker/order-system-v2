@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -8,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Customer, Order, OrderStatus, PricingBasis, Product
+from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product
 
 
 engine = create_engine(
@@ -66,6 +67,125 @@ def _seed_order_and_product() -> tuple[int, int]:
     db.add(p)
     db.commit()
     return o.id, p.id
+
+
+def _seed_customer_and_product() -> tuple[int, int]:
+    db = TestingSessionLocal()
+    suffix = uuid4().hex[:8]
+    customer = Customer(customer_code=f"C-ATOMIC-{suffix}", name="Atomic Customer", active=True)
+    product = Product(
+        sku=f"SKU-ATOMIC-{suffix}",
+        name="Atomic Product",
+        order_uom="count",
+        purchase_uom="count",
+        invoice_uom="count",
+        is_catch_weight=False,
+        weight_capture_required=False,
+        pricing_basis_default=PricingBasis.uom_count,
+        active=True,
+    )
+    db.add_all([customer, product])
+    db.commit()
+    result = (customer.id, product.id)
+    db.close()
+    return result
+
+
+def _atomic_order_payload(customer_id: int, product_id: int) -> dict:
+    return {
+        "customer_id": customer_id,
+        "delivery_date": str(date.today()),
+        "items": [
+            {
+                "product_id": product_id,
+                "ordered_qty": 2,
+                "order_uom_type": "uom_count",
+                "pricing_basis": "uom_count",
+                "unit_price_uom_count": 100,
+            }
+        ],
+    }
+
+
+def test_create_order_with_items_is_atomic_and_requires_at_least_one_item():
+    customer_id, product_id = _seed_customer_and_product()
+    client = _client()
+
+    with TestingSessionLocal() as db:
+        initial_orders = db.query(Order).count()
+
+    empty = client.post(
+        "/api/v1/orders/with-items",
+        json={"customer_id": customer_id, "delivery_date": str(date.today()), "items": []},
+    )
+    assert empty.status_code == 422
+
+    missing_product_payload = _atomic_order_payload(customer_id, 999999)
+    missing_product = client.post("/api/v1/orders/with-items", json=missing_product_payload)
+    assert missing_product.status_code == 404
+    assert missing_product.json()["detail"]["code"] == "PRODUCT_NOT_FOUND"
+
+    with TestingSessionLocal() as db:
+        assert db.query(Order).count() == initial_orders
+
+    created = client.post(
+        "/api/v1/orders/with-items",
+        json=_atomic_order_payload(customer_id, product_id),
+    )
+    assert created.status_code == 201
+    assert created.json()["order"]["customer_id"] == customer_id
+    assert len(created.json()["items"]) == 1
+    assert created.json()["items"][0]["order_id"] == created.json()["order"]["id"]
+
+    with TestingSessionLocal() as db:
+        assert db.query(Order).count() == initial_orders + 1
+        assert db.query(OrderItem).filter(OrderItem.order_id == created.json()["order"]["id"]).count() == 1
+
+
+def test_order_line_reference_uses_permanent_document_sequence_not_date_tracking():
+    customer_id, product_id = _seed_customer_and_product()
+    db = TestingSessionLocal()
+    suffix = uuid4().hex[:8]
+    orders = [
+        Order(
+            order_no=f"ORD-20000101-54321-{suffix}",
+            tracking_no="20000101-54321",
+            customer_id=customer_id,
+            order_datetime=datetime.now(UTC),
+            delivery_date=date.today(),
+            status=OrderStatus.new,
+            created_by="system_api",
+            updated_by="system_api",
+        ),
+        Order(
+            order_no=f"ORD-20000102-54321-{suffix}",
+            tracking_no="20000102-54321",
+            customer_id=customer_id,
+            order_datetime=datetime.now(UTC),
+            delivery_date=date.today(),
+            status=OrderStatus.new,
+            created_by="system_api",
+            updated_by="system_api",
+        ),
+    ]
+    db.add_all(orders)
+    db.commit()
+    order_ids = [order.id for order in orders]
+    db.close()
+
+    client = _client()
+    payload = _atomic_order_payload(customer_id, product_id)["items"][0]
+    first = client.post(f"/api/v1/orders/{order_ids[0]}/items", json=payload)
+    second = client.post(f"/api/v1/orders/{order_ids[1]}/items", json=payload)
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["line_no"] == 10
+    assert second.json()["line_no"] == 10
+    assert first.json()["line_ref"].endswith("-0010")
+    assert second.json()["line_ref"].endswith("-0010")
+    assert first.json()["line_ref"] != second.json()["line_ref"]
+    assert first.json()["order_line_no"] == first.json()["line_ref"]
+    assert second.json()["order_line_no"] == second.json()["line_ref"]
 
 
 def test_order_items_crud_and_bulk():

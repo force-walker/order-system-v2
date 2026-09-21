@@ -235,6 +235,12 @@ def test_openapi_phase2_query_filters_are_exposed():
     order_response_props = spec["components"]["schemas"]["OrderResponse"]["properties"]
     assert "shipped_date" in order_response_props
 
+    create_with_items = spec["paths"]["/api/v1/orders/with-items"]["post"]
+    request_schema = create_with_items["requestBody"]["content"]["application/json"]["schema"]
+    assert request_schema["$ref"].endswith("/OrderWithItemsCreateRequest")
+    atomic_required = set(spec["components"]["schemas"]["OrderWithItemsCreateRequest"].get("required", []))
+    assert {"customer_id", "items"}.issubset(atomic_required)
+
     product_response_props = spec["components"]["schemas"]["ProductResponse"]["properties"]
     assert "legacy_code" in product_response_props
     assert "legacy_unit_code" in product_response_props

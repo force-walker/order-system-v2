@@ -243,13 +243,36 @@ def _seed_delivery_for_order(order_id: str) -> str:
     return delivery_id
 
 
+def _seed_legacy_empty_invoice(order_id: str, marker: str) -> str:
+    """Represent a pre-migration empty header; new APIs must never create one."""
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).one()
+    invoice = Invoice(
+        invoice_no=f"IVD-LEGACY-{marker}",
+        invoice_draft_no=f"IVD-LEGACY-{marker}",
+        customer_id=order.customer_id,
+        invoice_date=date.today(),
+        delivery_date=order.delivery_date,
+        subtotal=0,
+        tax_total=0,
+        grand_total=0,
+        status=InvoiceStatus.draft,
+        is_locked=False,
+    )
+    db.add(invoice)
+    db.commit()
+    invoice_id = invoice.id
+    db.close()
+    return invoice_id
+
+
 def test_create_invoice_invalid_date_range_is_422():
     order_id = _seed_order()
     client = _client()
 
     today = date.today()
     bad = client.post(
-        "/api/v1/invoices",
+        "/api/v1/invoices/generate",
         json={
             "invoice_no": "INV-BAD-DATE",
             "order_id": order_id,
@@ -291,13 +314,13 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert fin.status_code == 200
     assert fin.json()["status"] == "finalized"
     assert fin.json()["is_locked"] is True
-    assert fin.json()["official_invoice_no"].startswith(f"INV/{date.today().year}/")
+    assert fin.json()["official_invoice_no"].startswith("INV-")
     assert fin.json()["invoice_no"] == fin.json()["official_invoice_no"]
 
     report_by_uuid = client.get(f"/api/v1/invoices/uuid/{created.json()['uuid']}/report")
     assert report_by_uuid.status_code == 200
     assert report_by_uuid.json()["invoice_id"] == invoice_id
-    assert report_by_uuid.json()["delivery_no"].startswith("DLV-")
+    assert report_by_uuid.json()["delivery_no"].startswith("DEL-")
     assert report_by_uuid.json()["delivery_id"] is not None
     assert report_by_uuid.json()["delivery_uuid"] is not None
 
@@ -309,7 +332,7 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert invoice is not None
     assert order.status == OrderStatus.invoiced
     assert order.delivery_no is not None
-    assert order.delivery_no.startswith("DLV-")
+    assert order.delivery_no.startswith("DEL-")
     assert invoice.delivery_no == order.delivery_no
     assert all(line.line_status == LineStatus.invoiced for line in lines)
     db.close()
@@ -359,13 +382,16 @@ def test_finalize_invoice_allocates_official_number_from_year_sequence():
     second_fin = client.post(f"/api/v1/invoices/{second.json()['id']}/finalize")
     assert first_fin.status_code == 200
     assert second_fin.status_code == 200
-    assert first_fin.json()["official_invoice_no"] == "INV/2099/00001"
-    assert second_fin.json()["official_invoice_no"] == "INV/2099/00002"
+    assert first_fin.json()["official_invoice_no"].startswith("INV-")
+    assert second_fin.json()["official_invoice_no"].startswith("INV-")
+    assert first_fin.json()["official_invoice_no"] != second_fin.json()["official_invoice_no"]
 
     db = TestingSessionLocal()
-    seq = db.query(InvoiceNumberSequence).filter(InvoiceNumberSequence.year == 2099).first()
-    assert seq is not None
-    assert seq.next_seq == 3
+    first_row = db.get(Invoice, first.json()["id"])
+    second_row = db.get(Invoice, second.json()["id"])
+    assert first_row.official_document_seq is not None
+    assert second_row.official_document_seq == first_row.official_document_seq + 1
+    assert db.query(InvoiceNumberSequence).filter(InvoiceNumberSequence.year == 2099).first() is None
     db.close()
 
 
@@ -415,10 +441,8 @@ def test_create_and_generate_invoice_from_delivery_success():
         "/api/v1/invoices/from-delivery",
         json={"delivery_id": delivery_id, "invoice_date": str(date.today())},
     )
-    assert created.status_code == 201
-    assert created.json()["delivery_id"] == delivery_id
-    assert created.json()["delivery_uuid"] == delivery_id
-    assert created.json()["delivery_no"].startswith("DLV-")
+    assert created.status_code == 422
+    assert created.json()["detail"]["code"] == "INVOICE_ITEMS_REQUIRED"
 
     generated = client.post(
         "/api/v1/invoices/generate-from-delivery",
@@ -434,7 +458,6 @@ def test_create_and_generate_invoice_from_delivery_success():
     filtered = client.get(f"/api/v1/invoices?delivery_id={delivery_id}")
     assert filtered.status_code == 200
     ids = {row["id"] for row in filtered.json()}
-    assert created.json()["id"] in ids
     assert generated.json()["id"] in ids
 
 
@@ -513,14 +536,8 @@ def test_generate_invoice_missing_actual_weight_is_422():
 def test_finalize_invoice_without_items_is_409():
     order_id = _seed_order(with_items=False)
     client = _client()
-
-    created = client.post(
-        "/api/v1/invoices",
-        json={"invoice_no": "INV-NO-ITEMS", "order_id": order_id, "invoice_date": str(date.today())},
-    )
-    assert created.status_code == 201
-
-    fin = client.post(f"/api/v1/invoices/{created.json()['id']}/finalize")
+    invoice_id = _seed_legacy_empty_invoice(order_id, "NO-ITEMS")
+    fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert fin.status_code == 409
     assert fin.json()["detail"]["code"] == "INVOICE_ITEMS_REQUIRED"
 
@@ -547,12 +564,7 @@ def test_finalize_batch_invoices_partial_success():
     locked_fin = client.post(f"/api/v1/invoices/{locked_id}/finalize")
     assert locked_fin.status_code == 200
 
-    empty = client.post(
-        "/api/v1/invoices",
-        json={"invoice_no": "INV-BATCH-EMPTY-1", "order_id": order_id_empty, "invoice_date": str(date.today())},
-    )
-    assert empty.status_code == 201
-    empty_id = empty.json()["id"]
+    empty_id = _seed_legacy_empty_invoice(order_id_empty, "BATCH-EMPTY")
 
     batch = client.post(
         "/api/v1/invoices/finalize-batch",
@@ -659,13 +671,8 @@ def test_get_invoice_pdf_success_and_not_found():
 def test_get_invoice_pdf_without_items_is_409():
     order_id = _seed_order(with_items=False)
     client = _client()
-    created = client.post(
-        "/api/v1/invoices",
-        json={"invoice_no": "INV-PDF-NOITEM", "order_id": order_id, "invoice_date": str(date.today())},
-    )
-    assert created.status_code == 201
-
-    res = client.get(f"/api/v1/invoices/{created.json()['id']}/pdf")
+    invoice_id = _seed_legacy_empty_invoice(order_id, "PDF-NOITEM")
+    res = client.get(f"/api/v1/invoices/{invoice_id}/pdf")
     assert res.status_code == 409
     assert res.json()["detail"]["code"] == "INVOICE_ITEMS_REQUIRED"
 
@@ -1137,13 +1144,13 @@ def test_invoice_report_not_found():
 
 
 def test_invoice_neighbors_follow_invoice_list_order():
-    order_id = _seed_order(with_items=False)
+    order_id = _seed_order(with_items=True)
     client = _client()
 
     created_ids: list[int] = []
     for no in ["INV-NB-001", "INV-NB-002", "INV-NB-003"]:
         res = client.post(
-            "/api/v1/invoices",
+            "/api/v1/invoices/generate",
             json={"invoice_no": no, "order_id": order_id, "invoice_date": str(date.today())},
         )
         assert res.status_code == 201

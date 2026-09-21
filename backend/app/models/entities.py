@@ -2,7 +2,7 @@ import enum
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Numeric, String, Text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -137,6 +137,8 @@ class Order(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     legacy_id: Mapped[int | None] = mapped_column(unique=True, index=True, nullable=True)
+    document_seq: Mapped[int] = mapped_column(BigInteger, unique=True, index=True, nullable=False)
+    next_line_no: Mapped[int] = mapped_column(default=10, nullable=False)
     tracking_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     delivery_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     order_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
@@ -167,12 +169,17 @@ class OrderItem(Base):
         ),
         CheckConstraint("target_price IS NULL OR target_price >= 0", name="ck_order_items_target_price_non_negative"),
         CheckConstraint("price_ceiling IS NULL OR price_ceiling >= 0", name="ck_order_items_price_ceiling_non_negative"),
+        UniqueConstraint("order_id", "order_line_no", name="uq_order_items_order_line_no_per_order"),
+        UniqueConstraint("order_id", "line_no", name="uq_order_items_order_id_line_no"),
+        CheckConstraint("line_no IS NULL OR line_no > 0", name="ck_order_items_line_no_positive"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     legacy_id: Mapped[int | None] = mapped_column(unique=True, index=True, nullable=True)
     order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), index=True)
-    order_line_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
+    order_line_no: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
+    line_no: Mapped[int] = mapped_column(nullable=False)
+    line_ref: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     ordered_qty: Mapped[float] = mapped_column(Numeric(12, 3))
     order_uom_type: Mapped[PricingBasis] = mapped_column(Enum(PricingBasis, name="pricingbasis"), default=PricingBasis.uom_count)
@@ -283,9 +290,13 @@ class Invoice(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     legacy_id: Mapped[int | None] = mapped_column(unique=True, index=True, nullable=True)
+    document_seq: Mapped[int] = mapped_column(BigInteger, unique=True, index=True, nullable=False)
+    official_document_seq: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True, nullable=True)
+    next_line_no: Mapped[int] = mapped_column(default=10, nullable=False)
     invoice_no: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     tracking_no: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
     delivery_no: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
+    delivery_id: Mapped[str | None] = mapped_column(ForeignKey("deliveries.id"), index=True, nullable=True)
     invoice_draft_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     official_invoice_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
@@ -318,6 +329,8 @@ class InvoiceItem(Base):
         CheckConstraint("sales_unit_price >= 0", name="ck_invoice_items_sales_unit_price_non_negative"),
         Index("ix_invoice_items_invoice_id", "invoice_id"),
         Index("ix_invoice_items_order_item_id", "order_item_id"),
+        UniqueConstraint("invoice_id", "line_no", name="uq_invoice_items_invoice_id_line_no"),
+        CheckConstraint("line_no IS NULL OR line_no > 0", name="ck_invoice_items_line_no_positive"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -325,6 +338,8 @@ class InvoiceItem(Base):
     invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id"))
     order_item_id: Mapped[str] = mapped_column(ForeignKey("order_items.id"))
     invoice_line_no: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
+    line_no: Mapped[int] = mapped_column(nullable=False)
+    line_ref: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     billable_qty: Mapped[float] = mapped_column(Numeric(12, 3))
     billable_uom: Mapped[str] = mapped_column(String(32))
     invoice_line_status: Mapped[InvoiceLineStatus] = mapped_column(
@@ -349,6 +364,8 @@ class Delivery(Base):
     __tablename__ = "deliveries"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    document_seq: Mapped[int] = mapped_column(BigInteger, unique=True, index=True, nullable=False)
+    next_line_no: Mapped[int] = mapped_column(default=10, nullable=False)
     delivery_no: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     tracking_no: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
     order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), unique=True, index=True)
@@ -365,12 +382,18 @@ class Delivery(Base):
 
 class DeliveryItem(Base):
     __tablename__ = "delivery_items"
+    __table_args__ = (
+        UniqueConstraint("delivery_id", "line_no", name="uq_delivery_items_delivery_id_line_no"),
+        CheckConstraint("line_no IS NULL OR line_no > 0", name="ck_delivery_items_line_no_positive"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     delivery_id: Mapped[str] = mapped_column(ForeignKey("deliveries.id"), index=True)
     order_item_id: Mapped[str] = mapped_column(ForeignKey("order_items.id"), unique=True, index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
     delivery_line_no: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    line_no: Mapped[int] = mapped_column(nullable=False)
+    line_ref: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     delivered_qty: Mapped[float] = mapped_column(Numeric(12, 3))
     delivered_uom: Mapped[str] = mapped_column(String(32))
     shipped_date: Mapped[date] = mapped_column(Date, index=True)

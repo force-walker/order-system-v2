@@ -1,6 +1,6 @@
 # order_system_v2 handoff
 
-Updated: 2026-09-19
+Updated: 2026-09-21
 
 ## Active workspace
 
@@ -34,6 +34,7 @@ Detailed procedures:
 - `docs/authentication.md`
 - `docs/audit-identity-repair.md`
 - `docs/uuid-frontend-repair.md`
+- `docs/permanent-numbering-migration-2026-09-20.md`
 
 ## Authentication behavior
 
@@ -52,6 +53,9 @@ Orders, order items, invoices, invoice items, deliveries, and delivery items use
 ## Database repair
 
 Migration `2026091801` restores PostgreSQL identity generation for `audit_logs.id`, which was lost in a historical UUID migration. The live database was backed up before migration and existing records were preserved. PostgreSQL regression tests use isolated rollback-only schemas when `TEST_POSTGRES_URL` is provided.
+Migration `2026091901` applies the same repair to `supplier_allocations.id` and `purchase_results.id`; this fixes new bulk allocations and prevents the following purchase-result step from failing for the same reason.
+Migration `2026092001` is the transitional parent-scoped legacy-line constraint.
+Migrations `2026092002` through `2026092007` add immutable `document_seq`, `line_no`, and `line_ref`, independent Order/Delivery/Invoice and Invoice Official sequences, concurrency-safe legacy-ID sequences, UUID Invoice→Delivery linkage, deterministic backfill, and concurrency-safe deferred non-empty aggregate triggers. `2026092007` additionally enforces the `ORD`/`DEL`/`IVD` business-number match to `document_seq` for new or changed values at the PostgreSQL layer while preserving unchanged legacy backfill strings. Existing UUIDs and old number strings are preserved. New authoritative line references use `ODL/DLI/IVL-00000001-0010`; old `*_line_no` columns are deprecated compatibility fields.
 
 ## Verification commands
 
@@ -113,4 +117,7 @@ npm run sync:openapi
 - Password registration/login/logout and protected routes/APIs
 - Shared order identifier lookup with legacy numeric fallback
 - Audit-log identity repair
+- Atomic order creation: header and at least one item commit together or roll back together
+- Permanent Header/Detail numbering with immutable UUID-independent business references
+- Empty Header prevention, last Order-detail deletion rejection, and deprecated Header-only create APIs
 - Tailscale-oriented host startup and user documentation

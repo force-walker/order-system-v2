@@ -16,6 +16,8 @@ type Props = {
 type ItemForm = {
   clientKey: string;
   id?: EntityId;
+  lineNo?: number;
+  lineRef?: string;
   productId: string;
   productName: string;
   quantity: string;
@@ -105,6 +107,8 @@ const toInitialForm = (initialValue?: CreateOrderRequest): FormState => {
         ? initialValue.items.map((i) => ({
             clientKey: i.id ? `existing-${i.id}` : nextRowKey(),
             id: i.id,
+            lineNo: i.lineNo,
+            lineRef: i.lineRef,
             productId: i.productId ? String(i.productId) : '',
             productName: i.productName,
             quantity: String(i.quantity),
@@ -447,7 +451,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
             return (
               <div key={row.clientKey} className="item-card item-card-flat">
                 <div className="item-grid-row item-grid-row-primary item-row-flat">
-                  <div className="item-index">{idx + 1}</div>
+                  <div className="item-index" title={row.lineRef ?? undefined}>{row.lineNo ?? idx + 1}</div>
                   <label>
                     <input
                       list="product-options"
@@ -466,6 +470,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                       placeholder="商品名で検索"
                     />
                     {e.productId ? <small className="field-error">{e.productId}</small> : null}
+                    {row.lineRef ? <small className="subtle">{row.lineRef}</small> : null}
                   </label>
 
                   <label>

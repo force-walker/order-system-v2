@@ -1,5 +1,7 @@
 # 番号体系仕様メモ
 
+> **2026-09-20 superseded:** この文書の旧日付・枝番形式は履歴として残しています。現在の正式仕様は `docs/permanent-numbering-migration-2026-09-20.md` です。
+
 作成日: 2026-06-19
 対象: 注文・納品・請求の内部ID / 表示番号 / 採番責務
 
@@ -174,4 +176,3 @@ MVPでは以下を優先する。
 - `order_no` / `order_line_no` / `invoice_draft_no` / `invoice_line_no` 導入
 - `official_invoice_no` 導入
 - 納品ヘッダー/納品明細は独立実体を作るタイミングで番号体系を適用
-

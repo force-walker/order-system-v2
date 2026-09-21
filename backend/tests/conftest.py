@@ -2,9 +2,11 @@
 
 Authentication tests deliberately use anonymous clients and their own isolated DB.
 """
+from itertools import count
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -13,6 +15,48 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.auth import User
+from app.models.entities import Delivery, DeliveryItem, Invoice, InvoiceItem, Order, OrderItem
+
+
+_SQLITE_TEST_DOCUMENT_SEQ = count(900_000_000)
+_SQLITE_TEST_LINE_SEQ = count(900_000_000)
+
+
+@event.listens_for(Session, "before_flush")
+def supply_permanent_numbers_for_legacy_sqlite_fixtures(session, _flush_context, _instances):
+    """Keep direct legacy test seeds valid after production metadata became NOT NULL.
+
+    Application creation paths allocate authoritative values before flush. This
+    SQLite-only listener is test support for older fixtures which construct ORM
+    rows directly; it never runs against PostgreSQL or production sessions.
+    """
+    if session.get_bind().dialect.name != "sqlite":
+        return
+
+    for row in tuple(session.new):
+        if isinstance(row, (Order, Delivery, Invoice)):
+            if row.document_seq is None:
+                row.document_seq = next(_SQLITE_TEST_DOCUMENT_SEQ)
+            if row.next_line_no is None:
+                row.next_line_no = 10
+
+    detail_specs = (
+        (OrderItem, "ODL", "order_line_no"),
+        (DeliveryItem, "DLI", "delivery_line_no"),
+        (InvoiceItem, "IVL", "invoice_line_no"),
+    )
+    for row in tuple(session.new):
+        for model, prefix, compatibility_field in detail_specs:
+            if not isinstance(row, model):
+                continue
+            synthetic = next(_SQLITE_TEST_LINE_SEQ)
+            if row.line_no is None:
+                row.line_no = synthetic
+            if row.line_ref is None:
+                row.line_ref = f"{prefix}-T{synthetic:016d}"
+            if not getattr(row, compatibility_field, None):
+                setattr(row, compatibility_field, row.line_ref)
+            break
 
 
 LEGACY_BUSINESS_MODULES = {

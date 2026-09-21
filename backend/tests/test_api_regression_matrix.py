@@ -40,7 +40,7 @@ def _auth(role: str = "admin") -> dict[str, str]:
     return {"Authorization": f"Bearer {access}"}
 
 
-def _seed_order_with_allocation() -> tuple[int, int, int]:
+def _seed_order_with_allocation() -> tuple[int, str, int, int]:
     db = TestingSessionLocal()
     customer = Customer(customer_code=f"C-R-{datetime.now(UTC).timestamp()}", name="R-C", active=True)
     db.add(customer)
@@ -86,7 +86,7 @@ def _seed_order_with_allocation() -> tuple[int, int, int]:
     db.add(alloc)
     db.commit()
 
-    return customer.id, order.id, alloc.id
+    return customer.id, order.id, alloc.id, product.id
 
 
 def test_products_regression_status_matrix():
@@ -119,20 +119,31 @@ def test_products_regression_status_matrix():
 
 def test_orders_invoices_and_purchase_results_regression_matrix():
     client = _client()
-    customer_id, order_id, allocation_id = _seed_order_with_allocation()
+    customer_id, order_id, allocation_id, product_id = _seed_order_with_allocation()
 
     # orders create 201 / 409 / 422 / 404
-    create_order = client.post(
-        "/api/v1/orders",
-        json={"customer_id": customer_id, "delivery_date": str(date.today())},
-    )
+    aggregate_payload = {
+        "customer_id": customer_id,
+        "delivery_date": str(date.today()),
+        "items": [{
+            "product_id": product_id,
+            "ordered_qty": 1,
+            "order_uom_type": "uom_count",
+            "pricing_basis": "uom_count",
+            "unit_price_uom_count": 10,
+        }],
+    }
+    create_order = client.post("/api/v1/orders/with-items", json=aggregate_payload)
     assert create_order.status_code == 201
 
-    dup_order = client.post(
+    dup_order = client.post("/api/v1/orders/with-items", json=aggregate_payload)
+    assert dup_order.status_code == 201
+
+    deprecated_header_only = client.post(
         "/api/v1/orders",
         json={"customer_id": customer_id, "delivery_date": str(date.today())},
     )
-    assert dup_order.status_code == 201
+    assert deprecated_header_only.status_code == 422
 
     bad_order = client.post(
         "/api/v1/orders",

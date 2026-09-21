@@ -18,6 +18,8 @@ type ApiInvoiceSummary = {
 
 type ApiInvoiceItem = {
   id: EntityId;
+  line_no?: number | null;
+  line_ref?: string | null;
   invoice_id: EntityId;
   order_item_id: EntityId;
   billable_qty: number;
@@ -36,6 +38,8 @@ type ApiInvoiceDraftListRow = {
   invoice_id: EntityId;
   invoice_item_id: EntityId;
   invoice_no: string;
+  line_no?: number | null;
+  line_ref?: string | null;
   invoice_date: string;
   delivery_date: string;
   status: InvoiceStatus;
@@ -172,6 +176,8 @@ export const getInvoiceDraftItems = async (invoiceId: EntityId): Promise<Invoice
   const data = (await res.json()) as ApiInvoiceItem[];
   return data.map((r) => ({
     id: r.id,
+    lineNo: r.line_no ?? undefined,
+    lineRef: r.line_ref ?? undefined,
     orderItemId: r.order_item_id,
     billableQty: r.billable_qty,
     billableUom: r.billable_uom,
@@ -192,6 +198,8 @@ export const finalizeInvoiceItemLine = async (invoiceId: EntityId, invoiceItemId
   const r = (await res.json()) as ApiInvoiceItem;
   return {
     id: r.id,
+    lineNo: r.line_no ?? undefined,
+    lineRef: r.line_ref ?? undefined,
     orderItemId: r.order_item_id,
     billableQty: r.billable_qty,
     billableUom: r.billable_uom,
@@ -212,6 +220,8 @@ export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]>
     invoiceId: r.invoice_id,
     invoiceItemId: r.invoice_item_id,
     invoiceNo: r.invoice_no,
+    lineNo: r.line_no ?? undefined,
+    lineRef: r.line_ref ?? undefined,
     invoiceDate: r.invoice_date,
     deliveryDate: r.delivery_date,
     status: r.status,
@@ -244,6 +254,8 @@ export const updateInvoiceDraftItem = async (
   const r = (await res.json()) as ApiInvoiceItem;
   return {
     id: r.id,
+    lineNo: r.line_no ?? undefined,
+    lineRef: r.line_ref ?? undefined,
     orderItemId: r.order_item_id,
     billableQty: r.billable_qty,
     billableUom: r.billable_uom,
