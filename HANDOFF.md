@@ -122,5 +122,5 @@ npm run sync:openapi
 - Atomic order creation: header and at least one item commit together or roll back together
 - Permanent Header/Detail numbering with immutable UUID-independent business references
 - Empty Header prevention, last Order-detail deletion rejection, and deprecated Header-only create APIs
-- Purchase-to-Invoice Draft contract aligned: bulk upsert returns `purchase_result_ids`, draft generation returns `invoice_id`, and the frontend no longer generates `DRAFT-*` invoice numbers.
+- Purchase-to-Invoice Draft frontend/API contract aligned (`purchase_result_ids` / `invoice_id`)
 - Tailscale-oriented host startup and user documentation
