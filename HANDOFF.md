@@ -111,6 +111,7 @@ npm run sync:openapi
 
 ## Recent completed work
 
+- Shared delivery-date default (13:00 cutoff; Wednesday/Sunday closed)
 - Navigation selection and stable wide layout
 - Order list `new -> confirmed` action
 - UUID-safe order/invoice navigation, editing, selections, and service payloads

@@ -1,6 +1,7 @@
 import type { EntityId } from 'shared/entityId';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
+import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import { toActionableMessage } from 'shared/error';
 import { useFocusNavigation } from 'shared/useFocusNavigation';
 
@@ -53,20 +54,6 @@ type FieldErrors = {
 let rowSeq = 0;
 const nextRowKey = () => `row-${Date.now()}-${rowSeq++}`;
 
-const toYmd = (d: Date) => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-
-export const getInitialDeliveryDateByRule = (base = new Date()) => {
-  const d = new Date(base);
-  const hour = d.getHours();
-  if (hour >= 16) d.setDate(d.getDate() + 1);
-  return toYmd(d);
-};
-
 const newItem = (): ItemForm => ({
   clientKey: nextRowKey(),
   productId: '',
@@ -89,8 +76,8 @@ const toInitialForm = (initialValue?: CreateOrderRequest): FormState => {
     return {
       customerId: '',
       customerName: '',
-      deliveryDate: getInitialDeliveryDateByRule(),
-      shippedDate: getInitialDeliveryDateByRule(),
+      deliveryDate: getDefaultDeliveryDate(),
+      shippedDate: getDefaultDeliveryDate(),
       note: '',
       items: [newItem()],
     };
@@ -413,7 +400,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
           <label>
             納品日（顧客納品日） *
             <input type="date" value={form.deliveryDate} onChange={(e) => handleHeaderChange('deliveryDate', e.target.value)} />
-            <small className="subtle">初期値ルール: 16:00〜23:59 は翌日 / 00:00〜15:59 は当日</small>
+            <small className="subtle">初期値ルール: 13:00以降は次の営業日 / 13:00未満は当日（水曜・日曜休業）</small>
             {errors.deliveryDate ? <small className="field-error">{errors.deliveryDate}</small> : null}
           </label>
 

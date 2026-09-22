@@ -70,10 +70,14 @@ def _now_hk() -> datetime:
 
 
 def _default_delivery_date_by_hk_time(now_hk: datetime) -> datetime.date:
-    # 00:00-15:59 => same day, 16:00-23:59 => next day
-    if now_hk.hour >= 16:
-        return (now_hk + timedelta(days=1)).date()
-    return now_hk.date()
+    # Wednesday and Sunday are closed. Before 13:00 use today when open;
+    # at/after 13:00 (or on a closed day), advance to the next business day.
+    candidate = now_hk
+    if candidate.hour >= 13 or candidate.weekday() in {2, 6}:
+        candidate += timedelta(days=1)
+    while candidate.weekday() in {2, 6}:
+        candidate += timedelta(days=1)
+    return candidate.date()
 
 
 

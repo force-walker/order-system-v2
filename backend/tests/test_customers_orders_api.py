@@ -332,10 +332,14 @@ def test_create_order_success_and_list():
 
 
 def test_default_delivery_date_boundary_rule_hk_tz():
-    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 15, 59, tzinfo=HK_TZ)) == date(2026, 4, 14)
-    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 16, 0, tzinfo=HK_TZ)) == date(2026, 4, 15)
-    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 23, 59, tzinfo=HK_TZ)) == date(2026, 4, 15)
+    # Tuesday before cutoff stays Tuesday; at cutoff Wednesday is skipped.
+    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 12, 59, tzinfo=HK_TZ)) == date(2026, 4, 14)
+    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 13, 0, tzinfo=HK_TZ)) == date(2026, 4, 16)
+    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 23, 59, tzinfo=HK_TZ)) == date(2026, 4, 16)
     assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 0, 0, tzinfo=HK_TZ)) == date(2026, 4, 14)
+    # Closed days advance even before cutoff; Saturday after cutoff skips Sunday.
+    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 15, 8, 0, tzinfo=HK_TZ)) == date(2026, 4, 16)
+    assert _default_delivery_date_by_hk_time(datetime(2026, 4, 18, 13, 0, tzinfo=HK_TZ)) == date(2026, 4, 20)
 
 
 def test_create_order_uses_default_delivery_date_when_omitted():
@@ -699,9 +703,9 @@ def _seed_order_with_status_and_delivery(status: OrderStatus, delivery: date) ->
 
 def test_stale_cutoff_boundary_hk_tz():
     assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 0, 0, tzinfo=HK_TZ)) == date(2026, 4, 14)
-    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 15, 59, tzinfo=HK_TZ)) == date(2026, 4, 14)
-    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 16, 0, tzinfo=HK_TZ)) == date(2026, 4, 15)
-    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 23, 59, tzinfo=HK_TZ)) == date(2026, 4, 15)
+    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 12, 59, tzinfo=HK_TZ)) == date(2026, 4, 14)
+    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 13, 0, tzinfo=HK_TZ)) == date(2026, 4, 16)
+    assert _stale_cutoff_delivery_date(datetime(2026, 4, 14, 23, 59, tzinfo=HK_TZ)) == date(2026, 4, 16)
 
 
 def _seed_order_item_for_label(customer_name: str = "Label Customer", product_name: str = "Label Product", note: str = "item memo") -> int:
@@ -768,7 +772,7 @@ def test_list_orders_stale_filter():
 
     assert old_id in stale_ids
 
-    # cutoff depends on current HK time (16:00 boundary)
+    # cutoff follows the same HK-time 13:00 and closed-day rule as order creation
     cutoff = _stale_cutoff_delivery_date(datetime.now(HK_TZ))
     if today < cutoff:
         assert today_id in stale_ids
