@@ -7,6 +7,7 @@ import { bulkCancelOrders, confirmOrder, clearDirtyOrderStatus, hasDirtyOrderSta
 import type { OrderStatus, OrderSummary } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 import { useFocusNavigation } from 'shared/useFocusNavigation';
+import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   new: '新規',
@@ -25,10 +26,14 @@ type ToastPayload = {
 
 type RowSelect = Record<EntityId, boolean>;
 
+const DEFAULT_STATUS_FILTERS: OrderStatus[] = ['new', 'confirmed'];
+const STATUS_OPTIONS = (Object.keys(STATUS_LABEL) as OrderStatus[]).map((value) => ({ value, label: STATUS_LABEL[value] }));
+
 export const OrderListPage = () => {
   const [orders, setOrders] = useState<OrderSummary[] | null>(null);
   const [error, setError] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [statusFilters, setStatusFilters] = useState<OrderStatus[]>(DEFAULT_STATUS_FILTERS);
+  const [deliveryDateFilter, setDeliveryDateFilter] = useState(getDefaultDeliveryDate);
   const [keyword, setKeyword] = useState('');
   const [sortMode, setSortMode] = useState<'newest' | 'deliveryAsc' | 'deliveryDesc'>('newest');
   const [toast, setToast] = useState<ToastPayload | null>(null);
@@ -90,12 +95,15 @@ export const OrderListPage = () => {
 
     const normalizedKeyword = keyword.trim().toLowerCase();
 
-    const byStatus = statusFilter === 'all' ? orders : orders.filter((order) => order.status === statusFilter);
+    const byStatus = orders.filter((order) => statusFilters.includes(order.status));
+    const byDeliveryDate = deliveryDateFilter
+      ? byStatus.filter((order) => order.deliveryDate === deliveryDateFilter)
+      : byStatus;
 
     const byKeyword =
       normalizedKeyword.length === 0
-        ? byStatus
-        : byStatus.filter((order) => {
+        ? byDeliveryDate
+        : byDeliveryDate.filter((order) => {
             const target = `${order.orderNo} ${order.customerName}`.toLowerCase();
             return target.includes(normalizedKeyword);
           });
@@ -109,7 +117,11 @@ export const OrderListPage = () => {
       sorted.sort(newestOrderFirst);
     }
     return sorted;
-  }, [orders, statusFilter, keyword, sortMode]);
+  }, [orders, statusFilters, deliveryDateFilter, keyword, sortMode]);
+
+  const toggleStatusFilter = (status: OrderStatus) => {
+    setStatusFilters((current) => current.includes(status) ? current.filter((value) => value !== status) : [...current, status]);
+  };
 
   const visibleIds = useMemo(() => filteredOrders.map((o) => o.id), [filteredOrders]);
 
@@ -234,18 +246,19 @@ export const OrderListPage = () => {
             />
           </label>
 
+          <fieldset className="status-filter-group">
+            <legend>状態フィルタ</legend>
+            {STATUS_OPTIONS.map(({ value, label }) => (
+              <label key={value}>
+                <input type="checkbox" checked={statusFilters.includes(value)} onChange={() => toggleStatusFilter(value)} />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+
           <label className="filter-label">
-            状態フィルタ
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | OrderStatus)}>
-              <option value="all">すべて</option>
-              <option value="new">新規</option>
-              <option value="confirmed">確定</option>
-              <option value="allocated">引当済</option>
-              <option value="purchased">仕入済</option>
-              <option value="shipped">出荷済</option>
-              <option value="invoiced">請求済</option>
-              <option value="cancelled">取消</option>
-            </select>
+            納品日
+            <input type="date" value={deliveryDateFilter} onChange={(e) => setDeliveryDateFilter(e.target.value)} />
           </label>
 
           <label className="filter-label">

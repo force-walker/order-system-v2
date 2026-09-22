@@ -206,7 +206,7 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert {"supplier_id", "product_id"}.issubset(mapping_list_params)
 
     worklist_params = {p["name"] for p in spec["paths"]["/api/v1/order-item-allocations"]["get"]["parameters"]}
-    assert {"unallocated_only", "delivery_date", "supplier_id", "product_name", "customer_name", "limit", "offset"}.issubset(worklist_params)
+    assert {"unallocated_only", "delivery_date", "order_status", "supplier_id", "product_name", "customer_name", "limit", "offset"}.issubset(worklist_params)
 
     shipping_report_params = {p["name"] for p in spec["paths"]["/api/v1/reports/shipping"]["get"]["parameters"]}
     assert {"shipped_date", "mode"}.issubset(shipping_report_params)
@@ -221,7 +221,7 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert "allocated_qty" not in required_fields
 
     work_item_schema = spec["components"]["schemas"]["OrderItemAllocationWorkItem"]["properties"]
-    assert {"allocated_supplier_id", "allocated_qty", "delivery_date"}.issubset(work_item_schema)
+    assert {"order_id", "order_status", "customer_name", "allocated_supplier_id", "allocated_qty", "delivery_date"}.issubset(work_item_schema)
 
     shipping_report_props = spec["components"]["schemas"]["ShippingReportRow"]["properties"]
     assert {"delivery_id", "delivery_item_id", "delivery_no", "order_item_id"}.issubset(shipping_report_props)

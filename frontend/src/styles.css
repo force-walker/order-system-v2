@@ -112,10 +112,36 @@ th, td {
   display: flex;
   gap: 8px;
   align-items: end;
+  flex-wrap: wrap;
 }
 
 .filter-label {
   min-width: 180px;
+}
+
+.status-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  min-width: 280px;
+  margin: 0;
+  padding: 6px 10px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.status-filter-group legend {
+  padding: 0 4px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.status-filter-group label {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .subtle {
@@ -532,6 +558,10 @@ button:disabled { opacity: 0.6; }
 
 .bulk-allocation-table {
   min-width: 1500px;
+}
+
+.bulk-allocation-table .status-badge + .status-badge {
+  margin-left: 4px;
 }
 
 .bulk-allocation-table .col-order-no,

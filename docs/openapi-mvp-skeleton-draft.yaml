@@ -2287,6 +2287,16 @@ paths:
             format: date
           - type: 'null'
           title: Delivery Date
+      - name: order_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              $ref: '#/components/schemas/OrderStatus'
+          - type: 'null'
+          title: Order Status
       - name: supplier_id
         in: query
         required: false
@@ -7428,9 +7438,17 @@ components:
           - type: integer
           - type: 'null'
           title: Allocation Id
+        order_id:
+          type: string
+          title: Order Id
         order_no:
           type: string
           title: Order No
+        order_status:
+          $ref: '#/components/schemas/OrderStatus'
+        customer_name:
+          type: string
+          title: Customer Name
         product_id:
           type: integer
           title: Product Id
@@ -7466,7 +7484,10 @@ components:
       type: object
       required:
       - order_item_id
+      - order_id
       - order_no
+      - order_status
+      - customer_name
       - product_id
       - product_name
       - ordered_qty

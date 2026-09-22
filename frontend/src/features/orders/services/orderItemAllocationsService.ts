@@ -1,14 +1,15 @@
 import type { EntityId } from 'shared/entityId';
 import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClient';
 import { parseApiErrorPayload } from 'shared/error';
-import { listOrders } from 'features/orders/services/ordersService';
 import { listSuppliers } from 'features/suppliers/services/suppliersService';
+import type { OrderStatus } from 'features/orders/types/order';
 
 export type OrderItemAllocationWorkItem = {
   orderItemId: EntityId;
   allocationId: number | null;
-  orderId: EntityId | null;
+  orderId: EntityId;
   orderNo: string;
+  orderStatus: OrderStatus;
   customerName: string;
   productId: number;
   productName: string;
@@ -56,7 +57,10 @@ export type SupplierFilterOption = {
 type ApiWorkItem = {
   order_item_id: EntityId;
   allocation_id: number | null;
+  order_id: EntityId;
   order_no: string;
+  order_status: OrderStatus;
+  customer_name: string;
   product_id: number;
   product_name: string;
   ordered_qty: number;
@@ -95,29 +99,27 @@ export const listSupplierFilterOptions = async (): Promise<SupplierFilterOption[
 export const listOrderItemAllocationWorkItems = async (params: {
   unallocatedOnly: boolean;
   deliveryDate?: string;
+  orderStatuses?: OrderStatus[];
   supplierId?: number;
 }): Promise<OrderItemAllocationWorkItem[]> => {
   const query = new URLSearchParams();
   if (params.unallocatedOnly) query.set('unallocated_only', 'true');
   if (params.deliveryDate) query.set('delivery_date', params.deliveryDate);
+  params.orderStatuses?.forEach((status) => query.append('order_status', status));
   if (params.supplierId) query.set('supplier_id', String(params.supplierId));
 
-  const [res, orders] = await Promise.all([
-    fetchWithAuth(`/api/v1/order-item-allocations?${query.toString()}`),
-    listOrders().catch(() => []),
-  ]);
+  const res = await fetchWithAuth(`/api/v1/order-item-allocations?${query.toString()}`);
   if (!res.ok) throw await parseApiErrorPayload(res);
 
-  const customerByOrderNo = new Map(orders.map((o) => [o.orderNo, o.customerName]));
-  const orderIdByOrderNo = new Map(orders.map((o) => [o.orderNo, o.id]));
   const rows = (await res.json()) as ApiWorkItem[];
 
   return rows.map((row) => ({
     orderItemId: row.order_item_id,
     allocationId: row.allocation_id,
-    orderId: orderIdByOrderNo.get(row.order_no) ?? null,
+    orderId: row.order_id,
     orderNo: row.order_no,
-    customerName: customerByOrderNo.get(row.order_no) ?? '-',
+    orderStatus: row.order_status,
+    customerName: row.customer_name,
     productId: row.product_id,
     productName: row.product_name,
     orderedQty: row.ordered_qty,

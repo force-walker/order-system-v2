@@ -104,6 +104,9 @@ def test_worklist_suggest_and_bulk_save_flow():
     assert "allocated_supplier_id" in row
     assert "allocated_qty" in row
     assert "delivery_date" in row
+    assert row["order_id"]
+    assert row["order_status"] == "confirmed"
+    assert row["customer_name"] == "C"
     assert re.match(r"^\d{4}-\d{2}-\d{2}$", row["delivery_date"]) is not None
 
     suggest = client.post("/api/v1/order-item-allocations/suggestions", json={"order_item_ids": [order_item_id]})
@@ -230,3 +233,12 @@ def test_worklist_filters_by_product_and_customer_with_paging():
     paged = client.get("/api/v1/order-item-allocations?limit=1&offset=1")
     assert paged.status_code == 200
     assert len(paged.json()) == 1
+
+    confirmed = client.get("/api/v1/order-item-allocations?order_status=confirmed&order_status=allocated")
+    assert confirmed.status_code == 200
+    assert len(confirmed.json()) >= 2
+    assert all(row["order_status"] in {"confirmed", "allocated"} for row in confirmed.json())
+
+    excluded = client.get("/api/v1/order-item-allocations?order_status=new")
+    assert excluded.status_code == 200
+    assert excluded.json() == []

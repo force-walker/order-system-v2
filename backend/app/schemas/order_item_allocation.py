@@ -2,11 +2,16 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
+from app.models.entities import OrderStatus
+
 
 class OrderItemAllocationWorkItem(BaseModel):
     order_item_id: str
     allocation_id: int | None = None
+    order_id: str
     order_no: str
+    order_status: OrderStatus
+    customer_name: str
     product_id: int
     product_name: str
     ordered_qty: float

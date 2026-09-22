@@ -31,13 +31,13 @@ vi.mock('features/products/services/productsService', () => ({ getProductDetail:
 const rows = [
   {
     orderItemId: 'item-a', allocationId: 11, orderId: 'order-a', orderNo: 'ORD-A',
-    customerName: 'Customer A', productId: 1, productName: 'Product A', orderedQty: 2,
+    orderStatus: 'confirmed' as const, customerName: 'Customer A', productId: 1, productName: 'Product A', orderedQty: 2,
     deliveryDate: '2026-09-22', shippedDate: null, allocationStatus: 'allocated',
     proposedSupplierId: 1, proposedQty: 2, manualSupplierId: 1, manualQty: 2,
   },
   {
     orderItemId: 'item-b', allocationId: 22, orderId: 'order-b', orderNo: 'ORD-B',
-    customerName: 'Customer B', productId: 2, productName: 'Product B', orderedQty: 3,
+    orderStatus: 'confirmed' as const, customerName: 'Customer B', productId: 2, productName: 'Product B', orderedQty: 3,
     deliveryDate: '2026-09-22', shippedDate: null, allocationStatus: 'allocated',
     proposedSupplierId: 2, proposedQty: 3, manualSupplierId: 2, manualQty: 3,
   },

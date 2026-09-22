@@ -3084,8 +3084,13 @@ export interface components {
             order_item_id: string;
             /** Allocation Id */
             allocation_id?: number | null;
+            /** Order Id */
+            order_id: string;
             /** Order No */
             order_no: string;
+            order_status: components["schemas"]["OrderStatus"];
+            /** Customer Name */
+            customer_name: string;
             /** Product Id */
             product_id: number;
             /** Product Name */
@@ -6676,6 +6681,7 @@ export interface operations {
             query?: {
                 unallocated_only?: boolean;
                 delivery_date?: string | null;
+                order_status?: components["schemas"]["OrderStatus"][] | null;
                 supplier_id?: number | null;
                 product_name?: string | null;
                 customer_name?: string | null;

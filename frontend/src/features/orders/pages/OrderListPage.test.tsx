@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { OrderListPage } from './OrderListPage';
 import { confirmOrder, listOrders } from '../services/ordersService';
+import { getDefaultDeliveryDate } from '../utils/deliveryDate';
 
 vi.mock('../services/ordersService', () => ({
   listOrders: vi.fn(), confirmOrder: vi.fn(), bulkCancelOrders: vi.fn(),
@@ -14,13 +15,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
   vi.spyOn(window, 'confirm').mockReturnValue(true);
+  const deliveryDate = getDefaultDeliveryDate();
   vi.mocked(listOrders).mockResolvedValue([
-    { id: 'order-uuid', orderNo: 'ORD-new', customerName: 'Test', deliveryDate: '2026-09-20', status: 'new', items: [] },
-    { id: 'confirmed-uuid', orderNo: 'ORD-confirmed', customerName: 'Test', deliveryDate: '2026-09-20', status: 'confirmed', items: [] },
+    { id: 'order-uuid', orderNo: 'ORD-new', customerName: 'Test', deliveryDate, status: 'new', items: [] },
+    { id: 'confirmed-uuid', orderNo: 'ORD-confirmed', customerName: 'Test', deliveryDate, status: 'confirmed', items: [] },
   ] as unknown as Awaited<ReturnType<typeof listOrders>>);
   vi.mocked(confirmOrder).mockResolvedValue();
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+it('defaults to new and confirmed status plus the shared delivery date', async () => {
+  render(<MemoryRouter><OrderListPage /></MemoryRouter>);
+  await screen.findByText('ORD-new');
+  expect((screen.getByRole('checkbox', { name: '新規' }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole('checkbox', { name: '確定' }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole('checkbox', { name: '引当済' }) as HTMLInputElement).checked).toBe(false);
+  expect((screen.getByLabelText('納品日') as HTMLInputElement).value).toBe(getDefaultDeliveryDate());
+});
 
 it('only confirms selected new orders and refreshes the list', async () => {
   const actor = userEvent.setup();

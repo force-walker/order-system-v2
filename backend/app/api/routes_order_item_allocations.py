@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Customer, LineStatus, Order, OrderItem, Product, Supplier, SupplierAllocation, SupplierProduct
+from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, Product, Supplier, SupplierAllocation, SupplierProduct
 from app.schemas.common import ApiErrorResponse
 from app.schemas.order_item_allocation import (
     AllocationSuggestRequest,
@@ -40,6 +40,7 @@ def _current_allocation(db: Session, order_item_id: str) -> SupplierAllocation |
 def list_order_item_allocation_work_items(
     unallocated_only: bool = Query(default=False),
     delivery_date: date | None = Query(default=None),
+    order_status: list[OrderStatus] | None = Query(default=None),
     supplier_id: int | None = Query(default=None, gt=0),
     product_name: str | None = Query(default=None, min_length=1, max_length=255),
     customer_name: str | None = Query(default=None, min_length=1, max_length=255),
@@ -56,6 +57,8 @@ def list_order_item_allocation_work_items(
 
     if delivery_date is not None:
         query = query.filter(Order.delivery_date == delivery_date)
+    if order_status:
+        query = query.filter(Order.status.in_(order_status))
     if product_name is not None:
         query = query.filter(Product.name.ilike(f"%{product_name}%"))
     if customer_name is not None:
@@ -76,7 +79,10 @@ def list_order_item_allocation_work_items(
             OrderItemAllocationWorkItem(
                 order_item_id=item.id,
                 allocation_id=(alloc.id if alloc is not None else None),
+                order_id=order.id,
                 order_no=order.order_no,
+                order_status=order.status,
+                customer_name=_customer.name,
                 product_id=product.id,
                 product_name=product.name,
                 ordered_qty=float(item.ordered_qty),

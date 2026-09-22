@@ -12,6 +12,8 @@ import {
   type SupplierFilterOption,
 } from 'features/orders/services/orderItemAllocationsService';
 import { toActionableMessage } from 'shared/error';
+import type { OrderStatus } from 'features/orders/types/order';
+import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 
 type RowEdit = {
   selected: boolean;
@@ -27,6 +29,17 @@ type SortState = {
   direction: 'asc' | 'desc';
 };
 
+const DEFAULT_ORDER_STATUSES: OrderStatus[] = ['confirmed', 'allocated'];
+const ORDER_STATUS_OPTIONS: Array<{ value: OrderStatus; label: string }> = [
+  { value: 'new', label: '新規' },
+  { value: 'confirmed', label: '確定' },
+  { value: 'allocated', label: '引当済' },
+  { value: 'purchased', label: '仕入済' },
+  { value: 'shipped', label: '出荷済' },
+  { value: 'invoiced', label: '請求済' },
+  { value: 'cancelled', label: '取消' },
+];
+
 export const OrderItemBulkAllocationPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -39,7 +52,8 @@ export const OrderItemBulkAllocationPage = () => {
   const [lastSelectedId, setLastSelectedId] = useState<EntityId | null>(null);
 
   const [unallocatedOnly, setUnallocatedOnly] = useState(false);
-  const [deliveryDate, setDeliveryDate] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState(getDefaultDeliveryDate);
+  const [orderStatuses, setOrderStatuses] = useState<OrderStatus[]>(DEFAULT_ORDER_STATUSES);
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [productFilter, setProductFilter] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
@@ -59,6 +73,7 @@ export const OrderItemBulkAllocationPage = () => {
         listOrderItemAllocationWorkItems({
           unallocatedOnly,
           deliveryDate: deliveryDate || undefined,
+          orderStatuses,
           supplierId: supplierId || undefined,
         }),
         listSupplierFilterOptions(),
@@ -90,7 +105,7 @@ export const OrderItemBulkAllocationPage = () => {
 
   useEffect(() => {
     void load();
-  }, [unallocatedOnly, deliveryDate, supplierId]);
+  }, [unallocatedOnly, deliveryDate, orderStatuses, supplierId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -103,6 +118,7 @@ export const OrderItemBulkAllocationPage = () => {
     const customer = customerFilter.trim().toLowerCase();
 
     return items.filter((row) => {
+      if (!orderStatuses.includes(row.orderStatus)) return false;
       if (product && !row.productName.toLowerCase().includes(product)) return false;
       if (customer && !row.customerName.toLowerCase().includes(customer)) return false;
 
@@ -117,7 +133,7 @@ export const OrderItemBulkAllocationPage = () => {
 
       return true;
     });
-  }, [items, productFilter, customerFilter, editById, filterUnassignedSupplierOnly, filterNonZeroDiffOnly]);
+  }, [items, orderStatuses, productFilter, customerFilter, editById, filterUnassignedSupplierOnly, filterNonZeroDiffOnly]);
 
   const sortedItems = useMemo(() => {
     const rows = [...filteredItems];
@@ -153,14 +169,7 @@ export const OrderItemBulkAllocationPage = () => {
 
   const visibleIds = useMemo(() => sortedItems.map((row) => row.orderItemId), [sortedItems]);
 
-  const tomorrowDateStr = useMemo(() => {
-    const now = new Date();
-    now.setDate(now.getDate() + 1);
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }, []);
+  const defaultDeliveryDate = useMemo(() => getDefaultDeliveryDate(), []);
 
   useEffect(() => {
     if (visibleIds.length === 0) {
@@ -263,10 +272,15 @@ export const OrderItemBulkAllocationPage = () => {
 
   const resetFilters = () => {
     setUnallocatedOnly(false);
-    setDeliveryDate('');
+    setDeliveryDate(getDefaultDeliveryDate());
+    setOrderStatuses(DEFAULT_ORDER_STATUSES);
     setSupplierId('');
     setProductFilter('');
     setCustomerFilter('');
+  };
+
+  const toggleOrderStatus = (status: OrderStatus) => {
+    setOrderStatuses((current) => current.includes(status) ? current.filter((value) => value !== status) : [...current, status]);
   };
 
   const saveBulk = async () => {
@@ -407,6 +421,15 @@ export const OrderItemBulkAllocationPage = () => {
         </div>
 
         <div className="list-controls" style={{ marginBottom: 6 }}>
+          <fieldset className="status-filter-group">
+            <legend>注文状態</legend>
+            {ORDER_STATUS_OPTIONS.map(({ value, label }) => (
+              <label key={value}>
+                <input type="checkbox" checked={orderStatuses.includes(value)} onChange={() => toggleOrderStatus(value)} />
+                {label}
+              </label>
+            ))}
+          </fieldset>
           <label className="filter-label">
             納品日
             <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
@@ -433,7 +456,7 @@ export const OrderItemBulkAllocationPage = () => {
             取引先フィルター
             <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="例: テスト商事" />
           </label>
-          <button type="button" className="secondary" onClick={resetFilters}>フィルター解除</button>
+          <button type="button" className="secondary" onClick={resetFilters}>フィルターを初期値に戻す</button>
           <div className="filter-gap" />
           <label className="filter-label">
             選択行へ一括仕入先適用（未選択=未割当へ戻す）
@@ -475,7 +498,7 @@ export const OrderItemBulkAllocationPage = () => {
                   <th className="col-order-no" onClick={() => onSort('orderNo')} style={{ cursor: 'pointer' }}>{sortLabel('orderNo', '注文番号')}</th>
                   <th className="col-delivery-date" onClick={() => onSort('deliveryDate')} style={{ cursor: 'pointer' }}>{sortLabel('deliveryDate', '納品日')}</th>
                   <th>出荷日</th>
-                  <th>状態</th>
+                  <th>注文状態 / 割当状態</th>
                   <th className="col-customer" onClick={() => onSort('customerName')} style={{ cursor: 'pointer' }}>{sortLabel('customerName', '顧客')}</th>
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th onClick={() => onSort('manualSupplierId')} style={{ cursor: 'pointer' }}>
@@ -525,7 +548,7 @@ export const OrderItemBulkAllocationPage = () => {
                   const shortageQty = Number(Math.max(diffQty, 0).toFixed(3));
 
                   const hasManualSupplier = (edit?.manualSupplierId ?? row.manualSupplierId) != null;
-                  const isNonTomorrow = row.deliveryDate !== tomorrowDateStr;
+                  const isNonDefaultDeliveryDate = row.deliveryDate !== defaultDeliveryDate;
 
                   return (
                     <tr key={row.orderItemId} className={hasManualSupplier ? 'row-allocated' : 'row-unallocated'}>
@@ -549,9 +572,12 @@ export const OrderItemBulkAllocationPage = () => {
                           <span className="text-ellipsis-inline" title={row.orderNo}>{row.orderNo}</span>
                         )}
                       </td>
-                      <td className={`col-delivery-date ${isNonTomorrow ? 'delivery-warning' : ''}`}>{row.deliveryDate}</td>
+                      <td className={`col-delivery-date ${isNonDefaultDeliveryDate ? 'delivery-warning' : ''}`}>{row.deliveryDate}</td>
                       <td>{row.shippedDate ?? '-'}</td>
                       <td>
+                        <span className={`status-badge status-${row.orderStatus}`}>
+                          {ORDER_STATUS_OPTIONS.find(({ value }) => value === row.orderStatus)?.label ?? row.orderStatus}
+                        </span>
                         <span className={`status-badge status-${row.allocationStatus === 'allocated' ? 'allocated' : 'new'}`}>
                           {row.allocationStatus === 'allocated' ? '引当済（allocated）' : '未割当'}
                         </span>
