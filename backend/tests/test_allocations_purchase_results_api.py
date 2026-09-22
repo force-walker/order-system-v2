@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierAllocation
+from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, Supplier, SupplierAllocation
 
 
 engine = create_engine(
@@ -221,6 +221,43 @@ def test_purchase_result_create_get_list_update_bulk_upsert():
     )
     assert upsert.status_code == 200
     assert upsert.json()["upserted_count"] == 1
+
+
+def test_bulk_upsert_returns_ids_for_each_created_and_updated_result():
+    allocation_id = _seed_allocation(final_qty=10)
+    client = _client()
+
+    def request(qty: float):
+        return client.post(
+            "/api/v1/purchase-results/bulk-upsert",
+            json={
+                "items": [{
+                    "allocation_id": allocation_id,
+                    "purchased_qty": qty,
+                    "purchased_uom": "count",
+                    "result_status": "filled",
+                    "invoiceable_flag": True,
+                }]
+            },
+        )
+
+    created = request(2)
+    assert created.status_code == 200
+    assert created.json()["upserted_count"] == 1
+    created_ids = created.json()["purchase_result_ids"]
+    assert len(created_ids) == 1
+
+    db = TestingSessionLocal()
+    rows = db.query(PurchaseResult).filter(PurchaseResult.id.in_(created_ids)).all()
+    assert {row.id: row.allocation_id for row in rows} == {created_ids[0]: allocation_id}
+    db.close()
+
+    updated = request(3)
+    assert updated.status_code == 200
+    assert updated.json() == {
+        "upserted_count": 1,
+        "purchase_result_ids": created_ids,
+    }
 
 
 def test_purchase_result_defaults_supplier_from_allocation():

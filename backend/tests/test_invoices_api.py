@@ -501,6 +501,48 @@ def test_generate_draft_from_purchase_results_for_shipped_order_resolves_deliver
     assert invoice.json()["delivery_no"].startswith("DLV-")
 
 
+def test_draft_generation_filters_foreign_missing_and_invalid_purchase_result_ids():
+    target_order_id = _seed_order(with_items=True)
+    foreign_order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    target_result_id = _seed_purchase_result_for_order(target_order_id, purchased_qty=2)
+    foreign_result_id = _seed_purchase_result_for_order(foreign_order_id, purchased_qty=2)
+    client = _client()
+
+    mixed = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": target_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [target_result_id, foreign_result_id, 999999999, -1],
+        },
+    )
+    assert mixed.status_code == 201
+    assert mixed.json()["target_purchase_result_ids"] == [target_result_id]
+
+    for invalid_ids in ([foreign_result_id], [999999999], [-1]):
+        rejected = client.post(
+            "/api/v1/invoices/generate-draft-from-purchase-results",
+            json={
+                "order_id": target_order_id,
+                "invoice_date": str(date.today()),
+                "purchase_result_ids": invalid_ids,
+            },
+        )
+        assert rejected.status_code == 422
+        assert rejected.json()["detail"]["code"] == "PURCHASE_RESULTS_NOT_FOUND"
+
+    empty = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": target_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [],
+        },
+    )
+    assert empty.status_code == 422
+
+
 def test_generate_invoice_without_items_is_422():
     order_id = _seed_order(with_items=False)
     client = _client()

@@ -3676,11 +3676,7 @@ paths:
           content:
             application/json:
               schema:
-                additionalProperties:
-                  type: integer
-                type: object
-                title: Response Bulk Upsert Purchase Results Api V1 Purchase Results
-                  Bulk Upsert Post
+                $ref: '#/components/schemas/PurchaseResultBulkUpsertResponse'
         '422':
           description: Validation Error
           content:
@@ -9009,6 +9005,21 @@ components:
       required:
       - items
       title: PurchaseResultBulkUpsertRequest
+    PurchaseResultBulkUpsertResponse:
+      properties:
+        upserted_count:
+          type: integer
+          title: Upserted Count
+        purchase_result_ids:
+          items:
+            type: integer
+          type: array
+          title: Purchase Result Ids
+      type: object
+      required:
+      - upserted_count
+      - purchase_result_ids
+      title: PurchaseResultBulkUpsertResponse
     PurchaseResultCreateRequest:
       properties:
         allocation_id:

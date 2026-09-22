@@ -122,18 +122,18 @@ export const undeferPurchaseResult = async (resultId: number): Promise<PurchaseR
   return toItem((await res.json()) as ApiPurchaseResultResponse);
 };
 
-export const generateDraftInvoiceFromPurchase = async (payload: { invoiceNo: string; orderId: EntityId; invoiceDate: string }): Promise<EntityId> => {
+export const generateDraftInvoiceFromPurchase = async (payload: { orderId: EntityId; invoiceDate: string; purchaseResultIds: number[] }): Promise<EntityId> => {
   const res = await fetchWithAuth('/api/v1/invoices/generate-draft-from-purchase-results', {
     method: 'POST',
     body: {
-      invoice_no: payload.invoiceNo,
       order_id: payload.orderId,
       invoice_date: payload.invoiceDate,
+      purchase_result_ids: payload.purchaseResultIds,
     },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
-  const data = (await res.json()) as { id: EntityId };
-  return data.id;
+  const data = (await res.json()) as { invoice_id: EntityId };
+  return data.invoice_id;
 };
 
 const toRequestBody = (payload: PurchaseResultCreateRequest) => ({
@@ -164,13 +164,13 @@ export const createPurchaseResult = async (payload: PurchaseResultCreateRequest)
   return toItem(data);
 };
 
-export const bulkUpsertPurchaseResults = async (items: PurchaseResultCreateRequest[]): Promise<number> => {
+export const bulkUpsertPurchaseResults = async (items: PurchaseResultCreateRequest[]): Promise<{ count: number; resultIds: number[] }> => {
   const res = await fetchWithAuth('/api/v1/purchase-results/bulk-upsert', {
     method: 'POST',
     body: { items: items.map(toRequestBody) },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 
-  const data = (await res.json()) as { upserted_count: number };
-  return data.upserted_count;
+  const data = (await res.json()) as { upserted_count: number; purchase_result_ids: number[] };
+  return { count: data.upserted_count, resultIds: data.purchase_result_ids };
 };

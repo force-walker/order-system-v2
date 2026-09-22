@@ -106,7 +106,7 @@ npm run sync:openapi
 - Email verification delivery, password reset, MFA, rate limiting, and session cleanup are not implemented.
 - Tokens are stored in localStorage; production deployment requires HTTPS and a security review.
 - Allocation eligibility is not yet restricted to confirmed orders at both display and API-save layers.
-- The purchase-to-invoice-draft flow has a separate API contract mismatch (`purchase_result_ids` / `invoice_id`) and requires dedicated repair and tests.
+- Purchase Result `invoice_qty` still doubles as requested quantity and draft-generation idempotency marker; add a dedicated PurchaseResult-to-InvoiceItem link before split/partial invoicing.
 - The frontend production bundle still emits the existing large-chunk warning.
 
 ## Recent completed work
@@ -120,4 +120,5 @@ npm run sync:openapi
 - Atomic order creation: header and at least one item commit together or roll back together
 - Permanent Header/Detail numbering with immutable UUID-independent business references
 - Empty Header prevention, last Order-detail deletion rejection, and deprecated Header-only create APIs
+- Purchase-to-Invoice Draft contract aligned: bulk upsert returns `purchase_result_ids`, draft generation returns `invoice_id`, and the frontend no longer generates `DRAFT-*` invoice numbers.
 - Tailscale-oriented host startup and user documentation

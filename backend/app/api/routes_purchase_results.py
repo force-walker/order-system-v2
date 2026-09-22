@@ -11,6 +11,7 @@ from app.models.entities import Customer, Order, OrderItem, Product, PurchaseRes
 from app.schemas.common import ApiErrorResponse
 from app.schemas.purchase_result import (
     PurchaseResultBulkUpsertRequest,
+    PurchaseResultBulkUpsertResponse,
     PurchaseResultCreateRequest,
     PurchaseResultDeferRequest,
     PurchaseResultResponse,
@@ -380,10 +381,12 @@ def undefer_purchase_result(result_id: int, db: Session = Depends(get_db)) -> Pu
 
 @router.post(
     "/bulk-upsert",
+    response_model=PurchaseResultBulkUpsertResponse,
     responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
 )
-def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: Session = Depends(get_db)) -> dict[str, int]:
+def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: Session = Depends(get_db)) -> PurchaseResultBulkUpsertResponse:
     count = 0
+    result_ids: list[int] = []
     for item in payload.items:
         alloc = _get_allocation_or_404(db, item.allocation_id)
 
@@ -406,6 +409,7 @@ def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: S
             db.flush()
             write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.BULK_UPSERT_UPDATE)
         count += 1
+        result_ids.append(row.id)
 
     db.commit()
-    return {"upserted_count": count}
+    return PurchaseResultBulkUpsertResponse(upserted_count=count, purchase_result_ids=result_ids)

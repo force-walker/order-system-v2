@@ -3714,6 +3714,13 @@ export interface components {
             /** Items */
             items: components["schemas"]["PurchaseResultCreateRequest"][];
         };
+        /** PurchaseResultBulkUpsertResponse */
+        PurchaseResultBulkUpsertResponse: {
+            /** Upserted Count */
+            upserted_count: number;
+            /** Purchase Result Ids */
+            purchase_result_ids: number[];
+        };
         /** PurchaseResultCreateRequest */
         PurchaseResultCreateRequest: {
             /** Allocation Id */
@@ -8005,9 +8012,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["PurchaseResultBulkUpsertResponse"];
                 };
             };
             /** @description Not Found */

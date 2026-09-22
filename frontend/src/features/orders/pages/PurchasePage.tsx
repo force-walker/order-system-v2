@@ -256,10 +256,9 @@ export const PurchasePage = () => {
 
   const selectedCount = useMemo(() => rows.filter((r) => editByItemId[r.orderItemId]?.selected).length, [rows, editByItemId]);
 
-  const createDraftForOrder = async (orderId: EntityId, markerId: EntityId) => {
-    const invoiceNo = `DRAFT-${markerId}-${Date.now()}`;
+  const createDraftForOrder = async (orderId: EntityId, markerId: EntityId, purchaseResultIds: number[]) => {
     const invoiceDate = new Date().toISOString().slice(0, 10);
-    const invoiceId = await generateDraftInvoiceFromPurchase({ invoiceNo, orderId, invoiceDate });
+    const invoiceId = await generateDraftInvoiceFromPurchase({ orderId, invoiceDate, purchaseResultIds });
     setQueueDraftInvoiceId((prev) => ({ ...prev, [markerId]: invoiceId }));
     return invoiceId;
   };
@@ -332,14 +331,17 @@ export const PurchasePage = () => {
       let draftCreated = 0;
       for (const oid of uniqueOrderIds) {
         try {
-          await createDraftForOrder(oid, oid);
+          const resultIds = selectedRows
+            .map((row, index) => (row.orderId === oid ? upserted.resultIds[index] : undefined))
+            .filter((id): id is number => id !== undefined);
+          await createDraftForOrder(oid, oid, resultIds);
           draftCreated += 1;
         } catch {
           // keep partial success: purchase save should remain successful even if draft generation fails for some orders
         }
       }
 
-      setToast({ type: 'success', message: `納品確認を保存しました（${upserted}件）。請求ドラフト作成: ${draftCreated}件` });
+      setToast({ type: 'success', message: `納品確認を保存しました（${upserted.count}件）。請求ドラフト作成: ${draftCreated}件` });
       await load();
     } catch (e) {
       setToast({ type: 'error', message: toActionableMessage(e, '納品確認の保存に失敗しました。') });

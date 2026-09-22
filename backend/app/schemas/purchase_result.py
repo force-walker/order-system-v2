@@ -42,6 +42,11 @@ class PurchaseResultBulkUpsertRequest(BaseModel):
     items: list[PurchaseResultCreateRequest] = Field(min_length=1)
 
 
+class PurchaseResultBulkUpsertResponse(BaseModel):
+    upserted_count: int
+    purchase_result_ids: list[int]
+
+
 class PurchaseResultDeferRequest(BaseModel):
     defer_until: datetime | None = None
     defer_reason: str | None = Field(default=None, min_length=1, max_length=255)
