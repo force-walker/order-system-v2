@@ -461,7 +461,7 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                   </label>
 
                   <label>
-                    <input type="number" min={1} value={row.quantity} onChange={(ev) => handleItemChange(idx, 'quantity', ev.target.value)} />
+                    <input type="number" inputMode="decimal" min={1} value={row.quantity} onChange={(ev) => handleItemChange(idx, 'quantity', ev.target.value)} />
                     {e.quantity ? <small className="field-error">{e.quantity}</small> : null}
                   </label>
 
@@ -491,19 +491,19 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                     <div className="item-grid-row item-grid-row-secondary">
                       <label>
                         推定重量kg
-                        <input type="number" min={0} step="0.001" value={row.estimatedWeightKg} onChange={(ev) => handleItemChange(idx, 'estimatedWeightKg', ev.target.value)} />
+                        <input type="number" inputMode="decimal" min={0} step="0.001" value={row.estimatedWeightKg} onChange={(ev) => handleItemChange(idx, 'estimatedWeightKg', ev.target.value)} />
                         {e.estimatedWeightKg ? <small className="field-error">{e.estimatedWeightKg}</small> : null}
                       </label>
 
                       <label>
                         目標単価
-                        <input type="number" min={0} step="0.01" value={row.targetPrice} onChange={(ev) => handleItemChange(idx, 'targetPrice', ev.target.value)} />
+                        <input type="number" inputMode="decimal" min={0} step="0.01" value={row.targetPrice} onChange={(ev) => handleItemChange(idx, 'targetPrice', ev.target.value)} />
                         {e.targetPrice ? <small className="field-error">{e.targetPrice}</small> : null}
                       </label>
 
                       <label>
                         価格上限
-                        <input type="number" min={0} step="0.01" value={row.priceCeiling} onChange={(ev) => handleItemChange(idx, 'priceCeiling', ev.target.value)} />
+                        <input type="number" inputMode="decimal" min={0} step="0.01" value={row.priceCeiling} onChange={(ev) => handleItemChange(idx, 'priceCeiling', ev.target.value)} />
                         {e.priceCeiling ? <small className="field-error">{e.priceCeiling}</small> : null}
                       </label>
 

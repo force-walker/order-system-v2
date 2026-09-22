@@ -212,17 +212,17 @@ export const ProductSupplierMappingPanel = ({ productId }: Props) => {
 
           <label>
             priority
-            <input type="number" min={1} max={9999} value={form.priority} onChange={(e) => setForm((prev) => ({ ...prev, priority: Number(e.target.value) }))} />
+            <input type="number" inputMode="numeric" min={1} max={9999} value={form.priority} onChange={(e) => setForm((prev) => ({ ...prev, priority: Number(e.target.value) }))} />
           </label>
 
           <label>
             lead_time_days
-            <input type="number" min={0} value={form.leadTimeDays} onChange={(e) => setForm((prev) => ({ ...prev, leadTimeDays: e.target.value }))} />
+            <input type="number" inputMode="numeric" min={0} value={form.leadTimeDays} onChange={(e) => setForm((prev) => ({ ...prev, leadTimeDays: e.target.value }))} />
           </label>
 
           <label>
             default_unit_cost
-            <input type="number" min={0} step="0.01" value={form.defaultUnitCost} onChange={(e) => setForm((prev) => ({ ...prev, defaultUnitCost: e.target.value }))} />
+            <input type="number" inputMode="decimal" min={0} step="0.01" value={form.defaultUnitCost} onChange={(e) => setForm((prev) => ({ ...prev, defaultUnitCost: e.target.value }))} />
           </label>
 
           <label>

@@ -606,6 +606,7 @@ export const OrderItemBulkAllocationPage = () => {
                       <td className="col-allocated-qty">
                         <input
                           type="number"
+                          inputMode="decimal"
                           min={0}
                           step="1"
                           value={edit?.manualQty ?? ''}

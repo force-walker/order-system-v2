@@ -474,6 +474,7 @@ export const PurchasePage = () => {
                       <td className="col-invoice">
                         <input
                           type="number"
+                          inputMode="decimal"
                           min={0}
                           step="1"
                           data-invoice-row={rowIndex}
@@ -514,6 +515,7 @@ export const PurchasePage = () => {
                       <td className="col-unit-cost">
                         <input
                           type="number"
+                          inputMode="decimal"
                           min={0}
                           step="0.01"
                           data-unitcost-row={rowIndex}

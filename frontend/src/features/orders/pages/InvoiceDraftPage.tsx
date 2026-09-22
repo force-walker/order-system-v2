@@ -305,6 +305,7 @@ export const InvoiceDraftPage = () => {
                       <td style={{ textAlign: 'right', minWidth: 140 }}>
                         <input
                           type="number"
+                          inputMode="decimal"
                           min="0"
                           step="0.01"
                           value={priceInputs[row.invoiceItemId] ?? String(row.salesUnitPrice)}
