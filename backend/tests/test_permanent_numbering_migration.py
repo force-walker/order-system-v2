@@ -63,7 +63,15 @@ def test_backfill_preserves_uuid_and_legacy_number_strings(pg):
     )
 
     with Operations.context(MigrationContext.configure(pg)):
-        for revision in ("2026092002", "2026092003", "2026092004", "2026092005", "2026092006", "2026092007"):
+        for revision in (
+            "2026092002",
+            "2026092003",
+            "2026092004",
+            "2026092005",
+            "2026092006",
+            "2026092007",
+            "2026092008",
+        ):
             _migration(revision).upgrade()
 
     order = pg.execute(
@@ -98,7 +106,15 @@ def test_business_number_consistency_on_insert_update_and_legacy_backfill(pg):
     )
 
     with Operations.context(MigrationContext.configure(pg)):
-        for revision in ("2026092002", "2026092003", "2026092004", "2026092005", "2026092006", "2026092007"):
+        for revision in (
+            "2026092002",
+            "2026092003",
+            "2026092004",
+            "2026092005",
+            "2026092006",
+            "2026092007",
+            "2026092008",
+        ):
             _migration(revision).upgrade()
 
     # Existing legacy formats remain unchanged and unrelated updates are valid.

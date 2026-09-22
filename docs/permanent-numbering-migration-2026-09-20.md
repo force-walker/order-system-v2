@@ -1,7 +1,7 @@
 # Permanent document / line numbering migration
 
 Approved: 2026-09-20
-Implemented migrations: `2026092002` → `2026092007`
+Implemented migrations: `2026092002` → `2026092008`
 
 ## Authoritative identifiers
 
@@ -49,6 +49,7 @@ Concurrency-safe legacy ID sequences are `orders_legacy_id_seq`, `order_items_le
 5. `2026092005`: validate that no header is empty; add deferred PostgreSQL constraint triggers and immutable business-number triggers.
 6. `2026092006`: serialize deferred Detail deletion checks with a `FOR UPDATE` Header lock; make issued Header business-number strings immutable; align SQLAlchemy NOT NULL metadata with the database.
 7. `2026092007`: enforce the PostgreSQL-level consistency of `order_no`, `delivery_no`, and `invoice_draft_no` with their Header `document_seq` on INSERT and whenever either value changes. Unchanged legacy backfill number strings remain valid.
+8. `2026092008`: validate every existing Detail `line_ref` without rewriting it, then enforce on PostgreSQL INSERT/UPDATE that `ODL`/`DLI`/`IVL`, the parent Header `document_seq`, and immutable `line_no` exactly form the authoritative `line_ref`. Violations use SQLSTATE `23514`; positive non-multiple values such as `line_no=15` remain valid.
 
 Every Header + Detail creation path uses one database transaction. Header-only Order and Invoice creation APIs are deprecated and return `422`. Application checks reject deletion of the last Order detail; deferred database triggers protect Order, Delivery, and Invoice aggregates at commit even when SQL bypasses the API.
 
