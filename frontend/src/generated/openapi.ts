@@ -2338,9 +2338,15 @@ export interface components {
              * @description Authoritative globally unique human-readable line reference
              */
             line_ref?: string | null;
-            /** Delivered Qty */
+            /**
+             * Delivered Qty
+             * @description Quantity delivered to the customer on the Product.order_uom axis
+             */
             delivered_qty: number;
-            /** Delivered Uom */
+            /**
+             * Delivered Uom
+             * @description Customer order UOM copied from Product.order_uom
+             */
             delivered_uom: string;
             /**
              * Shipped Date

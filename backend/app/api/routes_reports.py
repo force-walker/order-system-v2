@@ -168,7 +168,7 @@ def shipping_report(
     alloc = _latest_allocation_subquery(db)
 
     query = (
-        db.query(DeliveryItem, Delivery, Customer, Product, alloc.c.final_supplier_id, alloc.c.final_qty, Supplier)
+        db.query(DeliveryItem, Delivery, Customer, Product, alloc.c.final_supplier_id, Supplier)
         .join(Delivery, DeliveryItem.delivery_id == Delivery.id)
         .join(Customer, Delivery.customer_id == Customer.id)
         .join(Product, DeliveryItem.product_id == Product.id)
@@ -184,8 +184,7 @@ def shipping_report(
 
     rows = query.all()
     result: list[ShippingReportRow] = []
-    for item, delivery, customer, product, _supplier_id, final_qty, supplier in rows:
-        qty = float(final_qty) if final_qty is not None else float(item.delivered_qty)
+    for item, delivery, customer, product, _supplier_id, supplier in rows:
         result.append(
             ShippingReportRow(
                 delivery_id=delivery.id,
@@ -196,8 +195,8 @@ def shipping_report(
                 supplier_name=(supplier.name if supplier is not None else None),
                 customer_name=customer.name,
                 product_name=product.name,
-                quantity=qty,
-                unit=product.order_uom,
+                quantity=float(item.delivered_qty),
+                unit=item.delivered_uom,
             )
         )
 

@@ -35,6 +35,7 @@ Detailed procedures:
 - `docs/audit-identity-repair.md`
 - `docs/uuid-frontend-repair.md`
 - `docs/permanent-numbering-migration-2026-09-20.md`
+- `docs/delivery-uom-semantics.md`
 
 ## Authentication behavior
 
@@ -108,6 +109,7 @@ npm run sync:openapi
 - Allocation eligibility is not yet restricted to confirmed orders at both display and API-save layers.
 - Purchase Result UOM semantics are explicit: `purchased_qty` / `purchased_uom` use `Product.purchase_uom`; catch-weight measurements use only `PurchaseResult.actual_weight_kg` (the legacy `OrderItem.actual_weight_kg` column is not synchronized).
 - `PurchaseResult.invoice_qty` is server-managed. Draft generation locks and atomically claims every selected Purchase Result, storing the actual invoiced quantity snapshot (`purchased_qty` for fixed-unit items, `actual_weight_kg` for catch-weight items). Finalize/reset/cancel do not release that claim. A direct PurchaseResult-to-InvoiceItem link is still required before cancel/rebilling can be supported safely.
+- Delivery quantity is independent from Invoice quantity: `DeliveryItem.delivered_qty` stays on the Order quantity axis and `delivered_uom` is `Product.order_uom`. Catch-weight is not copied into Delivery; `PurchaseResult.actual_weight_kg` remains authoritative for Invoice billing.
 - The frontend production bundle still emits the existing large-chunk warning.
 
 ## Recent completed work

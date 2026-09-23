@@ -129,6 +129,8 @@ def test_shipping_report_same_date_and_sort_modes():
     assert len(by_supplier.json()) == 2
     assert by_supplier.json()[0]["delivery_no"].startswith("DLV-")
     assert by_supplier.json()[0]["supplier_name"] <= by_supplier.json()[1]["supplier_name"]
+    assert all(float(row["quantity"]) == 5 for row in by_supplier.json())
+    assert all(row["unit"] == "count" for row in by_supplier.json())
 
     by_customer = client.get(f"/api/v1/reports/shipping?shipped_date={sdate}&mode=customer")
     assert by_customer.status_code == 200

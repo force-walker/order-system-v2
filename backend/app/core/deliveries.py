@@ -1,18 +1,16 @@
 from sqlalchemy.orm import Session
 
 from app.core.numbering import ensure_delivery_header_numbers, ensure_delivery_item_number, ensure_order_delivery_number
-from app.models.entities import Delivery, DeliveryItem, Order, OrderItem, PricingBasis, Product
+from app.models.entities import Delivery, DeliveryItem, Order, OrderItem, Product
 
 
 def _delivered_qty(order_item: OrderItem) -> float:
-    if order_item.pricing_basis == PricingBasis.uom_kg and order_item.actual_weight_kg is not None:
-        return float(order_item.actual_weight_kg)
+    """Delivery stays on the customer order quantity axis."""
     return float(order_item.ordered_qty)
 
 
-def _delivered_uom(order_item: OrderItem, product: Product) -> str:
-    if order_item.pricing_basis == PricingBasis.uom_kg:
-        return "kg"
+def _delivered_uom(product: Product) -> str:
+    """Measured weight belongs to PurchaseResult and is not copied to Delivery."""
     return product.order_uom
 
 
@@ -59,7 +57,7 @@ def ensure_delivery_document(db: Session, order: Order) -> Delivery:
     }
     for order_item, product in rows:
         delivered_qty = _delivered_qty(order_item)
-        delivered_uom = _delivered_uom(order_item, product)
+        delivered_uom = _delivered_uom(product)
         item = existing_items.get(order_item.id)
         if item is None:
             item = DeliveryItem(

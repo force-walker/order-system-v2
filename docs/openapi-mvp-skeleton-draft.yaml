@@ -6026,9 +6026,12 @@ components:
         delivered_qty:
           type: number
           title: Delivered Qty
+          description: Quantity delivered to the customer on the Product.order_uom
+            axis
         delivered_uom:
           type: string
           title: Delivered Uom
+          description: Customer order UOM copied from Product.order_uom
         shipped_date:
           type: string
           format: date

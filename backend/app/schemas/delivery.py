@@ -45,8 +45,8 @@ class DeliveryItemResponse(BaseModel):
     delivery_line_no: str = Field(deprecated=True, description="Deprecated compatibility field; new rows mirror line_ref, not the legacy value format")
     line_no: int | None = Field(default=None, description="Immutable business line number within the Delivery")
     line_ref: str | None = Field(default=None, description="Authoritative globally unique human-readable line reference")
-    delivered_qty: float
-    delivered_uom: str
+    delivered_qty: float = Field(description="Quantity delivered to the customer on the Product.order_uom axis")
+    delivered_uom: str = Field(description="Customer order UOM copied from Product.order_uom")
     shipped_date: date
     created_at: datetime
     updated_at: datetime
