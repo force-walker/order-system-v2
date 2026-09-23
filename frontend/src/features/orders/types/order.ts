@@ -159,6 +159,7 @@ export type PurchaseResultItem = {
   productName?: string;
   purchasedQty: number;
   purchasedUom: string;
+  purchaseUom?: string;
   receivedQty?: number;
   orderUom?: string;
   invoiceQty?: number;
@@ -199,7 +200,6 @@ export type PurchaseResultCreateRequest = {
   purchasedQty: number;
   purchasedUom: string;
   actualWeightKg?: number;
-  invoiceQty?: number;
   unitCost?: number;
   finalUnitCost?: number;
   shortageQty?: number;

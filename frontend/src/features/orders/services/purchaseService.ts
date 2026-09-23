@@ -22,6 +22,7 @@ type ApiPurchaseResultResponse = {
   product_name?: string | null;
   purchased_qty: number;
   purchased_uom: string;
+  purchase_uom?: string | null;
   received_qty?: number | null;
   order_uom?: string | null;
   invoice_qty?: number | null;
@@ -55,6 +56,7 @@ const toItem = (row: ApiPurchaseResultResponse): PurchaseResultItem => ({
   productName: row.product_name ?? undefined,
   purchasedQty: row.purchased_qty,
   purchasedUom: row.purchased_uom,
+  purchaseUom: row.purchase_uom ?? undefined,
   receivedQty: row.received_qty ?? undefined,
   orderUom: row.order_uom ?? undefined,
   invoiceQty: row.invoice_qty ?? undefined,
@@ -142,7 +144,6 @@ const toRequestBody = (payload: PurchaseResultCreateRequest) => ({
   purchased_qty: payload.purchasedQty,
   purchased_uom: payload.purchasedUom,
   actual_weight_kg: payload.actualWeightKg ?? null,
-  invoice_qty: payload.invoiceQty ?? null,
   unit_cost: payload.unitCost ?? null,
   final_unit_cost: payload.finalUnitCost ?? null,
   shortage_qty: payload.shortageQty ?? null,

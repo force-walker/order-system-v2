@@ -40,6 +40,39 @@ def _default_supplier_id(payload_supplier_id: int | None, alloc: SupplierAllocat
     return alloc.suggested_supplier_id
 
 
+def _normalize_uom(value: str) -> str:
+    return value.strip().casefold()
+
+
+def _get_product_for_allocation(db: Session, alloc: SupplierAllocation) -> Product:
+    product = (
+        db.query(Product)
+        .join(OrderItem, OrderItem.product_id == Product.id)
+        .filter(OrderItem.id == alloc.order_item_id)
+        .first()
+    )
+    if product is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "allocation product not found"})
+    return product
+
+
+def _validate_purchase_uom(db: Session, *, alloc: SupplierAllocation, purchased_uom: str) -> Product:
+    product = _get_product_for_allocation(db, alloc)
+    actual = _normalize_uom(purchased_uom)
+    expected = _normalize_uom(product.purchase_uom)
+    allocation_uom = _normalize_uom(alloc.final_uom) if alloc.final_uom else None
+    if actual != expected or allocation_uom != expected:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "PURCHASE_UOM_MISMATCH",
+                "message": "purchased_uom must match product.purchase_uom and allocation.final_uom",
+                "details": [{"purchased_uom": purchased_uom, "purchase_uom": product.purchase_uom, "allocation_uom": alloc.final_uom}],
+            },
+        )
+    return product
+
+
 def _validate_quantity_limit(
     db: Session,
     *,
@@ -73,6 +106,8 @@ def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseRe
     product_id = None
     product_name = None
     invoice_uom = None
+    order_uom = row.purchased_uom
+    purchase_uom = row.purchased_uom
     order_id = None
     customer_id = None
     customer_name = None
@@ -84,6 +119,8 @@ def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseRe
             if product is not None:
                 product_id = product.id
                 product_name = product.name
+                order_uom = product.order_uom
+                purchase_uom = product.purchase_uom
                 invoice_uom = product.invoice_uom
 
             order = db.query(Order).filter(Order.id == order_item.order_id).first()
@@ -109,7 +146,8 @@ def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseRe
         purchased_qty=float(row.purchased_qty),
         purchased_uom=row.purchased_uom,
         received_qty=float(row.purchased_qty),
-        order_uom=row.purchased_uom,
+        order_uom=order_uom,
+        purchase_uom=purchase_uom,
         invoice_qty=float(row.invoice_qty) if row.invoice_qty is not None else None,
         invoice_uom=invoice_uom,
         customer_id=customer_id,
@@ -145,6 +183,7 @@ def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseRe
 )
 def create_purchase_result(payload: PurchaseResultCreateRequest, db: Session = Depends(get_db)) -> PurchaseResultResponse:
     alloc = _get_allocation_or_404(db, payload.allocation_id)
+    _validate_purchase_uom(db, alloc=alloc, purchased_uom=payload.purchased_uom)
     _validate_quantity_limit(db, alloc=alloc, incoming_qty=payload.purchased_qty)
 
     row = PurchaseResult(
@@ -315,12 +354,18 @@ def update_purchase_result(result_id: int, payload: PurchaseResultUpdateRequest,
     row = db.query(PurchaseResult).filter(PurchaseResult.id == result_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "purchase result not found"})
+    if row.invoice_qty is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "PURCHASE_RESULT_ALREADY_CLAIMED", "message": "claimed purchase result cannot be edited"},
+        )
 
     data = payload.model_dump(exclude_unset=True)
     for k, v in data.items():
         setattr(row, k, v)
 
     alloc = _get_allocation_or_404(db, row.allocation_id)
+    _validate_purchase_uom(db, alloc=alloc, purchased_uom=row.purchased_uom)
     _validate_quantity_limit(db, alloc=alloc, incoming_qty=row.purchased_qty, exclude_result_id=row.id)
 
     if row.supplier_id is None:
@@ -389,6 +434,7 @@ def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: S
     result_ids: list[int] = []
     for item in payload.items:
         alloc = _get_allocation_or_404(db, item.allocation_id)
+        _validate_purchase_uom(db, alloc=alloc, purchased_uom=item.purchased_uom)
 
         row = db.query(PurchaseResult).filter(PurchaseResult.allocation_id == item.allocation_id).first()
         if row is None:
@@ -401,6 +447,11 @@ def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: S
             db.flush()
             write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.BULK_UPSERT_CREATE)
         else:
+            if row.invoice_qty is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "PURCHASE_RESULT_ALREADY_CLAIMED", "message": "claimed purchase result cannot be edited"},
+                )
             for k, v in item.model_dump().items():
                 setattr(row, k, v)
             if row.supplier_id is None:

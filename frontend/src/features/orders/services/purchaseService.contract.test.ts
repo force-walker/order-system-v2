@@ -21,6 +21,7 @@ it('maps bulk-upsert response IDs to the frontend contract', async () => {
       allocationId: 11,
       purchasedQty: 2,
       purchasedUom: 'count',
+      actualWeightKg: 21.73,
       resultStatus: 'filled',
       invoiceableFlag: true,
     },
@@ -38,11 +39,13 @@ it('maps bulk-upsert response IDs to the frontend contract', async () => {
     method: 'POST',
     body: {
       items: [
-        expect.objectContaining({ allocation_id: 11, purchased_qty: 2 }),
+        expect.objectContaining({ allocation_id: 11, purchased_qty: 2, actual_weight_kg: 21.73 }),
         expect.objectContaining({ allocation_id: 22, purchased_qty: 3 }),
       ],
     },
   });
+  const body = request.mock.calls[0][1]?.body as { items: Array<Record<string, unknown>> };
+  expect(body.items[0]).not.toHaveProperty('invoice_qty');
 });
 
 it('sends purchase-result IDs and consumes invoice_id without a frontend draft number', async () => {

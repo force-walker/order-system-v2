@@ -55,8 +55,11 @@ beforeEach(() => {
   vi.mocked(listPurchaseResults).mockResolvedValue({ items: [], total: 0 });
   vi.mocked(getProductDetail).mockImplementation(async (id) => ({
     id,
-    orderUom: 'count',
-    invoiceUom: 'count',
+    orderUom: id === 1 ? 'CTN' : 'PC',
+    purchaseUom: id === 1 ? 'CTN' : 'PC',
+    invoiceUom: id === 1 ? 'KG' : 'PC',
+    isCatchWeight: id === 1,
+    weightCaptureRequired: id === 1,
   } as Awaited<ReturnType<typeof getProductDetail>>));
   vi.mocked(bulkUpsertPurchaseResults).mockResolvedValue({ count: 2, resultIds: [101, 202] });
   vi.mocked(generateDraftInvoiceFromPurchase)
@@ -72,12 +75,17 @@ it('passes only each order\'s returned purchase-result IDs to draft generation',
 
   const rowA = (await screen.findByText('ORD-A')).closest('tr');
   const rowB = screen.getByText('ORD-B').closest('tr');
+  await actor.type(screen.getByRole('spinbutton', { name: 'Product A 実測重量' }), '21.73');
   await actor.click(rowA!.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await actor.click(rowB!.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await actor.click(screen.getByRole('button', { name: '選択行を保存 (2)' }));
 
   await waitFor(() => expect(generateDraftInvoiceFromPurchase).toHaveBeenCalledTimes(2));
   expect(bulkUpsertPurchaseResults).toHaveBeenCalledTimes(1);
+  expect(bulkUpsertPurchaseResults).toHaveBeenCalledWith([
+    expect.objectContaining({ allocationId: 11, purchasedUom: 'CTN', actualWeightKg: 21.73 }),
+    expect.objectContaining({ allocationId: 22, purchasedUom: 'PC', actualWeightKg: undefined }),
+  ]);
   expect(generateDraftInvoiceFromPurchase).toHaveBeenNthCalledWith(1, {
     orderId: 'order-a',
     invoiceDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),

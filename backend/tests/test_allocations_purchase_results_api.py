@@ -522,7 +522,7 @@ def test_purchase_result_work_queue_and_history_separation():
     assert deferred_id in hist_ids
 
 
-def test_purchase_result_invoice_qty_persists_after_save():
+def test_purchase_result_invoice_qty_is_server_managed():
     aid = _seed_allocation(final_qty=10)
     client = _client()
 
@@ -538,17 +538,39 @@ def test_purchase_result_invoice_qty_persists_after_save():
             "invoiceable_flag": True,
         },
     )
-    assert created.status_code == 201
-    rid = created.json()["id"]
-    assert float(created.json()["invoice_qty"]) == 3.0
+    assert created.status_code == 422
 
-    got = client.get(f"/api/v1/purchase-results/{rid}")
-    assert got.status_code == 200
-    assert float(got.json()["invoice_qty"]) == 3.0
 
-    listed = client.get(f"/api/v1/purchase-results?allocation_id={aid}")
-    assert listed.status_code == 200
-    assert any(float(r["invoice_qty"]) == 3.0 for r in listed.json() if r["id"] == rid)
+def test_purchase_result_requires_product_purchase_uom_and_reports_distinct_uoms():
+    aid = _seed_allocation(final_qty=10)
+    db = TestingSessionLocal()
+    allocation = db.query(SupplierAllocation).filter(SupplierAllocation.id == aid).one()
+    item = db.query(OrderItem).filter(OrderItem.id == allocation.order_item_id).one()
+    product = db.query(Product).filter(Product.id == item.product_id).one()
+    product.order_uom = "CTN"
+    product.purchase_uom = "CASE"
+    product.invoice_uom = "KG"
+    allocation.final_uom = "CASE"
+    db.commit()
+    db.close()
+    client = _client()
+
+    rejected = client.post(
+        "/api/v1/purchase-results",
+        json={"allocation_id": aid, "purchased_qty": 2, "purchased_uom": "CTN", "result_status": "filled", "invoiceable_flag": True},
+    )
+    assert rejected.status_code == 422
+    assert rejected.json()["detail"]["code"] == "PURCHASE_UOM_MISMATCH"
+
+    created = client.post(
+        "/api/v1/purchase-results",
+        json={"allocation_id": aid, "purchased_qty": 2, "purchased_uom": "CASE", "actual_weight_kg": 21.73, "result_status": "filled", "invoiceable_flag": True},
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["order_uom"] == "CTN"
+    assert created.json()["purchase_uom"] == "CASE"
+    assert created.json()["purchased_uom"] == "CASE"
+    assert created.json()["invoice_uom"] == "KG"
 
 
 def test_purchase_result_unit_cost_negative_is_422():
@@ -567,3 +589,29 @@ def test_purchase_result_unit_cost_negative_is_422():
         },
     )
     assert bad.status_code == 422
+
+
+def test_claimed_purchase_result_cannot_be_edited_or_bulk_overwritten():
+    aid = _seed_allocation(final_qty=5)
+    client = _client()
+    created = client.post(
+        "/api/v1/purchase-results",
+        json={"allocation_id": aid, "purchased_qty": 2, "purchased_uom": "count", "result_status": "filled", "invoiceable_flag": True},
+    )
+    assert created.status_code == 201
+    result_id = created.json()["id"]
+    db = TestingSessionLocal()
+    db.query(PurchaseResult).filter(PurchaseResult.id == result_id).one().invoice_qty = 2
+    db.commit()
+    db.close()
+
+    patched = client.patch(f"/api/v1/purchase-results/{result_id}", json={"actual_weight_kg": 10.5})
+    assert patched.status_code == 409
+    assert patched.json()["detail"]["code"] == "PURCHASE_RESULT_ALREADY_CLAIMED"
+
+    bulk = client.post(
+        "/api/v1/purchase-results/bulk-upsert",
+        json={"items": [{"allocation_id": aid, "purchased_qty": 3, "purchased_uom": "count", "result_status": "filled", "invoiceable_flag": True}]},
+    )
+    assert bulk.status_code == 409
+    assert bulk.json()["detail"]["code"] == "PURCHASE_RESULT_ALREADY_CLAIMED"

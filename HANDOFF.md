@@ -106,7 +106,8 @@ npm run sync:openapi
 - Email verification delivery, password reset, MFA, rate limiting, and session cleanup are not implemented.
 - Tokens are stored in localStorage; production deployment requires HTTPS and a security review.
 - Allocation eligibility is not yet restricted to confirmed orders at both display and API-save layers.
-- Purchase Result `invoice_qty` still doubles as requested quantity and draft-generation idempotency marker; add a dedicated PurchaseResult-to-InvoiceItem link before split/partial invoicing.
+- Purchase Result UOM semantics are explicit: `purchased_qty` / `purchased_uom` use `Product.purchase_uom`; catch-weight measurements use only `PurchaseResult.actual_weight_kg` (the legacy `OrderItem.actual_weight_kg` column is not synchronized).
+- `PurchaseResult.invoice_qty` is server-managed. Draft generation locks and atomically claims every selected Purchase Result, storing the actual invoiced quantity snapshot (`purchased_qty` for fixed-unit items, `actual_weight_kg` for catch-weight items). Finalize/reset/cancel do not release that claim. A direct PurchaseResult-to-InvoiceItem link is still required before cancel/rebilling can be supported safely.
 - The frontend production bundle still emits the existing large-chunk warning.
 
 ## Recent completed work

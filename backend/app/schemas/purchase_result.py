@@ -1,17 +1,18 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.entities import PurchaseResultStatus
 
 
 class PurchaseResultCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     allocation_id: int = Field(gt=0)
     supplier_id: int | None = Field(default=None, gt=0)
     purchased_qty: float = Field(gt=0)
     purchased_uom: str = Field(min_length=1, max_length=32)
     actual_weight_kg: float | None = Field(default=None, gt=0)
-    invoice_qty: float | None = Field(default=None, ge=0)
     unit_cost: float | None = Field(default=None, ge=0)
     final_unit_cost: float | None = Field(default=None, ge=0)
     shortage_qty: float | None = Field(default=None, ge=0)
@@ -23,11 +24,12 @@ class PurchaseResultCreateRequest(BaseModel):
 
 
 class PurchaseResultUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     supplier_id: int | None = Field(default=None, gt=0)
     purchased_qty: float | None = Field(default=None, gt=0)
     purchased_uom: str | None = Field(default=None, min_length=1, max_length=32)
     actual_weight_kg: float | None = Field(default=None, gt=0)
-    invoice_qty: float | None = Field(default=None, ge=0)
     unit_cost: float | None = Field(default=None, ge=0)
     final_unit_cost: float | None = Field(default=None, ge=0)
     shortage_qty: float | None = Field(default=None, ge=0)
@@ -63,7 +65,11 @@ class PurchaseResultResponse(BaseModel):
     purchased_uom: str
     received_qty: float
     order_uom: str
-    invoice_qty: float | None = None
+    purchase_uom: str
+    invoice_qty: float | None = Field(
+        default=None,
+        description="Server-managed invoiced-quantity snapshot and claim marker; clients must not submit this field.",
+    )
     invoice_uom: str | None = None
     customer_id: int | None = None
     customer_name: str | None = None

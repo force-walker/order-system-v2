@@ -21,14 +21,16 @@ import { toActionableMessage } from 'shared/error';
 type RowEdit = {
   selected: boolean;
   purchaseUnitCost: string;
-  invoiceQty: string;
-  invoiceUom: string;
+  actualWeightKg: string;
   rowError?: string;
 };
 
 type UnitPair = {
   orderUom: string;
+  purchaseUom: string;
   invoiceUom: string;
+  isCatchWeight: boolean;
+  weightCaptureRequired: boolean;
 };
 
 type SortKey = 'customerName' | 'productName' | 'supplierName';
@@ -78,17 +80,17 @@ export const PurchasePage = () => {
       setSuppliers(supplierOptions);
       setQueueItems(queue.items);
 
-      const invoiceQtyByAllocationId = new Map<number, number | undefined>();
+      const actualWeightByAllocationId = new Map<number, number | undefined>();
       const unitCostByAllocationId = new Map<number, number | undefined>();
       const persistedByAllocationId: Record<number, PurchaseResultItem> = {};
       persisted.items.forEach((q) => {
-        invoiceQtyByAllocationId.set(q.allocationId, q.invoiceQty);
+        actualWeightByAllocationId.set(q.allocationId, q.actualWeightKg);
         unitCostByAllocationId.set(q.allocationId, q.unitCost);
         persistedByAllocationId[q.allocationId] = q;
       });
       queue.items.forEach((q) => {
-        if (!invoiceQtyByAllocationId.has(q.allocationId)) {
-          invoiceQtyByAllocationId.set(q.allocationId, q.invoiceQty);
+        if (!actualWeightByAllocationId.has(q.allocationId)) {
+          actualWeightByAllocationId.set(q.allocationId, q.actualWeightKg);
         }
         if (!persistedByAllocationId[q.allocationId]) {
           persistedByAllocationId[q.allocationId] = q;
@@ -122,9 +124,15 @@ export const PurchasePage = () => {
           try {
             const p = await getProductDetail(productId);
             if (!p) throw new Error('product not found');
-            return [productId, { orderUom: p.orderUom, invoiceUom: p.invoiceUom }] as const;
+            return [productId, {
+              orderUom: p.orderUom,
+              purchaseUom: p.purchaseUom,
+              invoiceUom: p.invoiceUom,
+              isCatchWeight: p.isCatchWeight,
+              weightCaptureRequired: p.weightCaptureRequired,
+            }] as const;
           } catch {
-            return [productId, { orderUom: 'count', invoiceUom: 'count' }] as const;
+            return [productId, { orderUom: 'count', purchaseUom: 'count', invoiceUom: 'count', isCatchWeight: false, weightCaptureRequired: false }] as const;
           }
         }),
       );
@@ -134,16 +142,14 @@ export const PurchasePage = () => {
       setEditByItemId((prev) =>
         Object.fromEntries(
           filtered.map((r) => {
-            const restoredInvoiceQty = typeof r.allocationId === 'number' ? invoiceQtyByAllocationId.get(r.allocationId) : undefined;
+            const restoredActualWeight = typeof r.allocationId === 'number' ? actualWeightByAllocationId.get(r.allocationId) : undefined;
             const restoredUnitCost = typeof r.allocationId === 'number' ? unitCostByAllocationId.get(r.allocationId) : undefined;
-            const units = unitsByProductIdLocal[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
             return [
               r.orderItemId,
               {
                 selected: prev[r.orderItemId]?.selected ?? false,
                 purchaseUnitCost: prev[r.orderItemId]?.purchaseUnitCost ?? (restoredUnitCost != null ? String(restoredUnitCost) : ''),
-                invoiceQty: prev[r.orderItemId]?.invoiceQty ?? (restoredInvoiceQty != null ? String(restoredInvoiceQty) : ''),
-                invoiceUom: prev[r.orderItemId]?.invoiceUom ?? units.invoiceUom,
+                actualWeightKg: prev[r.orderItemId]?.actualWeightKg ?? (restoredActualWeight != null ? String(restoredActualWeight) : ''),
                 rowError: undefined,
               },
             ];
@@ -272,10 +278,10 @@ export const PurchasePage = () => {
 
     const payload = selectedRows.map((r) => {
       const edit = editByItemId[r.orderItemId];
-      const units = unitsByProductId[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
+      const units = unitsByProductId[r.productId] ?? { orderUom: 'count', purchaseUom: 'count', invoiceUom: 'count', isCatchWeight: false, weightCaptureRequired: false };
       const received = Number(r.manualQty ?? r.orderedQty);
-      const invoiceText = edit.invoiceQty.trim();
-      const invoiced = invoiceText === '' ? undefined : Number(invoiceText);
+      const actualWeightText = edit.actualWeightKg.trim();
+      const actualWeightKg = actualWeightText === '' ? undefined : Number(actualWeightText);
       const unitCostText = edit.purchaseUnitCost.trim();
       const unitCost = unitCostText === '' ? undefined : Number(unitCostText);
       const shortage = Math.max(r.orderedQty - received, 0);
@@ -285,9 +291,9 @@ export const PurchasePage = () => {
           allocationId: Number(r.allocationId),
           supplierId: r.manualSupplierId ?? undefined,
           purchasedQty: received,
-          purchasedUom: units.orderUom,
+          purchasedUom: units.purchaseUom,
           unitCost,
-          invoiceQty: invoiced,
+          actualWeightKg,
           shortageQty: shortage > 0 ? shortage : undefined,
           resultStatus: shortage > 0 ? ('partially_filled' as const) : ('filled' as const),
           invoiceableFlag: true,
@@ -304,15 +310,15 @@ export const PurchasePage = () => {
         if (Number.isNaN(parsedUnitCost) || parsedUnitCost < 0) return true;
       }
 
-      const invoiceRaw = editByItemId[p.orderItemId]?.invoiceQty ?? '';
-      if (invoiceRaw.trim() !== '') {
-        const parsed = Number(invoiceRaw);
-        if (Number.isNaN(parsed) || parsed < 0) return true;
+      const actualWeightRaw = editByItemId[p.orderItemId]?.actualWeightKg ?? '';
+      if (actualWeightRaw.trim() !== '') {
+        const parsed = Number(actualWeightRaw);
+        if (Number.isNaN(parsed) || parsed <= 0) return true;
       }
       return false;
     });
     if (invalid.length > 0) {
-      setToast({ type: 'error', message: '受取数量/請求数量の数値入力を確認してください。' });
+      setToast({ type: 'error', message: '受取数量/実測重量の数値入力を確認してください。' });
       return;
     }
 
@@ -392,7 +398,7 @@ export const PurchasePage = () => {
                     <td>{q.customerName ?? '-'}</td>
                     <td>{q.productName ?? '-'}</td>
                     <td>{q.supplierName ?? '-'}</td>
-                    <td>{q.receivedQty ?? q.purchasedQty} {q.orderUom ?? q.purchasedUom}</td>
+                    <td>{q.receivedQty ?? q.purchasedQty} {q.purchaseUom ?? q.purchasedUom}</td>
                     <td>{q.invoiceQty ?? ''} {q.invoiceUom ?? ''}</td>
                     <td>
                       {queueResultMessage[q.id] ?? ''}
@@ -438,7 +444,7 @@ export const PurchasePage = () => {
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th className="col-supplier" onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
                   <th className="col-ordered">受注数量</th>
-                  <th className="col-invoice">請求数量</th>
+                  <th className="col-invoice">実測重量</th>
                   <th className="col-unit-cost">仕入単価</th>
                 </tr>
               </thead>
@@ -450,7 +456,7 @@ export const PurchasePage = () => {
                     </td>
                   </tr>
                 ) : sortedRows.map((r, rowIndex) => {
-                  const units = unitsByProductId[r.productId] ?? { orderUom: 'count', invoiceUom: 'count' };
+                  const units = unitsByProductId[r.productId] ?? { orderUom: 'count', purchaseUom: 'count', invoiceUom: 'count', isCatchWeight: false, weightCaptureRequired: false };
                   const edit = editByItemId[r.orderItemId];
                   const supplierName = r.manualSupplierId ? supplierNameById.get(r.manualSupplierId) ?? `仕入先#${r.manualSupplierId}` : '-';
 
@@ -472,14 +478,16 @@ export const PurchasePage = () => {
                       <td className="col-supplier">{supplierName}</td>
                       <td className="col-ordered">{r.orderedQty} {units.orderUom}</td>
                       <td className="col-invoice">
-                        <input
+                        {units.isCatchWeight || units.weightCaptureRequired ? <>
+                          <input
                           type="number"
                           inputMode="decimal"
                           min={0}
-                          step="1"
-                          data-invoice-row={rowIndex}
-                          value={edit?.invoiceQty ?? ''}
-                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], invoiceQty: e.target.value, rowError: undefined } }))}
+                          step="0.001"
+                          data-actual-weight-row={rowIndex}
+                          aria-label={`${r.productName} 実測重量`}
+                          value={edit?.actualWeightKg ?? ''}
+                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], actualWeightKg: e.target.value, rowError: undefined } }))}
                           onKeyDown={(e) => {
                             const native = e.nativeEvent as KeyboardEvent;
                             const isComposing = native.isComposing || native.keyCode === 229;
@@ -500,17 +508,7 @@ export const PurchasePage = () => {
                             target.focus();
                           }}
                           placeholder=""
-                        />
-                        <select
-                          tabIndex={-1}
-                          value={edit?.invoiceUom ?? units.invoiceUom}
-                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], invoiceUom: e.target.value, rowError: undefined } }))}
-                          style={{ marginLeft: 8 }}
-                        >
-                          {[...new Set([units.invoiceUom, units.orderUom])].map((u) => (
-                            <option key={u} value={u}>{u}</option>
-                          ))}
-                        </select>
+                        /> KG</> : <span className="subtle">対象外</span>}
                       </td>
                       <td className="col-unit-cost">
                         <input
@@ -534,7 +532,7 @@ export const PurchasePage = () => {
                             if (!moveDown && !moveUp) return;
 
                             const targetRow = moveDown ? rowIndex + 1 : rowIndex;
-                            const target = document.querySelector<HTMLInputElement>(`input[data-invoice-row="${targetRow}"]`);
+                            const target = document.querySelector<HTMLInputElement>(`input[data-actual-weight-row="${targetRow}"]`);
                             if (!target) return;
 
                             e.preventDefault();

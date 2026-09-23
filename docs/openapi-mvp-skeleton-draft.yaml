@@ -9080,12 +9080,6 @@ components:
             exclusiveMinimum: 0.0
           - type: 'null'
           title: Actual Weight Kg
-        invoice_qty:
-          anyOf:
-          - type: number
-            minimum: 0.0
-          - type: 'null'
-          title: Invoice Qty
         unit_cost:
           anyOf:
           - type: number
@@ -9130,6 +9124,7 @@ components:
             maxLength: 1000
           - type: 'null'
           title: Note
+      additionalProperties: false
       type: object
       required:
       - allocation_id
@@ -9196,11 +9191,16 @@ components:
         order_uom:
           type: string
           title: Order Uom
+        purchase_uom:
+          type: string
+          title: Purchase Uom
         invoice_qty:
           anyOf:
           - type: number
           - type: 'null'
           title: Invoice Qty
+          description: Server-managed invoiced-quantity snapshot and claim marker;
+            clients must not submit this field.
         invoice_uom:
           anyOf:
           - type: string
@@ -9305,6 +9305,7 @@ components:
       - purchased_uom
       - received_qty
       - order_uom
+      - purchase_uom
       - actual_weight_kg
       - unit_cost
       - final_unit_cost
@@ -9351,12 +9352,6 @@ components:
             exclusiveMinimum: 0.0
           - type: 'null'
           title: Actual Weight Kg
-        invoice_qty:
-          anyOf:
-          - type: number
-            minimum: 0.0
-          - type: 'null'
-          title: Invoice Qty
         unit_cost:
           anyOf:
           - type: number
@@ -9404,6 +9399,7 @@ components:
             maxLength: 1000
           - type: 'null'
           title: Note
+      additionalProperties: false
       type: object
       title: PurchaseResultUpdateRequest
     RefreshRequest:

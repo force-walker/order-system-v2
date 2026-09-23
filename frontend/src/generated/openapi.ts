@@ -3738,8 +3738,6 @@ export interface components {
             purchased_uom: string;
             /** Actual Weight Kg */
             actual_weight_kg?: number | null;
-            /** Invoice Qty */
-            invoice_qty?: number | null;
             /** Unit Cost */
             unit_cost?: number | null;
             /** Final Unit Cost */
@@ -3788,7 +3786,12 @@ export interface components {
             received_qty: number;
             /** Order Uom */
             order_uom: string;
-            /** Invoice Qty */
+            /** Purchase Uom */
+            purchase_uom: string;
+            /**
+             * Invoice Qty
+             * @description Server-managed invoiced-quantity snapshot and claim marker; clients must not submit this field.
+             */
             invoice_qty?: number | null;
             /** Invoice Uom */
             invoice_uom?: string | null;
@@ -3851,8 +3854,6 @@ export interface components {
             purchased_uom?: string | null;
             /** Actual Weight Kg */
             actual_weight_kg?: number | null;
-            /** Invoice Qty */
-            invoice_qty?: number | null;
             /** Unit Cost */
             unit_cost?: number | null;
             /** Final Unit Cost */

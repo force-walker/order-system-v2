@@ -134,8 +134,8 @@ def _seed_order(with_items: bool = False, include_kg_without_weight: bool = Fals
             order_uom="kg",
             purchase_uom="kg",
             invoice_uom="kg",
-            is_catch_weight=True,
-            weight_capture_required=True,
+            is_catch_weight=include_kg_without_weight,
+            weight_capture_required=include_kg_without_weight,
             pricing_basis_default=PricingBasis.uom_kg,
             active=True,
         )
@@ -166,6 +166,8 @@ def _seed_purchase_result_for_order(
     final_unit_cost: float | None = None,
     *,
     order_item_id: str | None = None,
+    purchased_uom: str | None = None,
+    actual_weight_kg: float | None = None,
 ) -> int:
     db = TestingSessionLocal()
     item_query = db.query(OrderItem).filter(OrderItem.order_id == order_id)
@@ -173,6 +175,8 @@ def _seed_purchase_result_for_order(
         item_query = item_query.filter(OrderItem.id == order_item_id)
     item = item_query.first()
     assert item is not None
+    product = db.query(Product).filter(Product.id == item.product_id).one()
+    resolved_purchase_uom = purchased_uom or product.purchase_uom
 
     alloc = SupplierAllocation(
         order_item_id=item.id,
@@ -180,7 +184,7 @@ def _seed_purchase_result_for_order(
         suggested_qty=float(purchased_qty),
         final_supplier_id=101,
         final_qty=float(purchased_qty),
-        final_uom="count",
+        final_uom=resolved_purchase_uom,
     )
     db.add(alloc)
     db.flush()
@@ -189,7 +193,8 @@ def _seed_purchase_result_for_order(
         allocation_id=alloc.id,
         supplier_id=101,
         purchased_qty=float(purchased_qty),
-        purchased_uom="count",
+        purchased_uom=resolved_purchase_uom,
+        actual_weight_kg=actual_weight_kg,
         unit_cost=unit_cost,
         final_unit_cost=final_unit_cost,
         result_status=PurchaseResultStatus.filled,
@@ -427,8 +432,8 @@ def test_generate_invoice_from_order_items_success():
     assert body["invoice_draft_no"].startswith("IVD-")
     assert body["invoice_no"] == body["invoice_draft_no"]
     assert body["official_invoice_no"] is None
-    assert float(body["subtotal"]) == 1850.0
-    assert float(body["grand_total"]) == 1850.0
+    assert float(body["subtotal"]) == 1600.0
+    assert float(body["grand_total"]) == 1600.0
 
     db = TestingSessionLocal()
     invoice_items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == body["id"]).all()
@@ -464,7 +469,7 @@ def test_create_and_generate_invoice_from_delivery_success():
     assert body["delivery_id"] == delivery_id
     assert body["delivery_uuid"] == delivery_id
     assert body["delivery_no"].startswith("DLV-")
-    assert float(body["subtotal"]) == 1850.0
+    assert float(body["subtotal"]) == 1600.0
 
     filtered = client.get(f"/api/v1/invoices?delivery_id={delivery_id}")
     assert filtered.status_code == 200
@@ -618,7 +623,7 @@ def test_generate_invoice_missing_actual_weight_is_422():
         },
     )
     assert res.status_code == 422
-    assert res.json()["detail"]["code"] == "MISSING_ACTUAL_WEIGHT"
+    assert res.json()["detail"]["code"] == "PURCHASE_RESULT_DRAFT_REQUIRED"
 
 
 def test_finalize_invoice_without_items_is_409():
@@ -825,6 +830,113 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
     db.close()
 
 
+def test_generate_draft_uses_purchase_result_actual_weight_and_claims_selected_splits():
+    order_id = _seed_order(with_items=True, include_kg_without_weight=True)
+    db = TestingSessionLocal()
+    catch_item = (
+        db.query(OrderItem)
+        .join(Product, Product.id == OrderItem.product_id)
+        .filter(OrderItem.order_id == order_id, Product.is_catch_weight.is_(True))
+        .one()
+    )
+    product = db.query(Product).filter(Product.id == catch_item.product_id).one()
+    product.order_uom = "CTN"
+    product.purchase_uom = "CTN"
+    product.invoice_uom = "KG"
+    catch_item.ordered_qty = 2
+    catch_item.actual_weight_kg = 999  # compatibility field must not be used
+    catch_item_id = catch_item.id
+    db.commit()
+    db.close()
+
+    first_id = _seed_purchase_result_for_order(
+        order_id, purchased_qty=1, final_unit_cost=1000, order_item_id=catch_item_id,
+        purchased_uom="CTN", actual_weight_kg=10.42,
+    )
+    second_id = _seed_purchase_result_for_order(
+        order_id, purchased_qty=1, final_unit_cost=1000, order_item_id=catch_item_id,
+        purchased_uom="CTN", actual_weight_kg=11.31,
+    )
+    unselected_id = _seed_purchase_result_for_order(
+        order_id, purchased_qty=1, final_unit_cost=1000, order_item_id=catch_item_id,
+        purchased_uom="CTN", actual_weight_kg=5.0,
+    )
+    _seed_system_settings()
+
+    draft = _client().post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={"order_id": order_id, "invoice_date": str(date.today()), "purchase_result_ids": [first_id, second_id]},
+    )
+    assert draft.status_code == 201, draft.text
+    assert draft.json()["created_count"] == 1
+    items = _client().get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items").json()
+    assert len(items) == 1
+    assert float(items[0]["billable_qty"]) == 21.73
+    assert items[0]["billable_uom"] == "KG"
+
+    db = TestingSessionLocal()
+    results = {row.id: row for row in db.query(PurchaseResult).filter(PurchaseResult.id.in_([first_id, second_id, unselected_id])).all()}
+    assert float(results[first_id].invoice_qty) == 10.42
+    assert float(results[second_id].invoice_qty) == 11.31
+    assert results[unselected_id].invoice_qty is None
+    assert float(db.query(OrderItem).filter(OrderItem.id == catch_item_id).one().actual_weight_kg) == 999
+    db.close()
+
+
+def test_generate_draft_missing_selected_actual_weight_rolls_back_all_claims():
+    order_id = _seed_order(with_items=True, include_kg_without_weight=True)
+    db = TestingSessionLocal()
+    catch_item = (
+        db.query(OrderItem)
+        .join(Product, Product.id == OrderItem.product_id)
+        .filter(OrderItem.order_id == order_id, Product.is_catch_weight.is_(True))
+        .one()
+    )
+    product = db.query(Product).filter(Product.id == catch_item.product_id).one()
+    product.order_uom = "CTN"
+    product.purchase_uom = "CTN"
+    product.invoice_uom = "KG"
+    catch_item_id = catch_item.id
+    db.commit()
+    db.close()
+    complete_id = _seed_purchase_result_for_order(order_id, order_item_id=catch_item_id, purchased_uom="CTN", actual_weight_kg=10.42)
+    missing_id = _seed_purchase_result_for_order(order_id, order_item_id=catch_item_id, purchased_uom="CTN")
+    _seed_system_settings()
+
+    response = _client().post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={"order_id": order_id, "invoice_date": str(date.today()), "purchase_result_ids": [complete_id, missing_id]},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "ACTUAL_WEIGHT_REQUIRED"
+    db = TestingSessionLocal()
+    assert db.query(PurchaseResult).filter(PurchaseResult.id.in_([complete_id, missing_id]), PurchaseResult.invoice_qty.is_not(None)).count() == 0
+    db.close()
+
+
+def test_generate_draft_rejects_mixed_claimed_and_unclaimed_results_atomically():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    claimed_id = _seed_purchase_result_for_order(order_id)
+    unclaimed_id = _seed_purchase_result_for_order(order_id)
+    db = TestingSessionLocal()
+    db.query(PurchaseResult).filter(PurchaseResult.id == claimed_id).one().invoice_qty = 2
+    invoice_count_before = db.query(Invoice).count()
+    db.commit()
+    db.close()
+
+    response = _client().post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={"order_id": order_id, "invoice_date": str(date.today()), "purchase_result_ids": [claimed_id, unclaimed_id]},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "PURCHASE_RESULT_ALREADY_CLAIMED"
+    db = TestingSessionLocal()
+    assert db.query(Invoice).count() == invoice_count_before
+    assert db.query(PurchaseResult).filter(PurchaseResult.id == unclaimed_id).one().invoice_qty is None
+    db.close()
+
+
 def test_generate_draft_rejects_cancelled_order_and_selected_cancelled_item():
     cancelled_order_id = _seed_order(with_items=True)
     item_cancelled_order_result_id = _seed_purchase_result_for_order(cancelled_order_id, final_unit_cost=1000)
@@ -1004,9 +1116,11 @@ def test_finalize_and_reset_do_not_revive_cancelled_order_item():
     active_item = db.query(OrderItem).filter(OrderItem.id == active_item_id).one()
     cancelled_item = db.query(OrderItem).filter(OrderItem.id == cancelled_item_id).one()
     order = db.query(Order).filter(Order.id == order_id).one()
+    purchase_result = db.query(PurchaseResult).filter(PurchaseResult.id == active_result_id).one()
     assert active_item.line_status == LineStatus.invoiced
     assert cancelled_item.line_status == LineStatus.cancelled
     assert order.status == OrderStatus.invoiced
+    assert float(purchase_result.invoice_qty) == float(purchase_result.purchased_qty)
     db.close()
 
     reset = client.post(
@@ -1018,9 +1132,11 @@ def test_finalize_and_reset_do_not_revive_cancelled_order_item():
     active_item = db.query(OrderItem).filter(OrderItem.id == active_item_id).one()
     cancelled_item = db.query(OrderItem).filter(OrderItem.id == cancelled_item_id).one()
     order = db.query(Order).filter(Order.id == order_id).one()
+    purchase_result = db.query(PurchaseResult).filter(PurchaseResult.id == active_result_id).one()
     assert active_item.line_status == LineStatus.shipped
     assert cancelled_item.line_status == LineStatus.cancelled
     assert order.status == OrderStatus.shipped
+    assert float(purchase_result.invoice_qty) == float(purchase_result.purchased_qty)
     db.close()
 
 
@@ -1369,7 +1485,7 @@ def test_recalculate_draft_costs_rejects_non_draft_invoice():
     assert recalc.json()["detail"]["code"] == "INVOICE_NOT_DRAFT"
 
 
-def test_draft_generation_from_purchase_results_is_idempotent():
+def test_draft_generation_from_purchase_results_rejects_second_claim():
     order_id = _seed_order(with_items=True)
     _seed_system_settings()
     purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
@@ -1397,7 +1513,7 @@ def test_draft_generation_from_purchase_results_is_idempotent():
         },
     )
     assert second.status_code == 409
-    assert second.json()["detail"]["code"] == "DRAFT_ALREADY_GENERATED"
+    assert second.json()["detail"]["code"] == "PURCHASE_RESULT_ALREADY_CLAIMED"
 
 
 def test_update_invoice_draft_item_recalculates_and_finalized_rejects():

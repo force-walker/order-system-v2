@@ -113,6 +113,34 @@ def _compute_auto_sales_unit_price(purchase_unit_cost: Decimal | None) -> tuple[
     return _amount(price), None
 
 
+def _legacy_invoice_quantity(db: Session, item: OrderItem) -> tuple[Decimal, Decimal, str]:
+    """Support only fixed-unit lines; measured weight is owned by PurchaseResult."""
+    product = db.query(Product).filter(Product.id == item.product_id).one()
+    if product.is_catch_weight or product.weight_capture_required:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "PURCHASE_RESULT_DRAFT_REQUIRED",
+                "message": f"catch-weight order_item={item.id} must be invoiced from selected purchase results",
+            },
+        )
+    if product.order_uom.strip().casefold() != product.invoice_uom.strip().casefold():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVOICE_UOM_MISMATCH_REQUIRES_MASTER_CORRECTION",
+                "message": f"fixed-unit order_item={item.id} requires matching order_uom and invoice_uom",
+            },
+        )
+    unit_price = item.unit_price_uom_kg if item.pricing_basis == PricingBasis.uom_kg else item.unit_price_uom_count
+    if unit_price is None:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "MISSING_UNIT_PRICE", "message": f"unit price is required for order_item={item.id}"},
+        )
+    return Decimal(str(item.ordered_qty)), Decimal(str(unit_price)), product.invoice_uom
+
+
 def _draft_item_metrics(item: InvoiceItem) -> tuple[float | None, bool]:
     margin = compute_draft_margin(
         sales_unit_price=Decimal(str(item.sales_unit_price)),
@@ -1034,27 +1062,8 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
 
     subtotal = Decimal("0")
     for item in order_items:
-        if item.pricing_basis == PricingBasis.uom_kg:
-            if item.actual_weight_kg is None:
-                raise HTTPException(
-                    status_code=422,
-                    detail={"code": "MISSING_ACTUAL_WEIGHT", "message": f"actual_weight_kg is required for order_item={item.id}"},
-                )
-            billable_qty = Decimal(str(item.actual_weight_kg))
-            unit_price = item.unit_price_uom_kg
-            billable_uom = "kg"
-        else:
-            billable_qty = Decimal(str(item.ordered_qty))
-            unit_price = item.unit_price_uom_count
-            billable_uom = "count"
-
-        if unit_price is None:
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "MISSING_UNIT_PRICE", "message": f"unit price is required for order_item={item.id}"},
-            )
-
-        sales_unit_price = _amount(Decimal(str(unit_price)))
+        billable_qty, unit_price, billable_uom = _legacy_invoice_quantity(db, item)
+        sales_unit_price = _amount(unit_price)
         line_amount = _amount(billable_qty * sales_unit_price)
         subtotal += line_amount
 
@@ -1137,27 +1146,8 @@ def generate_invoice_from_delivery(payload: InvoiceGenerateFromDeliveryRequest, 
 
     subtotal = Decimal("0")
     for item in order_items:
-        if item.pricing_basis == PricingBasis.uom_kg:
-            if item.actual_weight_kg is None:
-                raise HTTPException(
-                    status_code=422,
-                    detail={"code": "MISSING_ACTUAL_WEIGHT", "message": f"actual_weight_kg is required for order_item={item.id}"},
-                )
-            billable_qty = Decimal(str(item.actual_weight_kg))
-            unit_price = item.unit_price_uom_kg
-            billable_uom = "kg"
-        else:
-            billable_qty = Decimal(str(item.ordered_qty))
-            unit_price = item.unit_price_uom_count
-            billable_uom = "count"
-
-        if unit_price is None:
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "MISSING_UNIT_PRICE", "message": f"unit price is required for order_item={item.id}"},
-            )
-
-        sales_unit_price = _amount(Decimal(str(unit_price)))
+        billable_qty, unit_price, billable_uom = _legacy_invoice_quantity(db, item)
+        sales_unit_price = _amount(unit_price)
         line_amount = _amount(billable_qty * sales_unit_price)
         subtotal += line_amount
 
@@ -1216,20 +1206,22 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     if order.status == OrderStatus.cancelled:
         raise HTTPException(status_code=422, detail={"code": "CANCELLED_ORDER_NOT_INVOICEABLE", "message": "cancelled order cannot be invoiced"})
 
-    rows = (
-        db.query(PurchaseResult, OrderItem, Product)
+    rows_query = (
+        db.query(PurchaseResult, SupplierAllocation, OrderItem, Product)
         .join(SupplierAllocation, SupplierAllocation.id == PurchaseResult.allocation_id)
         .join(OrderItem, OrderItem.id == SupplierAllocation.order_item_id)
         .join(Product, Product.id == OrderItem.product_id)
         .filter(OrderItem.order_id == order.id)
         .filter(PurchaseResult.id.in_(payload.purchase_result_ids))
         .order_by(PurchaseResult.id.asc())
-        .all()
     )
+    if db.get_bind().dialect.name == "postgresql":
+        rows_query = rows_query.with_for_update(of=PurchaseResult)
+    rows = rows_query.all()
     if not rows:
         raise HTTPException(status_code=422, detail={"code": "PURCHASE_RESULTS_NOT_FOUND", "message": "no target purchase results found"})
 
-    target_ids = [pr.id for pr, _, _ in rows]
+    target_ids = [pr.id for pr, _, _, _ in rows]
     requested_ids = set(payload.purchase_result_ids)
     resolved_ids = set(target_ids)
     if requested_ids != resolved_ids:
@@ -1247,7 +1239,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
             },
         )
 
-    cancelled_item_ids = [item.id for _, item, _ in rows if item.line_status == LineStatus.cancelled]
+    cancelled_item_ids = [item.id for _, _, item, _ in rows if item.line_status == LineStatus.cancelled]
     if cancelled_item_ids:
         raise HTTPException(
             status_code=422,
@@ -1258,13 +1250,76 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
             },
         )
 
-    delivery = _resolve_delivery_for_order(db, order, create_if_missing=True)
+    claimed_ids = [pr.id for pr, _, _, _ in rows if pr.invoice_qty is not None]
+    if claimed_ids:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "PURCHASE_RESULT_ALREADY_CLAIMED",
+                "message": "purchase results already used by an invoice cannot be claimed again",
+                "details": [{"field": "purchase_result_ids", "ids": claimed_ids}],
+            },
+        )
 
-    # idempotent: skip purchase results already marked as invoiced
-    rows_to_create = [triple for triple in rows if triple[0].invoice_qty is None]
-    if not rows_to_create:
-        # keep existing contract: duplicated generation request returns 409
-        raise HTTPException(status_code=409, detail={"code": "DRAFT_ALREADY_GENERATED", "message": "all target purchase results already invoiced"})
+    grouped_rows: dict[str, list[tuple[PurchaseResult, SupplierAllocation, OrderItem, Product]]] = {}
+    for row in rows:
+        grouped_rows.setdefault(row[2].id, []).append(row)
+
+    contribution_by_result_id: dict[int, Decimal] = {}
+    for grouped in grouped_rows.values():
+        _, _, item, product = grouped[0]
+        purchase_uom = product.purchase_uom.strip().casefold()
+        invoice_uom = product.invoice_uom.strip().casefold()
+        is_catch_weight = product.is_catch_weight or product.weight_capture_required
+
+        invalid_uom_ids = [
+            pr.id
+            for pr, allocation, _, _ in grouped
+            if pr.purchased_uom.strip().casefold() != purchase_uom
+            or not allocation.final_uom
+            or allocation.final_uom.strip().casefold() != purchase_uom
+        ]
+        if invalid_uom_ids:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "PURCHASE_UOM_MISMATCH",
+                    "message": "purchase result UOM must match product.purchase_uom and allocation.final_uom",
+                    "details": [{"purchase_result_ids": invalid_uom_ids}],
+                },
+            )
+
+        if is_catch_weight:
+            if invoice_uom != "kg":
+                raise HTTPException(
+                    status_code=422,
+                    detail={"code": "INVOICE_UOM_UNSUPPORTED", "message": f"catch-weight order_item={item.id} must use KG invoice_uom"},
+                )
+            missing_weight_ids = [pr.id for pr, _, _, _ in grouped if pr.actual_weight_kg is None]
+            if missing_weight_ids:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "ACTUAL_WEIGHT_REQUIRED",
+                        "message": "actual_weight_kg is required for every selected catch-weight purchase result",
+                        "details": [{"purchase_result_ids": missing_weight_ids}],
+                    },
+                )
+            for pr, _, _, _ in grouped:
+                contribution_by_result_id[pr.id] = Decimal(str(pr.actual_weight_kg))
+        else:
+            if invoice_uom != purchase_uom:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "INVOICE_UOM_MISMATCH_REQUIRES_MASTER_CORRECTION",
+                        "message": f"fixed-unit order_item={item.id} requires matching purchase_uom and invoice_uom",
+                    },
+                )
+            for pr, _, _, _ in grouped:
+                contribution_by_result_id[pr.id] = Decimal(str(pr.purchased_qty))
+
+    delivery = _resolve_delivery_for_order(db, order, create_if_missing=True)
 
     invoice = Invoice(
         invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",
@@ -1288,9 +1343,20 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     settings = get_system_settings_or_404(db)
     subtotal = Decimal("0")
     tax_total = Decimal("0")
-    for pr, item, product in rows_to_create:
-        billable_qty = Decimal(str(pr.invoice_qty if pr.invoice_qty is not None else pr.purchased_qty))
-        purchase_unit_cost = Decimal(str(pr.final_unit_cost if pr.final_unit_cost is not None else pr.unit_cost)) if (pr.final_unit_cost is not None or pr.unit_cost is not None) else None
+    for grouped in grouped_rows.values():
+        _, _, item, product = grouped[0]
+        billable_qty = sum((contribution_by_result_id[pr.id] for pr, _, _, _ in grouped), Decimal("0"))
+        cost_rows = [
+            (Decimal(str(pr.purchased_qty)), Decimal(str(pr.final_unit_cost if pr.final_unit_cost is not None else pr.unit_cost)))
+            for pr, _, _, _ in grouped
+            if pr.final_unit_cost is not None or pr.unit_cost is not None
+        ]
+        purchased_total = sum((qty for qty, _ in cost_rows), Decimal("0"))
+        purchase_unit_cost = (
+            sum((qty * cost for qty, cost in cost_rows), Decimal("0")) / purchased_total
+            if len(cost_rows) == len(grouped) and purchased_total > 0
+            else None
+        )
         sales_unit_price, _ = _compute_auto_sales_unit_price(purchase_unit_cost)
         hkd_purchase_unit_cost = compute_hkd_purchase_unit_cost(
             jpy_purchase_unit_cost=purchase_unit_cost,
@@ -1308,7 +1374,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
             invoice_id=invoice.id,
             order_item_id=item.id,
             billable_qty=float(billable_qty),
-            billable_uom=pr.purchased_uom,
+            billable_uom=product.invoice_uom,
             invoice_line_status="uninvoiced",
             sales_unit_price=float(sales_unit_price),
             unit_cost_basis=(float(hkd_purchase_unit_cost) if hkd_purchase_unit_cost is not None else None),
@@ -1319,7 +1385,8 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
         ensure_invoice_item_number(db, invoice, invoice_item)
         db.add(invoice_item)
         db.flush()
-        pr.invoice_qty = float(billable_qty)
+        for pr, _, _, _ in grouped:
+            pr.invoice_qty = float(contribution_by_result_id[pr.id])
 
     invoice.subtotal = float(_amount(subtotal))
     invoice.tax_total = float(_amount(tax_total))
@@ -1338,7 +1405,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
             "grand_total": float(invoice.grand_total),
             "source": "purchase_results",
             "source_order_id": order.id,
-            "generated_item_count": len(rows_to_create),
+            "generated_item_count": len(grouped_rows),
             "target_purchase_result_ids": target_ids,
         },
     )
@@ -1346,7 +1413,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
 
     return InvoiceDraftGenerateResult(
         invoice_id=invoice.id,
-        created_count=len(rows_to_create),
+        created_count=len(grouped_rows),
         target_purchase_result_ids=target_ids,
         idempotent_hit=False,
     )
