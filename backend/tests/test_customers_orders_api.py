@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product
+from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, SupplierAllocation
 
 
 engine = create_engine(
@@ -537,6 +537,15 @@ def _seed_order_with_open_line() -> int:
         updated_at=datetime.now(UTC),
     )
     db.add(line)
+    db.flush()
+    db.add(
+        SupplierAllocation(
+            order_item_id=line.id,
+            final_supplier_id=1,
+            final_qty=2,
+            final_uom="count",
+        )
+    )
     db.commit()
     oid = order.id
     db.close()
@@ -627,11 +636,12 @@ def test_order_bulk_transition_line_status_mismatch_is_409():
     )
     assert ok.status_code == 200
 
-    # manually force order header back to confirmed to simulate inconsistent state
+    # Manually force an advanced line under a confirmed header to simulate inconsistent state.
     db = TestingSessionLocal()
     order = db.query(Order).filter(Order.id == order_id).first()
     assert order is not None
     order.status = OrderStatus.confirmed
+    db.query(OrderItem).filter(OrderItem.order_id == order_id).one().line_status = LineStatus.purchased
     db.commit()
     db.close()
 

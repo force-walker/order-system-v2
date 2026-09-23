@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -151,6 +152,42 @@ def test_allocation_validation_error_is_422():
         json={"final_supplier_id": 101, "final_qty": -1, "final_uom": "count", "override_reason_code": "manual"},
     )
     assert bad.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "order_status",
+    [OrderStatus.allocated, OrderStatus.purchased, OrderStatus.shipped, OrderStatus.invoiced, OrderStatus.cancelled],
+)
+@pytest.mark.parametrize("operation", ["override", "split"])
+def test_allocation_override_and_split_reject_orders_outside_confirmed_status(order_status: OrderStatus, operation: str):
+    allocation_id = _seed_allocation(final_qty=3, final_supplier_id=101)
+    db = TestingSessionLocal()
+    allocation = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).one()
+    item = db.query(OrderItem).filter(OrderItem.id == allocation.order_item_id).one()
+    order = db.query(Order).filter(Order.id == item.order_id).one()
+    order.status = order_status
+    db.commit()
+    db.close()
+
+    if operation == "override":
+        response = _client().patch(
+            f"/api/v1/allocations/{allocation_id}/override",
+            json={"final_supplier_id": 102, "final_qty": 3, "final_uom": "count", "override_reason_code": "manual"},
+        )
+    else:
+        response = _client().post(
+            f"/api/v1/allocations/{allocation_id}/split-line",
+            json={
+                "parts": [
+                    {"final_supplier_id": 102, "final_qty": 1, "final_uom": "count"},
+                    {"final_supplier_id": 103, "final_qty": 2, "final_uom": "count"},
+                ],
+                "override_reason_code": "split",
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ORDER_NOT_ALLOCATION_EDITABLE"
 
 
 def test_purchase_result_create_get_list_update_bulk_upsert():

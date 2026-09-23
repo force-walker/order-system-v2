@@ -79,7 +79,7 @@ def _seed_order_and_allocation() -> tuple[int, int]:
     db.add(item)
     db.flush()
 
-    alloc = SupplierAllocation(order_item_id=item.id, final_qty=2, final_uom="count")
+    alloc = SupplierAllocation(order_item_id=item.id, final_supplier_id=1, final_qty=2, final_uom="count")
     db.add(alloc)
     db.commit()
 

@@ -14,6 +14,7 @@ from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
 
 from app.api.order_lookup import get_order_or_404 as _get_order_by_identifier_or_404
+from app.core.allocation_completion import evaluate_order_allocation_completion
 from app.core.audit import AuditAction, write_audit_log
 from app.core.deliveries import ensure_delivery_document
 from app.core.numbering import ensure_order_delivery_number, ensure_order_header_numbers, ensure_order_item_number
@@ -447,6 +448,7 @@ _TRANSITION_RULES: dict[tuple[OrderStatus, OrderStatus], tuple[LineStatus, LineS
 )
 def bulk_transition_order(order_id: str, payload: OrderBulkTransitionRequest, db: Session = Depends(get_db)) -> OrderBulkTransitionResponse:
     order = _get_order_by_identifier_or_404(db, order_id)
+    order = db.query(Order).filter(Order.id == order.id).with_for_update().one()
 
     if payload.from_status == payload.to_status:
         raise HTTPException(status_code=422, detail={"code": "INVALID_TRANSITION_PAIR", "message": "from_status and to_status must differ"})
@@ -463,7 +465,32 @@ def bulk_transition_order(order_id: str, payload: OrderBulkTransitionRequest, db
     if not all_lines:
         raise HTTPException(status_code=409, detail={"code": "STATUS_NO_TARGET_LINES", "message": "no eligible lines"})
 
-    invalid_lines = [line for line in all_lines if line.line_status != from_line]
+    is_allocation_transition = key == (OrderStatus.confirmed, OrderStatus.allocated)
+    target_lines = [line for line in all_lines if not is_allocation_transition or line.line_status != LineStatus.cancelled]
+    if not target_lines:
+        raise HTTPException(status_code=409, detail={"code": "STATUS_NO_TARGET_LINES", "message": "no eligible lines"})
+
+    if is_allocation_transition:
+        completion = evaluate_order_allocation_completion(db, order.id)
+        if not completion.complete:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ALLOCATION_INCOMPLETE",
+                    "message": "all non-cancelled order items must have complete allocations",
+                    "details": [
+                        {
+                            "order_item_id": reason.order_item_id,
+                            "code": reason.code,
+                            "message": reason.message,
+                        }
+                        for reason in completion.reasons
+                    ],
+                },
+            )
+        invalid_lines = [line for line in target_lines if line.line_status not in {LineStatus.open, LineStatus.allocated}]
+    else:
+        invalid_lines = [line for line in target_lines if line.line_status != from_line]
     if invalid_lines:
         raise HTTPException(
             status_code=409,
@@ -473,10 +500,10 @@ def bulk_transition_order(order_id: str, payload: OrderBulkTransitionRequest, db
     before = {
         "order_status": order.status.value,
         "line_status": from_line.value,
-        "line_count": len(all_lines),
+        "line_count": len(target_lines),
     }
 
-    for line in all_lines:
+    for line in target_lines:
         line.line_status = to_line
 
     order.status = payload.to_status
@@ -491,11 +518,11 @@ def bulk_transition_order(order_id: str, payload: OrderBulkTransitionRequest, db
         entity_id=order.id,
         action=AuditAction.BULK_TRANSITION,
         before=before,
-        after={"order_status": order.status.value, "line_status": to_line.value, "line_count": len(all_lines)},
+        after={"order_status": order.status.value, "line_status": to_line.value, "line_count": len(target_lines)},
     )
     db.commit()
 
-    return OrderBulkTransitionResponse(order_id=order.id, updated_lines=len(all_lines), updated_order_status=order.status)
+    return OrderBulkTransitionResponse(order_id=order.id, updated_lines=len(target_lines), updated_order_status=order.status)
 
 
 @router.post(

@@ -3174,6 +3174,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
         '404':
           description: Not Found
           content:
@@ -3214,6 +3220,12 @@ paths:
                   Line Post
         '422':
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '409':
+          description: Conflict
           content:
             application/json:
               schema:

@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.entities import SupplierAllocation
+from app.models.entities import Order, OrderItem, OrderStatus, SupplierAllocation
+from app.core.allocation_completion import synchronize_confirmed_order_allocation_status
 from app.core.audit import AuditAction, write_audit_log
 from app.schemas.allocation import AllocationOverrideRequest, AllocationResponse, AllocationSplitRequest
 from app.schemas.common import ApiErrorResponse
@@ -13,7 +14,27 @@ router = APIRouter(prefix="/api/v1/allocations", tags=["allocations"])
 
 ALLOCATION_COMMON_ERROR_RESPONSES = {
     422: {"model": ApiErrorResponse, "description": "Validation Error"},
+    409: {"model": ApiErrorResponse, "description": "Conflict"},
 }
+
+
+def _lock_allocation_order(db: Session, allocation: SupplierAllocation) -> Order:
+    item = db.query(OrderItem).filter(OrderItem.id == allocation.order_item_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_ITEM_NOT_FOUND", "message": "order item not found"})
+    order = db.query(Order).filter(Order.id == item.order_id).with_for_update().first()
+    if order is None:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": "order not found"})
+    if order.status != OrderStatus.confirmed:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ORDER_NOT_ALLOCATION_EDITABLE",
+                "message": "allocations can only be edited while the order is confirmed",
+            },
+        )
+    db.refresh(allocation)
+    return order
 
 
 @router.patch(
@@ -25,6 +46,7 @@ def override_allocation(allocation_id: int, payload: AllocationOverrideRequest, 
     row = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "ALLOCATION_NOT_FOUND", "message": "allocation not found"})
+    order = _lock_allocation_order(db, row)
 
     row.final_supplier_id = payload.final_supplier_id
     row.final_qty = payload.final_qty
@@ -41,6 +63,7 @@ def override_allocation(allocation_id: int, payload: AllocationOverrideRequest, 
         action=AuditAction.OVERRIDE,
         reason_code=payload.override_reason_code,
     )
+    synchronize_confirmed_order_allocation_status(db, order)
     db.commit()
     db.refresh(row)
     return AllocationResponse.model_validate(row)
@@ -55,6 +78,7 @@ def split_allocation(allocation_id: int, payload: AllocationSplitRequest, db: Se
     row = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "ALLOCATION_NOT_FOUND", "message": "allocation not found"})
+    order = _lock_allocation_order(db, row)
 
     group_id = f"split-{uuid4().hex[:12]}"
     row.split_group_id = group_id
@@ -88,6 +112,7 @@ def split_allocation(allocation_id: int, payload: AllocationSplitRequest, db: Se
             action=AuditAction.SPLIT_LINE,
             reason_code=payload.override_reason_code,
         )
+    synchronize_confirmed_order_allocation_status(db, order)
     db.commit()
     for c in created:
         db.refresh(c)

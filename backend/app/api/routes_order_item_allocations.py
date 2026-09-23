@@ -3,9 +3,10 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.allocation_completion import synchronize_confirmed_order_allocation_status
 from app.core.audit import AuditAction, write_audit_log
 from app.db.session import get_db
-from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, Product, Supplier, SupplierAllocation, SupplierProduct
+from app.models.entities import Customer, Order, OrderItem, OrderStatus, Product, Supplier, SupplierAllocation, SupplierProduct
 from app.schemas.common import ApiErrorResponse
 from app.schemas.order_item_allocation import (
     AllocationSuggestRequest,
@@ -143,19 +144,48 @@ def suggest_allocations(payload: AllocationSuggestRequest, db: Session = Depends
 def bulk_save_allocations(payload: BulkAllocationSaveRequest, db: Session = Depends(get_db)) -> BulkAllocationSaveResponse:
     errors: list[BulkAllocationSaveError] = []
     succeeded = 0
+    resolved_items = [(row, _get_order_item_by_identifier(db, row.order_item_id)) for row in payload.items]
+    order_ids = sorted({item.order_id for _, item in resolved_items if item is not None})
+    locked_orders = {
+        order.id: order
+        for order in (
+            db.query(Order)
+            .filter(Order.id.in_(order_ids))
+            .order_by(Order.id.asc())
+            .with_for_update()
+            .all()
+        )
+    }
+    non_editable_orders = [order for order in locked_orders.values() if order.status != OrderStatus.confirmed]
+    if non_editable_orders:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ORDER_NOT_ALLOCATION_EDITABLE",
+                "message": "allocations can only be edited while the order is confirmed",
+                "details": [
+                    {"order_id": order.id, "order_status": order.status.value}
+                    for order in sorted(non_editable_orders, key=lambda candidate: candidate.id)
+                ],
+            },
+        )
+    successful_order_ids: set[str] = set()
 
-    for row in payload.items:
-        item = _get_order_item_by_identifier(db, row.order_item_id)
+    for row, item in resolved_items:
         if item is None:
             errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ORDER_ITEM_NOT_FOUND", message="order_item not found"))
             continue
 
-        split_children = db.query(SupplierAllocation.id).filter(SupplierAllocation.order_item_id == row.order_item_id, SupplierAllocation.is_split_child.is_(True)).all()
+        order = locked_orders.get(item.order_id)
+        if order is None:
+            errors.append(BulkAllocationSaveError(order_item_id=item.id, code="ORDER_NOT_FOUND", message="order not found"))
+            continue
+        split_children = db.query(SupplierAllocation.id).filter(SupplierAllocation.order_item_id == item.id, SupplierAllocation.is_split_child.is_(True)).all()
         if split_children:
             errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ALLOCATION_SPLIT_CONFLICT", message="split allocations exist; bulk-save not allowed"))
             continue
 
-        alloc = _current_allocation(db, row.order_item_id)
+        alloc = _current_allocation(db, item.id)
 
         # unselect supplier = clear allocation
         if row.supplier_id is None:
@@ -171,6 +201,7 @@ def bulk_save_allocations(payload: BulkAllocationSaveRequest, db: Session = Depe
 
             if alloc is None:
                 succeeded += 1
+                successful_order_ids.add(order.id)
                 continue
 
             alloc.final_supplier_id = None
@@ -181,6 +212,7 @@ def bulk_save_allocations(payload: BulkAllocationSaveRequest, db: Session = Depe
             db.flush()
             write_audit_log(db, entity_type="supplier_allocation", entity_id=alloc.id, action=AuditAction.OVERRIDE, reason_code=payload.override_reason_code)
             succeeded += 1
+            successful_order_ids.add(order.id)
             continue
 
         supplier = db.query(Supplier).filter(Supplier.id == row.supplier_id).first()
@@ -202,29 +234,28 @@ def bulk_save_allocations(payload: BulkAllocationSaveRequest, db: Session = Depe
             )
             continue
 
-        order = db.query(Order).filter(Order.id == item.order_id).first()
-        if order is None:
-            errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ORDER_NOT_FOUND", message="order not found"))
+        product = db.query(Product).filter(Product.id == item.product_id).first()
+        if product is None:
+            errors.append(BulkAllocationSaveError(order_item_id=item.id, code="PRODUCT_NOT_FOUND", message="product not found"))
             continue
-
         if alloc is None:
-            alloc = SupplierAllocation(order_item_id=row.order_item_id)
+            alloc = SupplierAllocation(order_item_id=item.id)
             db.add(alloc)
 
         alloc.final_supplier_id = row.supplier_id
         alloc.final_qty = row.allocated_qty
-        alloc.final_uom = "count"
+        alloc.final_uom = product.purchase_uom
         alloc.is_manual_override = True
         alloc.override_reason_code = payload.override_reason_code
 
-        # reflect assignment to order-item level workflow
-        item.shipped_date = order.delivery_date
-        item.line_status = LineStatus.allocated
-
         db.flush()
         write_audit_log(db, entity_type="supplier_allocation", entity_id=alloc.id, action=AuditAction.OVERRIDE, reason_code=payload.override_reason_code)
-        write_audit_log(db, entity_type="order_item", entity_id=item.id, action=AuditAction.UPDATE, reason_code="bulk_allocate_apply")
         succeeded += 1
+        successful_order_ids.add(order.id)
+
+    db.flush()
+    for order_id in sorted(successful_order_ids):
+        synchronize_confirmed_order_allocation_status(db, locked_orders[order_id])
 
     db.commit()
     failed = len(payload.items) - succeeded
