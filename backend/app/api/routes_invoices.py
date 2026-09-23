@@ -17,7 +17,7 @@ from app.core.numbering import (
     generate_official_invoice_no,
 )
 from app.db.session import get_db
-from app.models.entities import Customer, Delivery, Invoice, InvoiceItem, InvoiceStatus, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, SupplierAllocation
+from app.models.entities import Customer, Delivery, Invoice, InvoiceItem, InvoiceLineStatus, InvoiceStatus, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
     InvoiceBatchFinalizeRequest,
@@ -269,6 +269,11 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
     for order_id in order_ids:
         lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
         for line in lines:
+            # Cancellation is a terminal business decision. Invoice status
+            # synchronization must never revive a cancelled line that is not
+            # part of the invoice being finalized or reset.
+            if line.line_status == LineStatus.cancelled:
+                continue
             has_finalized_invoice = (
                 db.query(InvoiceItem.id)
                 .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
@@ -294,10 +299,11 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
         order = db.query(Order).filter(Order.id == order_id).first()
         if order is None:
             continue
-        all_invoiced = bool(lines) and all(line.line_status == LineStatus.invoiced for line in lines)
+        invoiceable_lines = [line for line in lines if line.line_status != LineStatus.cancelled]
+        all_invoiced = bool(invoiceable_lines) and all(line.line_status == LineStatus.invoiced for line in invoiceable_lines)
         if all_invoiced:
             target_order_status = OrderStatus.invoiced
-        elif lines:
+        elif invoiceable_lines:
             target_order_status = OrderStatus.shipped
         else:
             target_order_status = order.status
@@ -322,6 +328,30 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
             )
 
 
+def _set_invoice_item_statuses(
+    db: Session,
+    invoice: Invoice,
+    status: InvoiceLineStatus,
+    *,
+    reason_code: str | None = None,
+) -> None:
+    items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice.id).all()
+    for item in items:
+        if item.invoice_line_status == status:
+            continue
+        before = {"invoice_line_status": item.invoice_line_status.value}
+        item.invoice_line_status = status
+        write_audit_log(
+            db,
+            entity_type="invoice_item",
+            entity_id=item.id,
+            action=AuditAction.UPDATE,
+            reason_code=reason_code,
+            before=before,
+            after={"invoice_line_status": item.invoice_line_status.value, "invoice_id": invoice.id},
+        )
+
+
 def _finalize_invoice_row(db: Session, invoice: Invoice, *, reason_code: str | None = None) -> InvoiceFinalizeResponse:
     if invoice.status != InvoiceStatus.draft:
         raise HTTPException(status_code=409, detail={"code": "INVOICE_NOT_DRAFT", "message": "invoice is not draft"})
@@ -338,6 +368,7 @@ def _finalize_invoice_row(db: Session, invoice: Invoice, *, reason_code: str | N
     invoice.invoice_no = invoice.official_invoice_no
     invoice.status = InvoiceStatus.finalized
     invoice.is_locked = True
+    _set_invoice_item_statuses(db, invoice, InvoiceLineStatus.invoiced, reason_code=reason_code)
     db.flush()
     _sync_order_statuses_for_invoice(db, invoice)
     write_audit_log(
@@ -1182,7 +1213,8 @@ def generate_invoice_from_delivery(payload: InvoiceGenerateFromDeliveryRequest, 
 def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResultsRequest, db: Session = Depends(get_db)) -> InvoiceDraftGenerateResult:
     _validate_due_date(payload.invoice_date, payload.due_date)
     order = _get_order_or_404(db, payload.order_id)
-    delivery = _resolve_delivery_for_order(db, order, create_if_missing=True)
+    if order.status == OrderStatus.cancelled:
+        raise HTTPException(status_code=422, detail={"code": "CANCELLED_ORDER_NOT_INVOICEABLE", "message": "cancelled order cannot be invoiced"})
 
     rows = (
         db.query(PurchaseResult, OrderItem, Product)
@@ -1198,6 +1230,35 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
         raise HTTPException(status_code=422, detail={"code": "PURCHASE_RESULTS_NOT_FOUND", "message": "no target purchase results found"})
 
     target_ids = [pr.id for pr, _, _ in rows]
+    requested_ids = set(payload.purchase_result_ids)
+    resolved_ids = set(target_ids)
+    if requested_ids != resolved_ids:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "PURCHASE_RESULT_IDS_INVALID",
+                "message": "all purchase_result_ids must exist and belong to the target order",
+                "details": [
+                    {
+                        "field": "purchase_result_ids",
+                        "unresolved_ids": sorted(requested_ids - resolved_ids),
+                    }
+                ],
+            },
+        )
+
+    cancelled_item_ids = [item.id for _, item, _ in rows if item.line_status == LineStatus.cancelled]
+    if cancelled_item_ids:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "CANCELLED_ORDER_ITEM_NOT_INVOICEABLE",
+                "message": "cancelled order items cannot be invoiced",
+                "details": [{"field": "order_item_ids", "ids": cancelled_item_ids}],
+            },
+        )
+
+    delivery = _resolve_delivery_for_order(db, order, create_if_missing=True)
 
     # idempotent: skip purchase results already marked as invoiced
     rows_to_create = [triple for triple in rows if triple[0].invoice_qty is None]
@@ -1485,6 +1546,7 @@ def reset_to_draft(invoice_id: str, payload: InvoiceResetRequest, db: Session = 
     row.is_locked = False
     if row.invoice_draft_no is not None:
         row.invoice_no = row.invoice_draft_no
+    _set_invoice_item_statuses(db, row, InvoiceLineStatus.uninvoiced, reason_code=payload.reset_reason_code)
     db.flush()
     _sync_order_statuses_for_invoice(db, row)
     write_audit_log(
@@ -1519,6 +1581,7 @@ def reset_to_draft_by_uuid(invoice_uuid: str, payload: InvoiceResetRequest, db: 
     row.is_locked = False
     if row.invoice_draft_no is not None:
         row.invoice_no = row.invoice_draft_no
+    _set_invoice_item_statuses(db, row, InvoiceLineStatus.uninvoiced, reason_code=payload.reset_reason_code)
     db.flush()
     _sync_order_statuses_for_invoice(db, row)
     write_audit_log(

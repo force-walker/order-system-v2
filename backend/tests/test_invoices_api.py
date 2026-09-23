@@ -16,6 +16,7 @@ from app.models.entities import (
     Invoice,
     InvoiceNumberSequence,
     InvoiceItem,
+    InvoiceLineStatus,
     InvoiceStatus,
     LineStatus,
     Order,
@@ -158,9 +159,19 @@ def _seed_order(with_items: bool = False, include_kg_without_weight: bool = Fals
     return oid
 
 
-def _seed_purchase_result_for_order(order_id: int, purchased_qty: float = 2, unit_cost: float | None = None, final_unit_cost: float | None = None) -> int:
+def _seed_purchase_result_for_order(
+    order_id: int,
+    purchased_qty: float = 2,
+    unit_cost: float | None = None,
+    final_unit_cost: float | None = None,
+    *,
+    order_item_id: str | None = None,
+) -> int:
     db = TestingSessionLocal()
-    item = db.query(OrderItem).filter(OrderItem.order_id == order_id).first()
+    item_query = db.query(OrderItem).filter(OrderItem.order_id == order_id)
+    if order_item_id is not None:
+        item_query = item_query.filter(OrderItem.id == order_item_id)
+    item = item_query.first()
     assert item is not None
 
     alloc = SupplierAllocation(
@@ -501,7 +512,7 @@ def test_generate_draft_from_purchase_results_for_shipped_order_resolves_deliver
     assert invoice.json()["delivery_no"].startswith("DLV-")
 
 
-def test_draft_generation_filters_foreign_missing_and_invalid_purchase_result_ids():
+def test_draft_generation_requires_exact_unique_purchase_result_ids_for_order():
     target_order_id = _seed_order(with_items=True)
     foreign_order_id = _seed_order(with_items=True)
     _seed_system_settings()
@@ -509,28 +520,52 @@ def test_draft_generation_filters_foreign_missing_and_invalid_purchase_result_id
     foreign_result_id = _seed_purchase_result_for_order(foreign_order_id, purchased_qty=2)
     client = _client()
 
-    mixed = client.post(
+    all_foreign = client.post(
         "/api/v1/invoices/generate-draft-from-purchase-results",
         json={
             "order_id": target_order_id,
             "invoice_date": str(date.today()),
-            "purchase_result_ids": [target_result_id, foreign_result_id, 999999999, -1],
+            "purchase_result_ids": [foreign_result_id],
         },
     )
-    assert mixed.status_code == 201
-    assert mixed.json()["target_purchase_result_ids"] == [target_result_id]
+    assert all_foreign.status_code == 422
+    assert all_foreign.json()["detail"]["code"] == "PURCHASE_RESULTS_NOT_FOUND"
 
-    for invalid_ids in ([foreign_result_id], [999999999], [-1]):
-        rejected = client.post(
-            "/api/v1/invoices/generate-draft-from-purchase-results",
-            json={
-                "order_id": target_order_id,
-                "invoice_date": str(date.today()),
-                "purchase_result_ids": invalid_ids,
-            },
-        )
-        assert rejected.status_code == 422
-        assert rejected.json()["detail"]["code"] == "PURCHASE_RESULTS_NOT_FOUND"
+    mixed_foreign = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": target_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [target_result_id, foreign_result_id],
+        },
+    )
+    assert mixed_foreign.status_code == 422
+    assert mixed_foreign.json()["detail"]["code"] == "PURCHASE_RESULT_IDS_INVALID"
+    assert mixed_foreign.json()["detail"]["details"][0]["unresolved_ids"] == [foreign_result_id]
+
+    missing_id = 999999999
+    mixed_missing = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": target_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [target_result_id, missing_id],
+        },
+    )
+    assert mixed_missing.status_code == 422
+    assert mixed_missing.json()["detail"]["code"] == "PURCHASE_RESULT_IDS_INVALID"
+    assert mixed_missing.json()["detail"]["details"][0]["unresolved_ids"] == [missing_id]
+
+    duplicate = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": target_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [target_result_id, target_result_id],
+        },
+    )
+    assert duplicate.status_code == 422
+    assert "must not contain duplicates" in str(duplicate.json())
 
     empty = client.post(
         "/api/v1/invoices/generate-draft-from-purchase-results",
@@ -541,6 +576,17 @@ def test_draft_generation_filters_foreign_missing_and_invalid_purchase_result_id
         },
     )
     assert empty.status_code == 422
+
+    valid = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": target_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [target_result_id],
+        },
+    )
+    assert valid.status_code == 201
+    assert valid.json()["target_purchase_result_ids"] == [target_result_id]
 
 
 def test_generate_invoice_without_items_is_422():
@@ -776,6 +822,289 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
     assert order.status == OrderStatus.shipped
     assert sum(1 for line in lines if line.line_status == LineStatus.invoiced) == 1
     assert sum(1 for line in lines if line.line_status != LineStatus.invoiced) == 1
+    db.close()
+
+
+def test_generate_draft_rejects_cancelled_order_and_selected_cancelled_item():
+    cancelled_order_id = _seed_order(with_items=True)
+    item_cancelled_order_result_id = _seed_purchase_result_for_order(cancelled_order_id, final_unit_cost=1000)
+
+    partially_cancelled_order_id = _seed_order(with_items=True)
+    db = TestingSessionLocal()
+    cancelled_order = db.query(Order).filter(Order.id == cancelled_order_id).one()
+    cancelled_order.status = OrderStatus.cancelled
+    cancelled_item = (
+        db.query(OrderItem)
+        .filter(OrderItem.order_id == partially_cancelled_order_id)
+        .order_by(OrderItem.created_at.asc())
+        .first()
+    )
+    assert cancelled_item is not None
+    cancelled_item.line_status = LineStatus.cancelled
+    cancelled_item_id = cancelled_item.id
+    active_item = (
+        db.query(OrderItem)
+        .filter(OrderItem.order_id == partially_cancelled_order_id, OrderItem.id != cancelled_item_id)
+        .first()
+    )
+    assert active_item is not None
+    active_item_id = active_item.id
+    db.commit()
+    db.close()
+
+    cancelled_item_result_id = _seed_purchase_result_for_order(
+        partially_cancelled_order_id,
+        final_unit_cost=1000,
+        order_item_id=cancelled_item_id,
+    )
+    active_item_result_id = _seed_purchase_result_for_order(
+        partially_cancelled_order_id,
+        final_unit_cost=1000,
+        order_item_id=active_item_id,
+    )
+    _seed_system_settings()
+    client = _client()
+    endpoint = "/api/v1/invoices/generate-draft-from-purchase-results"
+
+    cancelled_order_response = client.post(
+        endpoint,
+        json={
+            "order_id": cancelled_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [item_cancelled_order_result_id],
+        },
+    )
+    assert cancelled_order_response.status_code == 422
+    assert cancelled_order_response.json()["detail"]["code"] == "CANCELLED_ORDER_NOT_INVOICEABLE"
+
+    cancelled_item_response = client.post(
+        endpoint,
+        json={
+            "order_id": partially_cancelled_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [cancelled_item_result_id],
+        },
+    )
+    assert cancelled_item_response.status_code == 422
+    assert cancelled_item_response.json()["detail"]["code"] == "CANCELLED_ORDER_ITEM_NOT_INVOICEABLE"
+    assert cancelled_item_response.json()["detail"]["details"][0]["ids"] == [cancelled_item_id]
+
+    mixed_response = client.post(
+        endpoint,
+        json={
+            "order_id": partially_cancelled_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [cancelled_item_result_id, active_item_result_id],
+        },
+    )
+    assert mixed_response.status_code == 422
+    assert mixed_response.json()["detail"]["code"] == "CANCELLED_ORDER_ITEM_NOT_INVOICEABLE"
+
+    active_only_response = client.post(
+        endpoint,
+        json={
+            "order_id": partially_cancelled_order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [active_item_result_id],
+        },
+    )
+    assert active_only_response.status_code == 201
+    db = TestingSessionLocal()
+    invoiced_order_item_ids = {
+        order_item_id
+        for (order_item_id,) in (
+            db.query(InvoiceItem.order_item_id)
+            .filter(InvoiceItem.invoice_id == active_only_response.json()["invoice_id"])
+            .all()
+        )
+    }
+    db.close()
+    assert invoiced_order_item_ids == {active_item_id}
+
+
+def test_finalize_reset_and_refinalize_keep_header_item_and_order_statuses_consistent():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+    generated = client.post(
+        "/api/v1/invoices/generate",
+        json={"order_id": order_id, "invoice_date": str(date.today())},
+    )
+    assert generated.status_code == 201
+    invoice_id = generated.json()["id"]
+
+    def assert_statuses(
+        invoice_status: InvoiceStatus,
+        invoice_item_status: InvoiceLineStatus,
+        order_status: OrderStatus,
+        order_item_status: LineStatus,
+    ) -> None:
+        db = TestingSessionLocal()
+        invoice = db.query(Invoice).filter(Invoice.id == invoice_id).one()
+        invoice_items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice_id).all()
+        order = db.query(Order).filter(Order.id == order_id).one()
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        assert invoice.status == invoice_status
+        assert invoice_items
+        assert all(item.invoice_line_status == invoice_item_status for item in invoice_items)
+        assert order.status == order_status
+        assert order_items
+        assert all(item.line_status == order_item_status for item in order_items)
+        db.close()
+
+    assert_statuses(InvoiceStatus.draft, InvoiceLineStatus.uninvoiced, OrderStatus.confirmed, LineStatus.open)
+
+    finalized = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
+    assert finalized.status_code == 200
+    assert_statuses(InvoiceStatus.finalized, InvoiceLineStatus.invoiced, OrderStatus.invoiced, LineStatus.invoiced)
+
+    reset = client.post(
+        f"/api/v1/invoices/{invoice_id}/reset-to-draft",
+        json={"reset_reason_code": "data_error", "reason_note": "verify status cycle"},
+    )
+    assert reset.status_code == 200
+    assert_statuses(InvoiceStatus.draft, InvoiceLineStatus.uninvoiced, OrderStatus.shipped, LineStatus.shipped)
+
+    refinalized = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
+    assert refinalized.status_code == 200
+    assert_statuses(InvoiceStatus.finalized, InvoiceLineStatus.invoiced, OrderStatus.invoiced, LineStatus.invoiced)
+
+
+def test_finalize_and_reset_do_not_revive_cancelled_order_item():
+    order_id = _seed_order(with_items=True)
+    db = TestingSessionLocal()
+    items = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.created_at.asc()).all()
+    assert len(items) == 2
+    active_item_id = items[0].id
+    cancelled_item_id = items[1].id
+    items[1].line_status = LineStatus.cancelled
+    db.commit()
+    db.close()
+
+    _seed_system_settings()
+    active_result_id = _seed_purchase_result_for_order(
+        order_id,
+        final_unit_cost=1000,
+        order_item_id=active_item_id,
+    )
+    client = _client()
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [active_result_id],
+        },
+    )
+    assert draft.status_code == 201
+    invoice_id = draft.json()["invoice_id"]
+
+    finalized = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
+    assert finalized.status_code == 200
+    db = TestingSessionLocal()
+    active_item = db.query(OrderItem).filter(OrderItem.id == active_item_id).one()
+    cancelled_item = db.query(OrderItem).filter(OrderItem.id == cancelled_item_id).one()
+    order = db.query(Order).filter(Order.id == order_id).one()
+    assert active_item.line_status == LineStatus.invoiced
+    assert cancelled_item.line_status == LineStatus.cancelled
+    assert order.status == OrderStatus.invoiced
+    db.close()
+
+    reset = client.post(
+        f"/api/v1/invoices/{invoice_id}/reset-to-draft",
+        json={"reset_reason_code": "data_error", "reason_note": "verify cancelled line remains terminal"},
+    )
+    assert reset.status_code == 200
+    db = TestingSessionLocal()
+    active_item = db.query(OrderItem).filter(OrderItem.id == active_item_id).one()
+    cancelled_item = db.query(OrderItem).filter(OrderItem.id == cancelled_item_id).one()
+    order = db.query(Order).filter(Order.id == order_id).one()
+    assert active_item.line_status == LineStatus.shipped
+    assert cancelled_item.line_status == LineStatus.cancelled
+    assert order.status == OrderStatus.shipped
+    db.close()
+
+
+def test_partial_invoices_and_reset_preserve_other_invoice_statuses():
+    order_id = _seed_order(with_items=True)
+    db = TestingSessionLocal()
+    items = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.created_at.asc()).all()
+    assert len(items) == 2
+    first_item_id = items[0].id
+    second_item_id = items[1].id
+    db.close()
+
+    _seed_system_settings()
+    first_result_id = _seed_purchase_result_for_order(
+        order_id,
+        final_unit_cost=1000,
+        order_item_id=first_item_id,
+    )
+    second_result_id = _seed_purchase_result_for_order(
+        order_id,
+        final_unit_cost=1000,
+        order_item_id=second_item_id,
+    )
+    client = _client()
+
+    first_draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [first_result_id],
+        },
+    )
+    assert first_draft.status_code == 201
+    first_invoice_id = first_draft.json()["invoice_id"]
+    assert client.post(f"/api/v1/invoices/{first_invoice_id}/finalize").status_code == 200
+
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).one()
+    first_item = db.query(OrderItem).filter(OrderItem.id == first_item_id).one()
+    second_item = db.query(OrderItem).filter(OrderItem.id == second_item_id).one()
+    assert first_item.line_status == LineStatus.invoiced
+    assert second_item.line_status == LineStatus.shipped
+    assert order.status == OrderStatus.shipped
+    db.close()
+
+    second_draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [second_result_id],
+        },
+    )
+    assert second_draft.status_code == 201
+    second_invoice_id = second_draft.json()["invoice_id"]
+    assert client.post(f"/api/v1/invoices/{second_invoice_id}/finalize").status_code == 200
+
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).one()
+    first_item = db.query(OrderItem).filter(OrderItem.id == first_item_id).one()
+    second_item = db.query(OrderItem).filter(OrderItem.id == second_item_id).one()
+    assert first_item.line_status == LineStatus.invoiced
+    assert second_item.line_status == LineStatus.invoiced
+    assert order.status == OrderStatus.invoiced
+    db.close()
+
+    reset_first = client.post(
+        f"/api/v1/invoices/{first_invoice_id}/reset-to-draft",
+        json={"reset_reason_code": "data_error", "reason_note": "verify other invoice remains finalized"},
+    )
+    assert reset_first.status_code == 200
+
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).one()
+    first_item = db.query(OrderItem).filter(OrderItem.id == first_item_id).one()
+    second_item = db.query(OrderItem).filter(OrderItem.id == second_item_id).one()
+    first_invoice_items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == first_invoice_id).all()
+    second_invoice_items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == second_invoice_id).all()
+    assert first_item.line_status == LineStatus.shipped
+    assert second_item.line_status == LineStatus.invoiced
+    assert order.status == OrderStatus.shipped
+    assert all(item.invoice_line_status == InvoiceLineStatus.uninvoiced for item in first_invoice_items)
+    assert all(item.invoice_line_status == InvoiceLineStatus.invoiced for item in second_invoice_items)
     db.close()
 
 

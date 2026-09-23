@@ -76,6 +76,15 @@ class InvoiceDraftFromPurchaseResultsRequest(BaseModel):
     def validate_order_id(cls, value: str | int) -> str | int:
         return InvoiceCreateRequest.validate_order_id(value)
 
+    @field_validator("purchase_result_ids")
+    @classmethod
+    def validate_purchase_result_ids(cls, value: list[int]) -> list[int]:
+        if any(result_id <= 0 for result_id in value):
+            raise ValueError("purchase_result_ids must contain only positive IDs")
+        if len(value) != len(set(value)):
+            raise ValueError("purchase_result_ids must not contain duplicates")
+        return value
+
 
 class InvoiceResponse(BaseModel):
     id: str
