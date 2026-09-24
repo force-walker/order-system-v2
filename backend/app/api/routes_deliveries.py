@@ -43,6 +43,16 @@ def _pick_font() -> str:
     return fallback
 
 
+def _fit_text(text: str, *, font: str, size: float, max_width: float) -> str:
+    if pdfmetrics.stringWidth(text, font, size) <= max_width:
+        return text
+    ellipsis = "..."
+    fitted = text
+    while fitted and pdfmetrics.stringWidth(fitted + ellipsis, font, size) > max_width:
+        fitted = fitted[:-1]
+    return f"{fitted}{ellipsis}" if fitted else ellipsis
+
+
 def _get_delivery_or_404(db: Session, delivery_id: str) -> Delivery:
     row = db.query(Delivery).filter(Delivery.id == delivery_id).first()
     if row is None:
@@ -291,9 +301,9 @@ def get_delivery_pdf(delivery_id: str, db: Session = Depends(get_db)) -> Respons
     y = height - 130
     pdf.setFont(font, 10)
     pdf.drawString(36, y, "Line")
-    pdf.drawString(120, y, "Product")
-    pdf.drawString(360, y, "Qty")
-    pdf.drawString(430, y, "UOM")
+    pdf.drawString(205, y, "Product")
+    pdf.drawRightString(493, y, "Qty")
+    pdf.drawString(505, y, "UOM")
     y -= 16
 
     for item, product, _order_item in rows:
@@ -301,10 +311,10 @@ def get_delivery_pdf(delivery_id: str, db: Session = Depends(get_db)) -> Respons
             pdf.showPage()
             pdf.setFont(font, 10)
             y = height - 40
-        pdf.drawString(36, y, item.line_ref or item.delivery_line_no)
-        pdf.drawString(120, y, product.name)
-        pdf.drawRightString(410, y, f"{float(item.delivered_qty):.3f}".rstrip("0").rstrip("."))
-        pdf.drawString(430, y, item.delivered_uom)
+        pdf.drawString(36, y, _fit_text(item.line_ref or item.delivery_line_no, font=font, size=10, max_width=142))
+        pdf.drawString(205, y, _fit_text(product.name, font=font, size=10, max_width=260))
+        pdf.drawRightString(493, y, f"{float(item.delivered_qty):.3f}".rstrip("0").rstrip("."))
+        pdf.drawString(505, y, _fit_text(item.delivered_uom, font=font, size=10, max_width=50))
         y -= 16
 
     pdf.save()

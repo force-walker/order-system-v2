@@ -335,10 +335,15 @@ def test_create_finalize_unlock_reset_invoice_flow():
 
     report_by_uuid = client.get(f"/api/v1/invoices/uuid/{created.json()['uuid']}/report")
     assert report_by_uuid.status_code == 200
+    report = client.get(f"/api/v1/invoices/{invoice_id}/report")
+    assert report.status_code == 200
+    assert report_by_uuid.json() == report.json()
     assert report_by_uuid.json()["invoice_id"] == invoice_id
     assert report_by_uuid.json()["delivery_no"].startswith("DEL-")
     assert report_by_uuid.json()["delivery_id"] is not None
     assert report_by_uuid.json()["delivery_uuid"] is not None
+    assert all(item["line_no"] is not None for item in report_by_uuid.json()["items"])
+    assert all(item["line_ref"] for item in report_by_uuid.json()["items"])
 
     db = TestingSessionLocal()
     order = db.query(Order).filter(Order.id == order_id).first()

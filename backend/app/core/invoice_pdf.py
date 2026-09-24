@@ -79,28 +79,46 @@ def _format_unit_price(unit_price: float) -> str:
     return f"{unit_price:,.2f}"
 
 
+def _fit_single_line(c: canvas.Canvas, text: str, font: str, size: float, max_w: float) -> str:
+    if c.stringWidth(text, font, size) <= max_w:
+        return text
+    ellipsis = "..."
+    fitted = text
+    while fitted and c.stringWidth(fitted + ellipsis, font, size) > max_w:
+        fitted = fitted[:-1]
+    return f"{fitted}{ellipsis}" if fitted else ellipsis
+
+
 def _wrap_text(c: canvas.Canvas, text: str, font: str, size: float, max_w: float, max_lines: int) -> list[str]:
     if not text:
         return [""]
 
     lines: list[str] = []
-    current = ""
-    for ch in text:
-        candidate = current + ch
-        if c.stringWidth(candidate, font, size) <= max_w:
-            current = candidate
-            continue
-        lines.append(current)
-        current = ch
+    truncated = False
+    paragraphs = text.splitlines() or [""]
+    for paragraph_index, paragraph in enumerate(paragraphs):
+        current = ""
+        for ch in paragraph:
+            candidate = current + ch
+            if c.stringWidth(candidate, font, size) <= max_w:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+            current = ch
+            if len(lines) >= max_lines:
+                truncated = True
+                break
         if len(lines) >= max_lines:
+            truncated = truncated or bool(current) or paragraph_index < len(paragraphs) - 1
             break
-    if len(lines) < max_lines and current:
         lines.append(current)
+        if len(lines) >= max_lines and paragraph_index < len(paragraphs) - 1:
+            truncated = True
+            break
 
-    if len(lines) > max_lines:
-        lines = lines[:max_lines]
-
-    if len(lines) == max_lines and current and lines[-1] != current:
+    lines = lines[:max_lines]
+    if truncated and lines:
         ellipsis = "..."
         trimmed = lines[-1]
         while trimmed and c.stringWidth(trimmed + ellipsis, font, size) > max_w:
@@ -179,10 +197,13 @@ def build_invoice_pdf(doc: InvoicePdfDocument) -> bytes:
         c.setLineWidth(0.7)
         c.line(left, table_y, right, table_y)
         c.setFont(font, 9)
-        columns = [("Description", 240), ("Source", 70), ("Quantity", 70), ("Unit Price", 80), ("Amount", 95)]
+        columns = [("Description", 180), ("Source", 125), ("Quantity", 55), ("Unit Price", 70), ("Amount", 85)]
         x = left
         for label, col_w in columns:
-            c.drawString(x + 4, table_y - 14, label)
+            if label in {"Quantity", "Unit Price", "Amount"}:
+                c.drawRightString(x + col_w - 5, table_y - 14, label)
+            else:
+                c.drawString(x + 4, table_y - 14, label)
             x += col_w
         c.line(left, table_y - 20, right, table_y - 20)
         return table_y - 34
@@ -194,31 +215,37 @@ def build_invoice_pdf(doc: InvoicePdfDocument) -> bytes:
         return draw_header()
 
     y = draw_header()
-    desc_w = 232
-    source_w = 62
-    quantity_x = left + 240 + 70 + 70
-    unit_price_x = left + 240 + 70 + 70 + 80
+    desc_w = 172
+    source_w = 117
+    source_x = left + 180
+    quantity_x = left + 180 + 125 + 55 - 5
+    unit_price_x = left + 180 + 125 + 55 + 70 - 5
     amount_x = right
 
     for line in doc.lines:
         desc_lines = _wrap_text(c, line.description, font, 9, desc_w, 3)
-        source_lines = _wrap_text(c, line.source, font, 9, source_w, 2)
+        source_parts = line.source.splitlines()
+        source_lines = (
+            [_fit_single_line(c, part, font, 9, source_w) for part in source_parts[:2]]
+            if len(source_parts) > 1
+            else _wrap_text(c, line.source, font, 9, source_w, 2)
+        )
         line_count = max(len(desc_lines), len(source_lines), 1)
-        needed = (line_count * 11) + 8
+        needed = (line_count * 12) + 18
         y = ensure_space(y, needed)
 
         top = y
         c.setFont(font, 9)
         for idx, row in enumerate(desc_lines):
-            c.drawString(left + 4, top - (idx * 11), row)
+            c.drawString(left + 4, top - (idx * 12), row)
         for idx, row in enumerate(source_lines):
-            c.drawString(left + 244, top - (idx * 11), row)
+            c.drawString(source_x + 4, top - (idx * 12), row)
 
-        c.drawRightString(quantity_x + 66, top, _format_quantity(line.quantity))
-        c.drawRightString(unit_price_x + 76, top, _format_unit_price(line.unit_price))
-        c.drawRightString(amount_x, top, _format_currency(line.amount, doc.currency))
+        c.drawRightString(quantity_x, top, _format_quantity(line.quantity))
+        c.drawRightString(unit_price_x, top, _format_unit_price(line.unit_price))
+        c.drawRightString(amount_x - 5, top, _format_currency(line.amount, doc.currency))
         y -= needed
-        c.line(left, y + 2, right, y + 2)
+        c.line(left, y + 10, right, y + 10)
 
     summary_needed = 120
     y = ensure_space(y, summary_needed)

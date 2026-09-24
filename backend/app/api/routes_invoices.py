@@ -732,6 +732,8 @@ def get_invoice_report_by_uuid(invoice_uuid: str, db: Session = Depends(get_db))
                 invoice_item_legacy_id=i.legacy_id,
                 order_item_id=i.order_item_id,
                 invoice_line_no=i.invoice_line_no,
+                line_no=i.line_no,
+                line_ref=i.line_ref,
                 product_name=product_name_by_order_item_id.get(i.order_item_id, "-"),
                 billable_qty=float(i.billable_qty),
                 billable_uom=i.billable_uom,
@@ -788,7 +790,7 @@ def get_invoice_pdf(invoice_id: str, db: Session = Depends(get_db)) -> Response:
         lines=[
             InvoicePdfLine(
                 description=product.name,
-                source=f"{order.order_no} / {item.line_ref or item.invoice_line_no or '-'}",
+                source=f"{order.order_no}\n{item.line_ref or item.invoice_line_no or '-'}",
                 quantity=float(item.billable_qty),
                 unit_price=float(item.sales_unit_price),
                 amount=float(item.line_amount),
