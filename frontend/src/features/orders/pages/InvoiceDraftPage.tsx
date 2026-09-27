@@ -8,7 +8,8 @@ import {
   listInvoiceDraftListRows,
   updateInvoiceDraftItem,
 } from 'features/orders/services/invoiceService';
-import type { InvoiceDraftListRow, InvoiceStatus } from 'features/orders/types/order';
+import { listCustomers } from 'features/orders/services/ordersService';
+import type { CustomerOption, InvoiceDraftListRow, InvoiceStatus } from 'features/orders/types/order';
 import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import { toActionableMessage } from 'shared/error';
 
@@ -31,6 +32,18 @@ type ToastPayload = {
 type RowSelect = Record<EntityId, boolean>;
 type PriceInputMap = Record<EntityId, string>;
 type SavingMap = Record<EntityId, boolean>;
+const ALL_CUSTOMERS_LABEL = '全取引先';
+
+const customerName = (customer: CustomerOption) => {
+  const afterId = customer.label.includes(':') ? customer.label.split(':').slice(1).join(':').trim() : customer.label;
+  const suffix = customer.customerCode ? ` (${customer.customerCode})` : '';
+  return suffix && afterId.endsWith(suffix) ? afterId.slice(0, -suffix.length).trim() : afterId.replace(/\s+\([^)]*\)\s*$/, '').trim();
+};
+
+const customerDisplayLabel = (customer: CustomerOption) => {
+  const name = customerName(customer);
+  return customer.customerCode ? `${name} (${customer.customerCode})` : name;
+};
 
 const formatNumber = (value: number | undefined) => {
   if (value === undefined) return '-';
@@ -46,7 +59,9 @@ export const InvoiceDraftPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftListRow[]>([]);
-  const [customerFilter, setCustomerFilter] = useState('');
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS_LABEL);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [dateFilter, setDateFilter] = useState(getDefaultDeliveryDate);
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | ''>('draft');
   const [selectedByInvoiceId, setSelectedByInvoiceId] = useState<RowSelect>({});
@@ -59,8 +74,12 @@ export const InvoiceDraftPage = () => {
     setLoading(true);
     setError('');
     try {
-      const nextRows = await listInvoiceDraftListRows();
+      const [nextRows, customerOptions] = await Promise.all([
+        listInvoiceDraftListRows(),
+        listCustomers(true),
+      ]);
       setRows(nextRows);
+      setCustomers(customerOptions);
       setSelectedByInvoiceId((prev) =>
         Object.fromEntries([...new Set(nextRows.map((row) => row.invoiceId))].map((invoiceId) => [invoiceId, prev[invoiceId] ?? false])),
       );
@@ -83,16 +102,58 @@ export const InvoiceDraftPage = () => {
   }, [toast]);
 
   const filtered = useMemo(() => {
-    const customerQuery = customerFilter.trim().toLowerCase();
+    const customerQuery = customerFilter.trim().toLocaleLowerCase();
+    const selectedCustomer = selectedCustomerId == null ? undefined : customers.find((customer) => customer.id === selectedCustomerId);
+    const selectedCustomerName = selectedCustomer ? customerName(selectedCustomer).toLocaleLowerCase() : undefined;
+    const matchingCustomerNames = new Set(
+      customerQuery && customerQuery !== ALL_CUSTOMERS_LABEL.toLocaleLowerCase()
+        ? customers
+          .filter((customer) => [customer.label, customerName(customer), customer.customerCode ?? '']
+            .some((value) => value.toLocaleLowerCase().includes(customerQuery)))
+          .map((customer) => customerName(customer).toLocaleLowerCase())
+        : [],
+    );
     return rows
       .filter((row) => {
         if (statusFilter && row.status !== statusFilter) return false;
         if (dateFilter && row.deliveryDate !== dateFilter) return false;
-        if (customerQuery && !row.customerName.toLowerCase().includes(customerQuery)) return false;
+        const rowCustomerName = row.customerName.toLocaleLowerCase();
+        if (selectedCustomerName && rowCustomerName !== selectedCustomerName) return false;
+        if (
+          !selectedCustomerName
+          && customerQuery
+          && customerQuery !== ALL_CUSTOMERS_LABEL.toLocaleLowerCase()
+          && !rowCustomerName.includes(customerQuery)
+          && !matchingCustomerNames.has(rowCustomerName)
+        ) return false;
         return true;
       })
       .sort((a, b) => newestInvoiceFirst(a, b) || compareIds(a.invoiceItemId, b.invoiceItemId));
-  }, [rows, customerFilter, dateFilter, statusFilter]);
+  }, [rows, customers, customerFilter, selectedCustomerId, dateFilter, statusFilter]);
+
+  const resetCustomerFilter = () => {
+    setSelectedCustomerId(null);
+    setCustomerFilter(ALL_CUSTOMERS_LABEL);
+  };
+
+  const onCustomerFilterChange = (rawValue: string) => {
+    const value = rawValue.trim();
+    if (!value || value === ALL_CUSTOMERS_LABEL) {
+      setSelectedCustomerId(null);
+      setCustomerFilter(rawValue);
+      return;
+    }
+
+    const normalized = value.toLocaleLowerCase();
+    const exact = customers.find((customer) => (
+      customer.label.toLocaleLowerCase() === normalized
+      || customerDisplayLabel(customer).toLocaleLowerCase() === normalized
+      || customerName(customer).toLocaleLowerCase() === normalized
+      || customer.customerCode?.toLocaleLowerCase() === normalized
+    ));
+    setSelectedCustomerId(exact?.id ?? null);
+    setCustomerFilter(exact ? customerDisplayLabel(exact) : rawValue);
+  };
 
   const draftInvoiceIds = useMemo(() => [...new Set(rows.filter((row) => row.status === 'draft').map((row) => row.invoiceId))], [rows]);
   const finalizedInvoiceIds = useMemo(
@@ -227,8 +288,25 @@ export const InvoiceDraftPage = () => {
         <div className="list-controls" style={{ marginBottom: 12 }}>
           <label className="filter-label">
             取引先
-            <input value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} placeholder="取引先名で検索" />
+            <input
+              aria-label="取引先"
+              list="invoice-draft-customer-options"
+              value={customerFilter}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => onCustomerFilterChange(event.target.value)}
+              onBlur={() => {
+                if (!customerFilter.trim()) resetCustomerFilter();
+              }}
+              placeholder="取引先名 / 取引先コードで検索"
+            />
+            <datalist id="invoice-draft-customer-options">
+              <option value={ALL_CUSTOMERS_LABEL} />
+              {customers.map((customer) => (
+                <option key={customer.id} value={customerDisplayLabel(customer)}>{customer.label}</option>
+              ))}
+            </datalist>
           </label>
+          <button type="button" className="secondary" onClick={resetCustomerFilter}>全取引先</button>
           <label className="filter-label">
             納品日
             <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />

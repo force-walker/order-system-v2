@@ -7,6 +7,7 @@ import { InvoiceDraftPage } from './InvoiceDraftPage';
 import { getDefaultDeliveryDate } from '../utils/deliveryDate';
 import { getShippingReport } from '../services/shippingReportService';
 import { listInvoiceDraftListRows } from '../services/invoiceService';
+import { listCustomers } from '../services/ordersService';
 
 vi.mock('../services/shippingReportService', () => ({ getShippingReport: vi.fn(), generatePurchaseConfirmationPdf: vi.fn() }));
 vi.mock('../services/invoiceService', () => ({
@@ -14,11 +15,13 @@ vi.mock('../services/invoiceService', () => ({
   finalizeInvoiceDraftsBatch: vi.fn(),
   updateInvoiceDraftItem: vi.fn(),
 }));
+vi.mock('../services/ordersService', () => ({ listCustomers: vi.fn() }));
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getShippingReport).mockResolvedValue([]);
   vi.mocked(listInvoiceDraftListRows).mockResolvedValue([]);
+  vi.mocked(listCustomers).mockResolvedValue([]);
 });
 
 afterEach(cleanup);
