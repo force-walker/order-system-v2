@@ -14,7 +14,7 @@ class ShippingReportRow(BaseModel):
     delivery_item_id: str | None = None
     delivery_no: str | None = None
     order_item_id: str
-    shipped_date: date
+    delivery_date: date
     supplier_name: str | None
     customer_name: str
     product_name: str

@@ -64,11 +64,11 @@ it('loads and finalizes an invoice draft using its UUID', async () => {
   expect(invoices.finalizeInvoiceDraft).toHaveBeenCalledWith(id);
 });
 it('keeps the selected UUID when generating a shipping PDF', async () => {
-  vi.mocked(shipping.getShippingReport).mockResolvedValue([{ orderItemId: itemId, shippedDate: '2026-09-20', supplierName: 'Test', customerName: 'Test', productName: 'Test', quantity: 2, unit: 'kg' }]);
+  vi.mocked(shipping.getShippingReport).mockResolvedValue([{ orderItemId: itemId, deliveryDate: '2026-09-20', supplierName: 'Test', customerName: 'Test', productName: 'Test', quantity: 2, unit: 'kg' }]);
   // Stop before opening a window; this test verifies the selected ID passed to the service.
   vi.mocked(shipping.generatePurchaseConfirmationPdf).mockRejectedValue(new Error('test PDF stop'));
   render(<ShippingReportPage />);
-  fireEvent.change(screen.getByLabelText(/出荷日/), { target: { value: '2026-09-20' } });
+  fireEvent.change(screen.getByLabelText(/納品日/), { target: { value: '2026-09-20' } });
   await userEvent.selectOptions(screen.getByLabelText('表示モード'), 'customer');
   await screen.findByRole('table');
   await userEvent.click(screen.getAllByRole('checkbox')[0]);

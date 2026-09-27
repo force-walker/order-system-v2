@@ -166,15 +166,14 @@ def purchase_confirmation_pdf(payload: PurchaseConfirmationPdfRequest, db: Sessi
 
 @router.get("/shipping", response_model=list[ShippingReportRow])
 def shipping_report(
-    shipped_date: date = Query(...),
+    delivery_date: date = Query(...),
     mode: ShippingReportSortMode = Query(default=ShippingReportSortMode.supplier_product),
     db: Session = Depends(get_db),
 ) -> list[ShippingReportRow]:
     alloc = _latest_allocation_subquery(db)
-    report_date = func.coalesce(OrderItem.shipped_date, Order.shipped_date, Order.delivery_date)
 
     query = (
-        db.query(OrderItem, Order, Customer, Product, alloc.c.final_qty, Supplier, DeliveryItem, Delivery, report_date)
+        db.query(OrderItem, Order, Customer, Product, alloc.c.final_qty, Supplier, DeliveryItem, Delivery)
         .join(Order, Order.id == OrderItem.order_id)
         .join(Customer, Customer.id == Order.customer_id)
         .join(Product, Product.id == OrderItem.product_id)
@@ -183,7 +182,7 @@ def shipping_report(
         .outerjoin(DeliveryItem, DeliveryItem.order_item_id == OrderItem.id)
         .outerjoin(Delivery, Delivery.id == DeliveryItem.delivery_id)
         .filter(
-            report_date == shipped_date,
+            Order.delivery_date == delivery_date,
             Order.status.in_(REPORT_ORDER_STATUSES),
         )
     )
@@ -195,14 +194,14 @@ def shipping_report(
 
     rows = query.all()
     result: list[ShippingReportRow] = []
-    for item, _order, customer, product, final_qty, supplier, delivery_item, delivery, resolved_report_date in rows:
+    for item, order, customer, product, final_qty, supplier, delivery_item, delivery in rows:
         result.append(
             ShippingReportRow(
                 delivery_id=(delivery.id if delivery is not None else None),
                 delivery_item_id=(delivery_item.id if delivery_item is not None else None),
                 delivery_no=(delivery.delivery_no if delivery is not None else None),
                 order_item_id=item.id,
-                shipped_date=resolved_report_date,
+                delivery_date=order.delivery_date,
                 supplier_name=(supplier.name if supplier is not None else None),
                 customer_name=customer.name,
                 product_name=product.name,

@@ -3899,10 +3899,10 @@ export interface components {
             /** Order Item Id */
             order_item_id: string;
             /**
-             * Shipped Date
+             * Delivery Date
              * Format: date
              */
-            shipped_date: string;
+            delivery_date: string;
             /** Supplier Name */
             supplier_name: string | null;
             /** Customer Name */
@@ -9456,7 +9456,7 @@ export interface operations {
     shipping_report_api_v1_reports_shipping_get: {
         parameters: {
             query: {
-                shipped_date: string;
+                delivery_date: string;
                 mode?: components["schemas"]["ShippingReportSortMode"];
             };
             header?: never;

@@ -224,7 +224,8 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert {"unallocated_only", "delivery_date", "order_status", "supplier_id", "product_name", "customer_name", "limit", "offset"}.issubset(worklist_params)
 
     shipping_report_params = {p["name"] for p in spec["paths"]["/api/v1/reports/shipping"]["get"]["parameters"]}
-    assert {"shipped_date", "mode"}.issubset(shipping_report_params)
+    assert {"delivery_date", "mode"}.issubset(shipping_report_params)
+    assert "shipped_date" not in shipping_report_params
 
     delivery_list_params = {p["name"] for p in spec["paths"]["/api/v1/deliveries"]["get"]["parameters"]}
     assert {"order_id", "order_uuid", "shipped_date"}.issubset(delivery_list_params)
@@ -240,6 +241,8 @@ def test_openapi_phase2_query_filters_are_exposed():
 
     shipping_report_props = spec["components"]["schemas"]["ShippingReportRow"]["properties"]
     assert {"delivery_id", "delivery_item_id", "delivery_no", "order_item_id"}.issubset(shipping_report_props)
+    assert "delivery_date" in shipping_report_props
+    assert "shipped_date" not in shipping_report_props
 
     order_create_props = spec["components"]["schemas"]["OrderCreateRequest"]["properties"]
     assert "delivery_date" in order_create_props

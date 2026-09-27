@@ -6,7 +6,7 @@ export type ShippingReportMode = 'supplier_product' | 'customer';
 
 export type ShippingReportRow = {
   orderItemId: EntityId;
-  shippedDate: string;
+  deliveryDate: string;
   supplierName: string;
   customerName: string;
   productName: string;
@@ -16,7 +16,7 @@ export type ShippingReportRow = {
 
 type ApiShippingReportRow = {
   order_item_id: EntityId;
-  shipped_date: string;
+  delivery_date: string;
   supplier_name: string;
   customer_name: string;
   product_name: string;
@@ -24,15 +24,15 @@ type ApiShippingReportRow = {
   unit: string;
 };
 
-export const getShippingReport = async (shippedDate: string, mode: ShippingReportMode): Promise<ShippingReportRow[]> => {
-  const query = new URLSearchParams({ shipped_date: shippedDate, mode });
+export const getShippingReport = async (deliveryDate: string, mode: ShippingReportMode): Promise<ShippingReportRow[]> => {
+  const query = new URLSearchParams({ delivery_date: deliveryDate, mode });
   const res = await fetchWithAuth(`/api/v1/reports/shipping?${query.toString()}`);
   if (!res.ok) throw await parseApiErrorPayload(res);
 
   const data = (await res.json()) as ApiShippingReportRow[];
   return data.map((r) => ({
     orderItemId: r.order_item_id,
-    shippedDate: r.shipped_date,
+    deliveryDate: r.delivery_date,
     supplierName: r.supplier_name,
     customerName: r.customer_name,
     productName: r.product_name,

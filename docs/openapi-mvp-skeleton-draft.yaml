@@ -4926,13 +4926,13 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: shipped_date
+      - name: delivery_date
         in: query
         required: true
         schema:
           type: string
           format: date
-          title: Shipped Date
+          title: Delivery Date
       - name: mode
         in: query
         required: false
@@ -9458,10 +9458,10 @@ components:
         order_item_id:
           type: string
           title: Order Item Id
-        shipped_date:
+        delivery_date:
           type: string
           format: date
-          title: Shipped Date
+          title: Delivery Date
         supplier_name:
           anyOf:
           - type: string
@@ -9482,7 +9482,7 @@ components:
       type: object
       required:
       - order_item_id
-      - shipped_date
+      - delivery_date
       - supplier_name
       - customer_name
       - product_name

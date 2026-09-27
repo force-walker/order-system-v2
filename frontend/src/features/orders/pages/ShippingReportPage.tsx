@@ -6,8 +6,8 @@ import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import { toActionableMessage } from 'shared/error';
 
 export const ShippingReportPage = () => {
-  const [shippedDate, setShippedDate] = useState(getDefaultDeliveryDate);
-  const [mode, setMode] = useState<ShippingReportMode | ''>('');
+  const [deliveryDate, setDeliveryDate] = useState(getDefaultDeliveryDate);
+  const [mode, setMode] = useState<ShippingReportMode>('supplier_product');
   const [rows, setRows] = useState<ShippingReportRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [pdfGenerating, setPdfGenerating] = useState(false);
@@ -16,7 +16,7 @@ export const ShippingReportPage = () => {
   const [pdfError, setPdfError] = useState('');
 
   const load = async () => {
-    if (!shippedDate || !mode) {
+    if (!deliveryDate) {
       setRows(null);
       setError('');
       return;
@@ -26,7 +26,7 @@ export const ShippingReportPage = () => {
     setError('');
     setPdfError('');
     try {
-      const result = await getShippingReport(shippedDate, mode);
+      const result = await getShippingReport(deliveryDate, mode);
       setRows(result);
       setSelectedIds([]);
     } catch (e) {
@@ -39,7 +39,7 @@ export const ShippingReportPage = () => {
 
   useEffect(() => {
     void load();
-  }, [shippedDate, mode]);
+  }, [deliveryDate, mode]);
 
   const selectedCount = selectedIds.length;
   const selectableIds = useMemo(() => (rows ?? []).map((r) => r.orderItemId), [rows]);
@@ -80,20 +80,19 @@ export const ShippingReportPage = () => {
         <div className="list-header">
           <div>
             <h2>帳票作成</h2>
-            <p className="subtle">出荷日と表示モードを指定すると帳票リストを自動表示します。</p>
+            <p className="subtle">納品日と表示モードを指定すると帳票リストを自動表示します。</p>
           </div>
         </div>
 
         <div className="list-controls" style={{ marginTop: 8 }}>
           <label className="filter-label">
-            出荷日 *
-            <input type="date" value={shippedDate} onChange={(e) => setShippedDate(e.target.value)} />
+            納品日 *
+            <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
           </label>
 
           <label className="filter-label">
             表示モード
-            <select value={mode} onChange={(e) => setMode((e.target.value || '') as ShippingReportMode | '')}>
-              <option value="">選択してください</option>
+            <select value={mode} onChange={(e) => setMode(e.target.value as ShippingReportMode)}>
               <option value="supplier_product">仕入先→商品順</option>
               <option value="customer">顧客順</option>
             </select>
@@ -119,7 +118,7 @@ export const ShippingReportPage = () => {
       ) : error ? (
         <ErrorState title="帳票リストの取得に失敗しました" description={error} actionLabel="再試行" onAction={load} />
       ) : rows == null ? (
-        <EmptyState title="未表示" description="出荷日と表示モードを選択すると自動で表示されます。" />
+        <EmptyState title="未表示" description="納品日を選択すると自動で表示されます。" />
       ) : (
         <div className="card">
           <div className="table-wrap">
@@ -127,7 +126,7 @@ export const ShippingReportPage = () => {
               <thead>
                 <tr>
                   <th><input type="checkbox" checked={allVisibleSelected} onChange={(e) => toggleSelectAll(e.target.checked)} /></th>
-                  <th>出荷日</th>
+                  <th>納品日</th>
                   <th>仕入先</th>
                   <th>顧客</th>
                   <th>商品</th>
@@ -138,10 +137,10 @@ export const ShippingReportPage = () => {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="subtle">指定した出荷日・表示モードでは帳票対象が0件です。</td>
+                    <td colSpan={7} className="subtle">指定した納品日・表示モードでは帳票対象が0件です。</td>
                   </tr>
                 ) : rows.map((r, idx) => (
-                  <tr key={`${r.orderItemId}-${r.shippedDate}-${idx}`}>
+                  <tr key={`${r.orderItemId}-${r.deliveryDate}-${idx}`}>
                     <td>
                       <input
                         type="checkbox"
@@ -149,7 +148,7 @@ export const ShippingReportPage = () => {
                         onChange={(e) => toggleOne(r.orderItemId, e.target.checked)}
                       />
                     </td>
-                    <td>{r.shippedDate}</td>
+                    <td>{r.deliveryDate}</td>
                     <td>{r.supplierName}</td>
                     <td>{r.customerName}</td>
                     <td>{r.productName}</td>
