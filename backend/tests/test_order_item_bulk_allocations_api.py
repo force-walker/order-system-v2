@@ -11,7 +11,7 @@ from app.core.allocation_completion import evaluate_order_allocation_completion,
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import AuditLog, Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, Supplier, SupplierAllocation, SupplierProduct
+from app.models.entities import AuditLog, Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, PurchaseResultStatus, Supplier, SupplierAllocation, SupplierProduct
 
 
 engine = create_engine(
@@ -301,6 +301,42 @@ def test_worklist_filters_by_product_and_customer_with_paging():
     excluded = client.get("/api/v1/order-item-allocations?order_status=new")
     assert excluded.status_code == 200
     assert excluded.json() == []
+
+
+def test_worklist_combines_delivery_date_and_order_status_filters():
+    selected_date = date.today()
+    cases = [
+        (OrderStatus.allocated, selected_date, True),
+        (OrderStatus.purchased, selected_date, True),
+        (OrderStatus.shipped, selected_date, False),
+        (OrderStatus.allocated, date.fromordinal(selected_date.toordinal() + 1), False),
+    ]
+    expected_item_ids: set[str] = set()
+    excluded_item_ids: set[str] = set()
+
+    for order_status, delivery_date, expected in cases:
+        _order_id, item_ids, supplier_id = _seed_order_with_items(item_count=1, order_status=order_status)
+        db = TestingSessionLocal()
+        item = db.get(OrderItem, item_ids[0])
+        order = db.get(Order, item.order_id)
+        order.delivery_date = delivery_date
+        db.add(SupplierAllocation(order_item_id=item.id, final_supplier_id=supplier_id, final_qty=5, final_uom="count"))
+        db.commit()
+        db.close()
+        (expected_item_ids if expected else excluded_item_ids).add(item_ids[0])
+
+    response = _client().get(
+        "/api/v1/order-item-allocations",
+        params=[
+            ("delivery_date", selected_date.isoformat()),
+            ("order_status", "allocated"),
+            ("order_status", "purchased"),
+        ],
+    )
+    assert response.status_code == 200
+    returned_ids = {row["order_item_id"] for row in response.json()}
+    assert expected_item_ids <= returned_ids
+    assert returned_ids.isdisjoint(excluded_item_ids)
 
 
 def test_two_line_order_advances_only_after_whole_order_is_complete():
@@ -656,9 +692,8 @@ def test_split_allocation_completion_requires_exact_total_and_matching_uom():
         db.close()
 
 
-def test_bulk_save_rejects_orders_outside_confirmed_status():
+def test_bulk_save_rejects_changes_after_allocated_status():
     cases = (
-        (OrderStatus.allocated, LineStatus.allocated),
         (OrderStatus.purchased, LineStatus.purchased),
         (OrderStatus.shipped, LineStatus.shipped),
         (OrderStatus.invoiced, LineStatus.invoiced),
@@ -694,6 +729,55 @@ def test_bulk_save_rejects_orders_outside_confirmed_status():
         assert item.line_status == line_status
         assert float(allocation.final_qty) == 4
         db.close()
+
+
+def test_allocated_order_allows_noop_and_safe_change_before_purchase_result_then_locks():
+    order_id, item_ids, supplier_id = _seed_order_with_items(item_count=1, order_status=OrderStatus.allocated)
+    db = TestingSessionLocal()
+    item = db.query(OrderItem).filter(OrderItem.id == item_ids[0]).one()
+    item.line_status = LineStatus.allocated
+    allocation = SupplierAllocation(order_item_id=item.id, final_supplier_id=supplier_id, final_qty=5, final_uom="count")
+    db.add(allocation)
+    db.commit()
+    allocation_id = allocation.id
+    item_id = item.id
+    initial_audit_count = db.query(AuditLog).filter(AuditLog.entity_type == "supplier_allocation", AuditLog.entity_id == str(allocation_id)).count()
+    db.close()
+    client = _client()
+
+    same = client.post("/api/v1/order-item-allocations/bulk-save", json={"items": [{"order_item_id": item_id, "supplier_id": supplier_id, "allocated_qty": 5}]})
+    assert same.status_code == 200
+    db = TestingSessionLocal()
+    assert db.query(AuditLog).filter(AuditLog.entity_type == "supplier_allocation", AuditLog.entity_id == str(allocation_id)).count() == initial_audit_count
+    db.close()
+
+    changed = client.post("/api/v1/order-item-allocations/bulk-save", json={"items": [{"order_item_id": item_id, "supplier_id": supplier_id, "allocated_qty": 4}]})
+    assert changed.status_code == 422
+    db = TestingSessionLocal()
+    assert float(db.get(SupplierAllocation, allocation_id).final_qty) == 5
+    other_supplier = Supplier(supplier_code=f"SUP-ALT-{datetime.now(UTC).timestamp()}", name="Alt", active=True)
+    db.add(other_supplier)
+    db.commit()
+    other_supplier_id = other_supplier.id
+    db.close()
+
+    safe_change = client.post("/api/v1/order-item-allocations/bulk-save", json={"items": [{"order_item_id": item_id, "supplier_id": other_supplier_id, "allocated_qty": 5}]})
+    assert safe_change.status_code == 200
+    db = TestingSessionLocal()
+    updated_allocation = db.get(SupplierAllocation, allocation_id)
+    assert updated_allocation.final_supplier_id == other_supplier_id
+    audit = db.query(AuditLog).filter(AuditLog.entity_type == "supplier_allocation", AuditLog.entity_id == str(allocation_id), AuditLog.action == "override").order_by(AuditLog.id.desc()).first()
+    assert audit is not None and audit.before_json and audit.after_json
+    assert audit.changed_by == "business-test"
+    db.add(PurchaseResult(allocation_id=allocation_id, supplier_id=other_supplier_id, purchased_qty=5, purchased_uom="count", result_status=PurchaseResultStatus.filled, invoiceable_flag=True))
+    db.commit()
+    db.close()
+
+    same_locked = client.post("/api/v1/order-item-allocations/bulk-save", json={"items": [{"order_item_id": item_id, "supplier_id": other_supplier_id, "allocated_qty": 5}]})
+    assert same_locked.status_code == 200
+    changed_locked = client.post("/api/v1/order-item-allocations/bulk-save", json={"items": [{"order_item_id": item_id, "supplier_id": supplier_id, "allocated_qty": 5}]})
+    assert changed_locked.status_code == 409
+    assert changed_locked.json()["detail"]["code"] == "ALLOCATION_LOCKED_BY_PURCHASE_RESULT"
 
 
 def test_cancelled_order_rejects_allocation_save():

@@ -301,6 +301,21 @@ export const OrderItemBulkAllocationPage = () => {
       return;
     }
 
+    const changes = selectedRows.flatMap((row) => {
+      const edit = editById[row.orderItemId];
+      const nextSupplierId = edit.manualSupplierId == null ? null : Number(edit.manualSupplierId);
+      const nextQty = nextSupplierId == null ? null : Number(edit.manualQty);
+      const lines: string[] = [];
+      if (nextSupplierId !== row.manualSupplierId) {
+        const before = row.manualSupplierId == null ? '未割当' : suppliers.find((supplier) => supplier.id === row.manualSupplierId)?.label ?? `#${row.manualSupplierId}`;
+        const after = nextSupplierId == null ? '未割当' : suppliers.find((supplier) => supplier.id === nextSupplierId)?.label ?? `#${nextSupplierId}`;
+        lines.push(`${row.orderNo} / ${row.productName} 仕入先: ${before} → ${after}`);
+      }
+      if (nextQty !== row.manualQty) lines.push(`${row.orderNo} / ${row.productName} 数量: ${row.manualQty ?? '-'} → ${nextQty ?? '-'}`);
+      return lines;
+    });
+    if (changes.length > 0 && !window.confirm(`保存済みの割当内容が変更されています。\n\n${changes.join('\n')}\n\n上書きして保存しますか？`)) return;
+
     try {
       const result = await bulkSaveOrderItemAllocations(payload);
       const errorById = new Map(result.errors.map((e) => [String(e.orderItemId), `${e.code}: ${e.message}`]));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ServiceError, toActionableMessage, toUserMessage } from './error';
+import { parseApiErrorPayload, ServiceError, toActionableMessage, toUserMessage } from './error';
 
 describe('toUserMessage', () => {
   it('returns service error message', () => {
@@ -29,5 +29,17 @@ describe('toUserMessage', () => {
   it('adds actionable guidance for 404 not found', () => {
     const e = new ServiceError('見つかりません', { status: 404, code: 'SUPPLIER_NOT_FOUND' });
     expect(toActionableMessage(e, 'fallback')).toContain('一覧から選び直し');
+  });
+
+  it('explains downstream workflow locks in user-facing terms', async () => {
+    const allocationError = await parseApiErrorPayload(new Response(JSON.stringify({
+      detail: { code: 'ALLOCATION_LOCKED_BY_PURCHASE_RESULT', message: 'locked' },
+    }), { status: 409 }));
+    const purchaseError = await parseApiErrorPayload(new Response(JSON.stringify({
+      detail: { code: 'PURCHASE_RESULT_ALREADY_CLAIMED', message: 'claimed' },
+    }), { status: 409 }));
+
+    expect(allocationError.message).toContain('仕入結果登録済み');
+    expect(purchaseError.message).toContain('請求ドラフトで使用済み');
   });
 });

@@ -15,6 +15,7 @@ import {
   listPurchaseWorkQueue,
 } from 'features/orders/services/purchaseService';
 import { getProductDetail } from 'features/products/services/productsService';
+import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 
 vi.mock('features/orders/services/orderItemAllocationsService', () => ({
   listOrderItemAllocationWorkItems: vi.fn(),
@@ -31,13 +32,13 @@ vi.mock('features/products/services/productsService', () => ({ getProductDetail:
 const rows = [
   {
     orderItemId: 'item-a', allocationId: 11, orderId: 'order-a', orderNo: 'ORD-A',
-    orderStatus: 'confirmed' as const, customerName: 'Customer A', productId: 1, productName: 'Product A', orderedQty: 2,
+    orderStatus: 'allocated' as const, customerName: 'Customer A', productId: 1, productName: 'Product A', orderedQty: 2,
     deliveryDate: '2026-09-22', shippedDate: null, allocationStatus: 'allocated',
     proposedSupplierId: 1, proposedQty: 2, manualSupplierId: 1, manualQty: 2,
   },
   {
     orderItemId: 'item-b', allocationId: 22, orderId: 'order-b', orderNo: 'ORD-B',
-    orderStatus: 'confirmed' as const, customerName: 'Customer B', productId: 2, productName: 'Product B', orderedQty: 3,
+    orderStatus: 'purchased' as const, customerName: 'Customer B', productId: 2, productName: 'Product B', orderedQty: 3,
     deliveryDate: '2026-09-22', shippedDate: null, allocationStatus: 'allocated',
     proposedSupplierId: 2, proposedQty: 3, manualSupplierId: 2, manualQty: 3,
   },
@@ -67,7 +68,10 @@ beforeEach(() => {
     .mockResolvedValueOnce('invoice-b');
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const renderPurchasePage = () => render(<MemoryRouter><PurchasePage /></MemoryRouter>);
 
@@ -77,6 +81,36 @@ it('shows both orders on the same delivery date when there is no handoff filter'
   expect(await screen.findByText('ORD-A')).toBeTruthy();
   expect(screen.getByText('ORD-B')).toBeTruthy();
   expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('uses the shared delivery date and allocated plus purchased as its default API filters', async () => {
+  renderPurchasePage();
+  await screen.findByText('ORD-A');
+
+  expect((screen.getByLabelText('納品日') as HTMLInputElement).value).toBe(getDefaultDeliveryDate());
+  expect((screen.getByRole('checkbox', { name: 'Allocated' }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole('checkbox', { name: 'Purchased' }) as HTMLInputElement).checked).toBe(true);
+  expect(listOrderItemAllocationWorkItems).toHaveBeenCalledWith({
+    unallocatedOnly: false,
+    deliveryDate: getDefaultDeliveryDate(),
+    orderStatuses: ['allocated', 'purchased'],
+  });
+});
+
+it('combines delivery date and selected status in the backend query', async () => {
+  const actor = userEvent.setup();
+  renderPurchasePage();
+  await screen.findByText('ORD-A');
+
+  await actor.click(screen.getByRole('checkbox', { name: 'Purchased' }));
+  await actor.clear(screen.getByLabelText('納品日'));
+  await actor.type(screen.getByLabelText('納品日'), '2026-09-29');
+
+  await waitFor(() => expect(listOrderItemAllocationWorkItems).toHaveBeenLastCalledWith({
+    unallocatedOnly: false,
+    deliveryDate: '2026-09-29',
+    orderStatuses: ['allocated'],
+  }));
 });
 
 it('uses the allocation handoff once and removes it from session storage immediately', async () => {
@@ -167,4 +201,74 @@ it('passes only each order\'s returned purchase-result IDs to draft generation',
     purchaseResultIds: [202],
   });
   expect(JSON.stringify(vi.mocked(generateDraftInvoiceFromPurchase).mock.calls)).not.toContain('DRAFT-');
+});
+
+const persistedResult = (invoiceQty: number | undefined = undefined) => ({
+  id: 101,
+  allocationId: 11,
+  orderId: 'order-a',
+  supplierId: 1,
+  purchasedQty: 2,
+  purchasedUom: 'CTN',
+  receivedQty: 2,
+  orderUom: 'CTN',
+  purchaseUom: 'CTN',
+  invoiceQty,
+  invoiceUom: 'KG',
+  actualWeightKg: 21.73,
+  unitCost: 10,
+  resultStatus: 'filled' as const,
+  invoiceableFlag: true,
+  recordedAt: '2026-09-27T00:00:00Z',
+});
+
+it('does not ask for overwrite confirmation when a saved purchase result is unchanged', async () => {
+  const actor = userEvent.setup();
+  const confirmSpy = vi.spyOn(window, 'confirm');
+  vi.mocked(listPurchaseResults).mockResolvedValue({ items: [persistedResult()], total: 1 });
+  vi.mocked(bulkUpsertPurchaseResults).mockResolvedValue({ count: 1, resultIds: [101] });
+  renderPurchasePage();
+
+  const row = (await screen.findByText('ORD-A')).closest('tr')!;
+  await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await actor.click(screen.getByRole('button', { name: '選択行を保存 (1)' }));
+
+  await waitFor(() => expect(bulkUpsertPurchaseResults).toHaveBeenCalledTimes(1));
+  expect(confirmSpy).not.toHaveBeenCalled();
+});
+
+it('asks before overwriting a changed unclaimed purchase result', async () => {
+  const actor = userEvent.setup();
+  const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  vi.mocked(listPurchaseResults).mockResolvedValue({ items: [persistedResult()], total: 1 });
+  vi.mocked(bulkUpsertPurchaseResults).mockResolvedValue({ count: 1, resultIds: [101] });
+  renderPurchasePage();
+
+  const row = (await screen.findByText('ORD-A')).closest('tr')!;
+  const weight = screen.getByRole('spinbutton', { name: 'Product A 実測重量' });
+  await actor.clear(weight);
+  await actor.type(weight, '22.14');
+  await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await actor.click(screen.getByRole('button', { name: '選択行を保存 (1)' }));
+
+  await waitFor(() => expect(bulkUpsertPurchaseResults).toHaveBeenCalledTimes(1));
+  expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('21.73 KG → 22.14 KG'));
+});
+
+it('shows the invoice-claim lock reason instead of attempting an overwrite', async () => {
+  const actor = userEvent.setup();
+  const confirmSpy = vi.spyOn(window, 'confirm');
+  vi.mocked(listPurchaseResults).mockResolvedValue({ items: [persistedResult(21.73)], total: 1 });
+  renderPurchasePage();
+
+  const row = (await screen.findByText('ORD-A')).closest('tr')!;
+  const weight = screen.getByRole('spinbutton', { name: 'Product A 実測重量' });
+  await actor.clear(weight);
+  await actor.type(weight, '22.14');
+  await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await actor.click(screen.getByRole('button', { name: '選択行を保存 (1)' }));
+
+  expect(await screen.findByText('請求ドラフトで使用済みのため変更できません。')).toBeTruthy();
+  expect(confirmSpy).not.toHaveBeenCalled();
+  expect(bulkUpsertPurchaseResults).not.toHaveBeenCalled();
 });

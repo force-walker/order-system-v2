@@ -14,7 +14,8 @@ import {
   listPurchaseResults,
   listPurchaseWorkQueue,
 } from 'features/orders/services/purchaseService';
-import type { PurchaseResultItem } from 'features/orders/types/order';
+import type { OrderStatus, PurchaseResultItem } from 'features/orders/types/order';
+import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import { getProductDetail } from 'features/products/services/productsService';
 import { toActionableMessage } from 'shared/error';
 
@@ -36,6 +37,7 @@ type UnitPair = {
 type SortKey = 'customerName' | 'productName' | 'supplierName';
 type SortDirection = 'asc' | 'desc';
 const PURCHASE_TARGET_ALLOCATIONS_KEY = 'osv2_purchase_target_allocations';
+const DEFAULT_PURCHASE_ORDER_STATUSES: OrderStatus[] = ['allocated', 'purchased'];
 
 const consumePurchaseTargetAllocationIds = (): number[] | null => {
   const raw = sessionStorage.getItem(PURCHASE_TARGET_ALLOCATIONS_KEY);
@@ -73,6 +75,8 @@ export const PurchasePage = () => {
   const [sortKey, setSortKey] = useState<SortKey>('customerName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [lastSelectedId, setLastSelectedId] = useState<EntityId | null>(null);
+  const [deliveryDate, setDeliveryDate] = useState(getDefaultDeliveryDate);
+  const [orderStatuses, setOrderStatuses] = useState<OrderStatus[]>(DEFAULT_PURCHASE_ORDER_STATUSES);
   const [targetAllocationIds, setTargetAllocationIds] = useState<number[] | null>(null);
   const targetAllocationIdsRef = useRef<number[] | null>(null);
   const handoffConsumedRef = useRef(false);
@@ -98,7 +102,7 @@ export const PurchasePage = () => {
     setError('');
     try {
       const [all, supplierOptions, queue, persisted] = await Promise.all([
-        listOrderItemAllocationWorkItems({ unallocatedOnly: false }),
+        listOrderItemAllocationWorkItems({ unallocatedOnly: false, deliveryDate, orderStatuses }),
         listSupplierFilterOptions(),
         listPurchaseWorkQueue(),
         listPurchaseResults({ limit: 500, offset: 0 }),
@@ -193,7 +197,7 @@ export const PurchasePage = () => {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [deliveryDate, orderStatuses]);
 
   useEffect(() => {
     if (!toast) return;
@@ -210,6 +214,13 @@ export const PurchasePage = () => {
   const clearHandoffFilter = () => {
     targetAllocationIdsRef.current = null;
     setTargetAllocationIds(null);
+  };
+
+  const toggleOrderStatus = (status: OrderStatus) => {
+    setOrderStatuses((current) => {
+      if (!current.includes(status)) return [...current, status];
+      return current.length === 1 ? current : current.filter((candidate) => candidate !== status);
+    });
   };
 
   const filteredRows = useMemo(() => {
@@ -361,6 +372,26 @@ export const PurchasePage = () => {
       return;
     }
 
+
+    const changes = payload.flatMap(({ row, orderItemId }) => {
+      const persisted = purchaseResultByAllocationId[row.allocationId];
+      if (!persisted) return [];
+      const lines: string[] = [];
+      if (persisted.purchasedQty !== row.purchasedQty) lines.push(`購入数量: ${persisted.purchasedQty} ${persisted.purchasedUom} → ${row.purchasedQty} ${row.purchasedUom}`);
+      if ((persisted.actualWeightKg ?? undefined) !== row.actualWeightKg) lines.push(`Actual Weight: ${persisted.actualWeightKg ?? '-'} KG → ${row.actualWeightKg ?? '-'} KG`);
+      if ((persisted.unitCost ?? undefined) !== row.unitCost) lines.push(`仕入単価: ${persisted.unitCost ?? '-'} → ${row.unitCost ?? '-'}`);
+      if (lines.length > 0 && persisted.invoiceQty != null) {
+        return [{ orderItemId, locked: true, lines }];
+      }
+      return lines.length > 0 ? [{ orderItemId, locked: false, lines }] : [];
+    });
+    if (changes.some((change) => change.locked)) {
+      setToast({ type: 'error', message: '請求ドラフトで使用済みのため変更できません。' });
+      return;
+    }
+    const changeLines = changes.flatMap((change) => change.lines);
+    if (changeLines.length > 0 && !window.confirm(`保存済みの仕入結果が変更されています。\n\n${changeLines.join('\n')}\n\n上書きして保存しますか？`)) return;
+
     setSaving(true);
     try {
       const upserted = await bulkUpsertPurchaseResults(payload.map((p) => p.row));
@@ -418,6 +449,22 @@ export const PurchasePage = () => {
             <button type="button" className="secondary" onClick={clearHandoffFilter}>全件表示</button>
           </div>
         ) : null}
+
+        <div className="list-controls" style={{ marginBottom: 12 }}>
+          <label className="filter-label">
+            納品日
+            <input type="date" value={deliveryDate} onChange={(event) => setDeliveryDate(event.target.value)} />
+          </label>
+          <fieldset className="status-filter-group">
+            <legend>注文状態</legend>
+            {(['allocated', 'purchased'] as OrderStatus[]).map((status) => (
+              <label key={status}>
+                <input type="checkbox" checked={orderStatuses.includes(status)} onChange={() => toggleOrderStatus(status)} />
+                {status === 'allocated' ? 'Allocated' : 'Purchased'}
+              </label>
+            ))}
+          </fieldset>
+        </div>
 
         <div className="card" style={{ marginBottom: 12 }}>
           <div className="list-header">

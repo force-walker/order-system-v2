@@ -6,6 +6,7 @@ from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
+from app.core.auth import AuthContext, get_auth_context
 from app.db.session import get_db
 from app.models.entities import Customer, Order, OrderItem, Product, PurchaseResult, Supplier, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
@@ -26,10 +27,42 @@ PURCHASE_RESULT_COMMON_ERROR_RESPONSES = {
 
 
 def _get_allocation_or_404(db: Session, allocation_id: int) -> SupplierAllocation:
-    alloc = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).first()
+    alloc = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).with_for_update().first()
     if alloc is None:
         raise HTTPException(status_code=404, detail={"code": "ALLOCATION_NOT_FOUND", "message": "allocation not found"})
     return alloc
+
+
+PURCHASE_RESULT_EDITABLE_FIELDS = (
+    "supplier_id", "purchased_qty", "purchased_uom", "actual_weight_kg", "unit_cost", "final_unit_cost",
+    "shortage_qty", "shortage_policy", "result_status", "invoiceable_flag", "recorded_by", "note",
+)
+
+
+def _comparable(field: str, value):
+    if hasattr(value, "value"):
+        return value.value
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+        return Decimal(str(value))
+    if field == "purchased_uom" and isinstance(value, str):
+        return value.strip().casefold()
+    return value
+
+
+def _purchase_result_snapshot(row: PurchaseResult) -> dict:
+    snapshot: dict = {}
+    for field in PURCHASE_RESULT_EDITABLE_FIELDS:
+        value = getattr(row, field)
+        if hasattr(value, "value"):
+            value = value.value
+        elif isinstance(value, Decimal):
+            value = float(value)
+        snapshot[field] = value
+    return snapshot
+
+
+def _is_purchase_result_unchanged(row: PurchaseResult, desired: dict) -> bool:
+    return all(_comparable(field, getattr(row, field)) == _comparable(field, value) for field, value in desired.items())
 
 
 def _default_supplier_id(payload_supplier_id: int | None, alloc: SupplierAllocation) -> int | None:
@@ -350,21 +383,31 @@ def list_purchase_result_history(
     response_model=PurchaseResultResponse,
     responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
 )
-def update_purchase_result(result_id: int, payload: PurchaseResultUpdateRequest, db: Session = Depends(get_db)) -> PurchaseResultResponse:
-    row = db.query(PurchaseResult).filter(PurchaseResult.id == result_id).first()
+def update_purchase_result(
+    result_id: int,
+    payload: PurchaseResultUpdateRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+) -> PurchaseResultResponse:
+    row = db.query(PurchaseResult).filter(PurchaseResult.id == result_id).with_for_update().first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "purchase result not found"})
+    data = payload.model_dump(exclude_unset=True)
+    alloc = _get_allocation_or_404(db, row.allocation_id)
+    if "supplier_id" in data and data["supplier_id"] is None:
+        data["supplier_id"] = _default_supplier_id(None, alloc)
+    if _is_purchase_result_unchanged(row, data):
+        return _to_purchase_result_response(db, row)
     if row.invoice_qty is not None:
         raise HTTPException(
             status_code=409,
             detail={"code": "PURCHASE_RESULT_ALREADY_CLAIMED", "message": "claimed purchase result cannot be edited"},
         )
 
-    data = payload.model_dump(exclude_unset=True)
+    before = _purchase_result_snapshot(row)
     for k, v in data.items():
         setattr(row, k, v)
 
-    alloc = _get_allocation_or_404(db, row.allocation_id)
     _validate_purchase_uom(db, alloc=alloc, purchased_uom=row.purchased_uom)
     _validate_quantity_limit(db, alloc=alloc, incoming_qty=row.purchased_qty, exclude_result_id=row.id)
 
@@ -372,7 +415,7 @@ def update_purchase_result(result_id: int, payload: PurchaseResultUpdateRequest,
         row.supplier_id = _default_supplier_id(None, alloc)
 
     db.flush()
-    write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.UPDATE)
+    write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.UPDATE, actor=auth.user_id, before=before, after=_purchase_result_snapshot(row))
     db.commit()
     db.refresh(row)
     return _to_purchase_result_response(db, row)
@@ -429,14 +472,18 @@ def undefer_purchase_result(result_id: int, db: Session = Depends(get_db)) -> Pu
     response_model=PurchaseResultBulkUpsertResponse,
     responses={**PURCHASE_RESULT_COMMON_ERROR_RESPONSES, 404: {"model": ApiErrorResponse, "description": "Not Found"}},
 )
-def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: Session = Depends(get_db)) -> PurchaseResultBulkUpsertResponse:
+def bulk_upsert_purchase_results(
+    payload: PurchaseResultBulkUpsertRequest,
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+) -> PurchaseResultBulkUpsertResponse:
     count = 0
     result_ids: list[int] = []
     for item in payload.items:
         alloc = _get_allocation_or_404(db, item.allocation_id)
         _validate_purchase_uom(db, alloc=alloc, purchased_uom=item.purchased_uom)
 
-        row = db.query(PurchaseResult).filter(PurchaseResult.allocation_id == item.allocation_id).first()
+        row = db.query(PurchaseResult).filter(PurchaseResult.allocation_id == item.allocation_id).with_for_update().first()
         if row is None:
             _validate_quantity_limit(db, alloc=alloc, incoming_qty=item.purchased_qty)
             row = PurchaseResult(
@@ -447,18 +494,25 @@ def bulk_upsert_purchase_results(payload: PurchaseResultBulkUpsertRequest, db: S
             db.flush()
             write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.BULK_UPSERT_CREATE)
         else:
+            desired = item.model_dump(exclude={"allocation_id"})
+            desired["supplier_id"] = _default_supplier_id(item.supplier_id, alloc)
+            if _is_purchase_result_unchanged(row, desired):
+                count += 1
+                result_ids.append(row.id)
+                continue
             if row.invoice_qty is not None:
                 raise HTTPException(
                     status_code=409,
                     detail={"code": "PURCHASE_RESULT_ALREADY_CLAIMED", "message": "claimed purchase result cannot be edited"},
                 )
-            for k, v in item.model_dump().items():
+            before = _purchase_result_snapshot(row)
+            for k, v in desired.items():
                 setattr(row, k, v)
             if row.supplier_id is None:
                 row.supplier_id = _default_supplier_id(None, alloc)
             _validate_quantity_limit(db, alloc=alloc, incoming_qty=row.purchased_qty, exclude_result_id=row.id)
             db.flush()
-            write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.BULK_UPSERT_UPDATE)
+            write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.BULK_UPSERT_UPDATE, actor=auth.user_id, before=before, after=_purchase_result_snapshot(row))
         count += 1
         result_ids.append(row.id)
 

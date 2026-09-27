@@ -39,6 +39,8 @@ const CODE_MESSAGES: Record<string, string> = {
   SUPPLIER_CODE_ALREADY_EXISTS: '仕入先コードが既に存在します。',
   SUPPLIER_PRODUCT_ALREADY_EXISTS: 'この仕入先と商品の紐づけは既に存在します。',
   SUPPLIER_PRODUCT_NOT_FOUND: '仕入先と商品の紐づけが見つかりません。',
+  ALLOCATION_LOCKED_BY_PURCHASE_RESULT: '仕入結果登録済みのため、割当内容は変更できません。',
+  PURCHASE_RESULT_ALREADY_CLAIMED: '請求ドラフトで使用済みのため、仕入結果は変更できません。',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {

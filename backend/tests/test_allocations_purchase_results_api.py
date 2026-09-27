@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, Supplier, SupplierAllocation
+from app.models.entities import AuditLog, Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, Supplier, SupplierAllocation
 
 
 engine = create_engine(
@@ -156,10 +156,10 @@ def test_allocation_validation_error_is_422():
 
 @pytest.mark.parametrize(
     "order_status",
-    [OrderStatus.allocated, OrderStatus.purchased, OrderStatus.shipped, OrderStatus.invoiced, OrderStatus.cancelled],
+    [OrderStatus.purchased, OrderStatus.shipped, OrderStatus.invoiced, OrderStatus.cancelled],
 )
 @pytest.mark.parametrize("operation", ["override", "split"])
-def test_allocation_override_and_split_reject_orders_outside_confirmed_status(order_status: OrderStatus, operation: str):
+def test_allocation_override_and_split_reject_changes_above_allocated_status(order_status: OrderStatus, operation: str):
     allocation_id = _seed_allocation(final_qty=3, final_supplier_id=101)
     db = TestingSessionLocal()
     allocation = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).one()
@@ -188,6 +188,42 @@ def test_allocation_override_and_split_reject_orders_outside_confirmed_status(or
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "ORDER_NOT_ALLOCATION_EDITABLE"
+
+
+@pytest.mark.parametrize("operation", ["override", "split"])
+def test_allocated_order_accepts_completion_preserving_override_or_split(operation: str):
+    allocation_id = _seed_allocation(final_qty=3, final_supplier_id=101)
+    db = TestingSessionLocal()
+    allocation = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).one()
+    item = db.query(OrderItem).filter(OrderItem.id == allocation.order_item_id).one()
+    order = db.query(Order).filter(Order.id == item.order_id).one()
+    order.status = OrderStatus.allocated
+    item.line_status = LineStatus.allocated
+    db.commit()
+    order_id = order.id
+    db.close()
+
+    if operation == "override":
+        response = _client().patch(
+            f"/api/v1/allocations/{allocation_id}/override",
+            json={"final_supplier_id": 102, "final_qty": 3, "final_uom": "count", "override_reason_code": "manual"},
+        )
+    else:
+        response = _client().post(
+            f"/api/v1/allocations/{allocation_id}/split-line",
+            json={
+                "parts": [
+                    {"final_supplier_id": 102, "final_qty": 1, "final_uom": "count"},
+                    {"final_supplier_id": 103, "final_qty": 2, "final_uom": "count"},
+                ],
+                "override_reason_code": "split",
+            },
+        )
+
+    assert response.status_code == 200
+    db = TestingSessionLocal()
+    assert db.query(Order).filter(Order.id == order_id).one().status == OrderStatus.allocated
+    db.close()
 
 
 def test_purchase_result_create_get_list_update_bulk_upsert():
@@ -615,3 +651,44 @@ def test_claimed_purchase_result_cannot_be_edited_or_bulk_overwritten():
     )
     assert bulk.status_code == 409
     assert bulk.json()["detail"]["code"] == "PURCHASE_RESULT_ALREADY_CLAIMED"
+
+    same = client.post(
+        "/api/v1/purchase-results/bulk-upsert",
+        json={"items": [{"allocation_id": aid, "purchased_qty": 2, "purchased_uom": "count", "result_status": "filled", "invoiceable_flag": True}]},
+    )
+    assert same.status_code == 200
+    assert same.json()["purchase_result_ids"] == [result_id]
+
+
+def test_purchase_result_update_is_noop_or_audited_change_before_claim():
+    aid = _seed_allocation(final_qty=5)
+    client = _client()
+    created = client.post(
+        "/api/v1/purchase-results",
+        json={"allocation_id": aid, "purchased_qty": 2, "purchased_uom": "count", "actual_weight_kg": 10.5, "result_status": "filled", "invoiceable_flag": True},
+    )
+    result_id = created.json()["id"]
+    db = TestingSessionLocal()
+    audit_count = db.query(AuditLog).filter(AuditLog.entity_type == "purchase_result", AuditLog.entity_id == str(result_id)).count()
+    db.close()
+
+    same = client.post(
+        "/api/v1/purchase-results/bulk-upsert",
+        json={"items": [{"allocation_id": aid, "purchased_qty": 2, "purchased_uom": "count", "actual_weight_kg": 10.5, "result_status": "filled", "invoiceable_flag": True}]},
+    )
+    assert same.status_code == 200
+    db = TestingSessionLocal()
+    assert db.query(AuditLog).filter(AuditLog.entity_type == "purchase_result", AuditLog.entity_id == str(result_id)).count() == audit_count
+    db.close()
+
+    changed = client.patch(f"/api/v1/purchase-results/{result_id}", json={"actual_weight_kg": 11.25})
+    assert changed.status_code == 200
+    assert changed.json()["actual_weight_kg"] == 11.25
+    db = TestingSessionLocal()
+    assert db.get(PurchaseResult, result_id).actual_weight_kg == 11.25
+    item = db.get(OrderItem, db.get(SupplierAllocation, aid).order_item_id)
+    assert item.actual_weight_kg is None
+    audit = db.query(AuditLog).filter(AuditLog.entity_type == "purchase_result", AuditLog.entity_id == str(result_id), AuditLog.action == "update").order_by(AuditLog.id.desc()).first()
+    assert audit is not None and audit.before_json and audit.after_json
+    assert audit.changed_by == "business-test"
+    db.close()
