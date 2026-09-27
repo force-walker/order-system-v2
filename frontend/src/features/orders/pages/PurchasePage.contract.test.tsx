@@ -69,9 +69,79 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+const renderPurchasePage = () => render(<MemoryRouter><PurchasePage /></MemoryRouter>);
+
+it('shows both orders on the same delivery date when there is no handoff filter', async () => {
+  renderPurchasePage();
+
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+  expect(screen.getByText('ORD-B')).toBeTruthy();
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('uses the allocation handoff once and removes it from session storage immediately', async () => {
+  sessionStorage.setItem('osv2_purchase_target_allocations', JSON.stringify([11]));
+
+  renderPurchasePage();
+
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+  expect(screen.queryByText('ORD-B')).toBeNull();
+  expect(screen.getByRole('status').textContent).toContain('一括割当から選択した 1 件を表示中');
+  expect(sessionStorage.getItem('osv2_purchase_target_allocations')).toBeNull();
+});
+
+it('shows all orders after a reload-equivalent remount', async () => {
+  sessionStorage.setItem('osv2_purchase_target_allocations', JSON.stringify([11]));
+  const firstView = renderPurchasePage();
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+  expect(screen.queryByText('ORD-B')).toBeNull();
+
+  firstView.unmount();
+  renderPurchasePage();
+
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+  expect(screen.getByText('ORD-B')).toBeTruthy();
+});
+
+it('shows all orders when the page is opened again by normal navigation', async () => {
+  sessionStorage.setItem('osv2_purchase_target_allocations', JSON.stringify([11]));
+  const handoffView = renderPurchasePage();
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+  handoffView.unmount();
+
+  renderPurchasePage();
+
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+  expect(screen.getByText('ORD-B')).toBeTruthy();
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('clears the handoff filter from the visible control', async () => {
+  const actor = userEvent.setup();
+  sessionStorage.setItem('osv2_purchase_target_allocations', JSON.stringify([11]));
+  renderPurchasePage();
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+  expect(screen.queryByText('ORD-B')).toBeNull();
+
+  await actor.click(screen.getByRole('button', { name: '全件表示' }));
+
+  expect(screen.getByText('ORD-B')).toBeTruthy();
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('falls back to all orders when the handed-off allocation ID is stale', async () => {
+  sessionStorage.setItem('osv2_purchase_target_allocations', JSON.stringify([999]));
+  renderPurchasePage();
+
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+  expect(screen.getByText('ORD-B')).toBeTruthy();
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(sessionStorage.getItem('osv2_purchase_target_allocations')).toBeNull();
+});
+
 it('passes only each order\'s returned purchase-result IDs to draft generation', async () => {
   const actor = userEvent.setup();
-  render(<MemoryRouter><PurchasePage /></MemoryRouter>);
+  renderPurchasePage();
 
   const rowA = (await screen.findByText('ORD-A')).closest('tr');
   const rowB = screen.getByText('ORD-B').closest('tr');

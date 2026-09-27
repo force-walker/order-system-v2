@@ -1,5 +1,5 @@
 import type { EntityId } from 'shared/entityId';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
@@ -35,6 +35,22 @@ type UnitPair = {
 
 type SortKey = 'customerName' | 'productName' | 'supplierName';
 type SortDirection = 'asc' | 'desc';
+const PURCHASE_TARGET_ALLOCATIONS_KEY = 'osv2_purchase_target_allocations';
+
+const consumePurchaseTargetAllocationIds = (): number[] | null => {
+  const raw = sessionStorage.getItem(PURCHASE_TARGET_ALLOCATIONS_KEY);
+  sessionStorage.removeItem(PURCHASE_TARGET_ALLOCATIONS_KEY);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const ids = Array.from(new Set(parsed.filter((value): value is number => Number.isInteger(value) && value > 0)));
+    return ids.length > 0 ? ids : null;
+  } catch {
+    return null;
+  }
+};
 
 export const PurchasePage = () => {
   const navigate = useNavigate();
@@ -57,6 +73,9 @@ export const PurchasePage = () => {
   const [sortKey, setSortKey] = useState<SortKey>('customerName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [lastSelectedId, setLastSelectedId] = useState<EntityId | null>(null);
+  const [targetAllocationIds, setTargetAllocationIds] = useState<number[] | null>(null);
+  const targetAllocationIdsRef = useRef<number[] | null>(null);
+  const handoffConsumedRef = useRef(false);
 
   const supplierNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -68,6 +87,13 @@ export const PurchasePage = () => {
   }, [suppliers]);
 
   const load = async () => {
+    if (!handoffConsumedRef.current) {
+      handoffConsumedRef.current = true;
+      const consumedIds = consumePurchaseTargetAllocationIds();
+      targetAllocationIdsRef.current = consumedIds;
+      setTargetAllocationIds(consumedIds);
+    }
+
     setLoading(true);
     setError('');
     try {
@@ -107,18 +133,20 @@ export const PurchasePage = () => {
       });
       setOrderIdByAllocationId(orderMap);
 
-      const raw = sessionStorage.getItem('osv2_purchase_target_allocations');
-      const targetAllocationIds: number[] = raw ? (JSON.parse(raw) as number[]) : [];
-      const filtered = targetAllocationIds.length > 0
-        ? allocated.filter((r) => {
-            const aid = r.allocationId;
-            return typeof aid === 'number' && targetAllocationIds.includes(aid);
-          })
-        : allocated;
+      const validAllocationIds = new Set(
+        allocated
+          .map((row) => row.allocationId)
+          .filter((allocationId): allocationId is number => typeof allocationId === 'number'),
+      );
+      const requestedIds = targetAllocationIdsRef.current;
+      if (requestedIds?.some((allocationId) => !validAllocationIds.has(allocationId))) {
+        targetAllocationIdsRef.current = null;
+        setTargetAllocationIds(null);
+      }
 
-      setRows(filtered);
+      setRows(allocated);
 
-      const productIds = [...new Set(filtered.map((r) => r.productId))];
+      const productIds = [...new Set(allocated.map((r) => r.productId))];
       const unitEntries = await Promise.all(
         productIds.map(async (productId) => {
           try {
@@ -141,7 +169,7 @@ export const PurchasePage = () => {
 
       setEditByItemId((prev) =>
         Object.fromEntries(
-          filtered.map((r) => {
+          allocated.map((r) => {
             const restoredActualWeight = typeof r.allocationId === 'number' ? actualWeightByAllocationId.get(r.allocationId) : undefined;
             const restoredUnitCost = typeof r.allocationId === 'number' ? unitCostByAllocationId.get(r.allocationId) : undefined;
             return [
@@ -173,19 +201,30 @@ export const PurchasePage = () => {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  const handoffRows = useMemo(() => {
+    if (!targetAllocationIds) return rows;
+    const targetIds = new Set(targetAllocationIds);
+    return rows.filter((row) => typeof row.allocationId === 'number' && targetIds.has(row.allocationId));
+  }, [rows, targetAllocationIds]);
+
+  const clearHandoffFilter = () => {
+    targetAllocationIdsRef.current = null;
+    setTargetAllocationIds(null);
+  };
+
   const filteredRows = useMemo(() => {
     const customerQ = customerFilter.trim().toLowerCase();
     const productQ = productFilter.trim().toLowerCase();
     const supplierQ = supplierFilter.trim().toLowerCase();
 
-    return rows.filter((r) => {
+    return handoffRows.filter((r) => {
       const supplierName = r.manualSupplierId ? supplierNameById.get(r.manualSupplierId) ?? `仕入先#${r.manualSupplierId}` : '';
       if (customerQ && !r.customerName.toLowerCase().includes(customerQ)) return false;
       if (productQ && !r.productName.toLowerCase().includes(productQ)) return false;
       if (supplierQ && !supplierName.toLowerCase().includes(supplierQ)) return false;
       return true;
     });
-  }, [rows, customerFilter, productFilter, supplierFilter, supplierNameById]);
+  }, [handoffRows, customerFilter, productFilter, supplierFilter, supplierNameById]);
 
   const sortedRows = useMemo(() => {
     const sorted = [...filteredRows];
@@ -260,7 +299,7 @@ export const PurchasePage = () => {
     setLastSelectedId(orderItemId);
   };
 
-  const selectedCount = useMemo(() => rows.filter((r) => editByItemId[r.orderItemId]?.selected).length, [rows, editByItemId]);
+  const selectedCount = useMemo(() => handoffRows.filter((r) => editByItemId[r.orderItemId]?.selected).length, [handoffRows, editByItemId]);
 
   const createDraftForOrder = async (orderId: EntityId, markerId: EntityId, purchaseResultIds: number[]) => {
     const invoiceDate = new Date().toISOString().slice(0, 10);
@@ -270,7 +309,7 @@ export const PurchasePage = () => {
   };
 
   const saveBulk = async () => {
-    const selectedRows = rows.filter((r) => editByItemId[r.orderItemId]?.selected);
+    const selectedRows = handoffRows.filter((r) => editByItemId[r.orderItemId]?.selected);
     if (selectedRows.length === 0) {
       setToast({ type: 'error', message: '保存対象がありません。行を選択してください。' });
       return;
@@ -373,6 +412,13 @@ export const PurchasePage = () => {
           </div>
         </div>
 
+        {targetAllocationIds ? (
+          <div className="filter-summary" role="status" style={{ marginBottom: 12 }}>
+            <span>一括割当から選択した {targetAllocationIds.length} 件を表示中</span>
+            <button type="button" className="secondary" onClick={clearHandoffFilter}>全件表示</button>
+          </div>
+        ) : null}
+
         <div className="card" style={{ marginBottom: 12 }}>
           <div className="list-header">
             <h3>作業キュー（納品確認）</h3>
@@ -452,7 +498,7 @@ export const PurchasePage = () => {
                 {sortedRows.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="subtle">
-                      {rows.length === 0 ? '一括割当で保存済み行が見つかりません。' : '条件に合う行がありません。'}
+                      {handoffRows.length === 0 ? '一括割当で保存済み行が見つかりません。' : '条件に合う行がありません。'}
                     </td>
                   </tr>
                 ) : sortedRows.map((r, rowIndex) => {
