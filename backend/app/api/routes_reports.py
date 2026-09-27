@@ -13,10 +13,15 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.entities import Customer, Delivery, DeliveryItem, Order, OrderItem, Product, Supplier, SupplierAllocation
+from app.models.entities import Customer, Delivery, DeliveryItem, Order, OrderItem, OrderStatus, Product, Supplier, SupplierAllocation
 from app.schemas.report import PurchaseConfirmationPdfRequest, ShippingReportRow, ShippingReportSortMode
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
+
+REPORT_ORDER_STATUSES = {
+    OrderStatus.allocated,
+    OrderStatus.purchased,
+}
 
 
 def _pick_font() -> str:
@@ -166,37 +171,43 @@ def shipping_report(
     db: Session = Depends(get_db),
 ) -> list[ShippingReportRow]:
     alloc = _latest_allocation_subquery(db)
+    report_date = func.coalesce(OrderItem.shipped_date, Order.shipped_date, Order.delivery_date)
 
     query = (
-        db.query(DeliveryItem, Delivery, Customer, Product, alloc.c.final_supplier_id, Supplier)
-        .join(Delivery, DeliveryItem.delivery_id == Delivery.id)
-        .join(Customer, Delivery.customer_id == Customer.id)
-        .join(Product, DeliveryItem.product_id == Product.id)
-        .outerjoin(alloc, alloc.c.order_item_id == DeliveryItem.order_item_id)
+        db.query(OrderItem, Order, Customer, Product, alloc.c.final_qty, Supplier, DeliveryItem, Delivery, report_date)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(Customer, Customer.id == Order.customer_id)
+        .join(Product, Product.id == OrderItem.product_id)
+        .outerjoin(alloc, alloc.c.order_item_id == OrderItem.id)
         .outerjoin(Supplier, Supplier.id == alloc.c.final_supplier_id)
-        .filter(Delivery.shipped_date == shipped_date)
+        .outerjoin(DeliveryItem, DeliveryItem.order_item_id == OrderItem.id)
+        .outerjoin(Delivery, Delivery.id == DeliveryItem.delivery_id)
+        .filter(
+            report_date == shipped_date,
+            Order.status.in_(REPORT_ORDER_STATUSES),
+        )
     )
 
     if mode == ShippingReportSortMode.supplier_product:
-        query = query.order_by(Supplier.name.asc().nulls_last(), Product.name.asc(), Customer.name.asc(), DeliveryItem.id.asc())
+        query = query.order_by(Supplier.name.asc().nulls_last(), Product.name.asc(), Customer.name.asc(), OrderItem.id.asc())
     else:
-        query = query.order_by(Customer.name.asc(), Supplier.name.asc().nulls_last(), Product.name.asc(), DeliveryItem.id.asc())
+        query = query.order_by(Customer.name.asc(), Supplier.name.asc().nulls_last(), Product.name.asc(), OrderItem.id.asc())
 
     rows = query.all()
     result: list[ShippingReportRow] = []
-    for item, delivery, customer, product, _supplier_id, supplier in rows:
+    for item, _order, customer, product, final_qty, supplier, delivery_item, delivery, resolved_report_date in rows:
         result.append(
             ShippingReportRow(
-                delivery_id=delivery.id,
-                delivery_item_id=item.id,
-                delivery_no=delivery.delivery_no,
-                order_item_id=item.order_item_id,
-                shipped_date=item.shipped_date,
+                delivery_id=(delivery.id if delivery is not None else None),
+                delivery_item_id=(delivery_item.id if delivery_item is not None else None),
+                delivery_no=(delivery.delivery_no if delivery is not None else None),
+                order_item_id=item.id,
+                shipped_date=resolved_report_date,
                 supplier_name=(supplier.name if supplier is not None else None),
                 customer_name=customer.name,
                 product_name=product.name,
-                quantity=float(item.delivered_qty),
-                unit=item.delivered_uom,
+                quantity=float(final_qty if final_qty is not None else item.ordered_qty),
+                unit=product.order_uom,
             )
         )
 

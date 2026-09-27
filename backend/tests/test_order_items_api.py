@@ -142,6 +142,23 @@ def test_create_order_with_items_is_atomic_and_requires_at_least_one_item():
         assert db.query(OrderItem).filter(OrderItem.order_id == created.json()["order"]["id"]).count() == 1
 
 
+def test_order_item_rejects_client_supplied_uom_and_keeps_product_master_authoritative():
+    customer_id, product_id = _seed_customer_and_product()
+    client = _client()
+
+    payload = _atomic_order_payload(customer_id, product_id)
+    payload["items"][0]["unit"] = "KG"
+    rejected = client.post("/api/v1/orders/with-items", json=payload)
+
+    assert rejected.status_code == 422
+    details = rejected.json()["detail"]["details"]
+    assert details[0]["loc"][-1] == "unit"
+    assert details[0]["type"] == "extra_forbidden"
+    with TestingSessionLocal() as db:
+        assert db.query(Product).filter(Product.id == product_id).one().order_uom == "count"
+        assert db.query(OrderItem).filter(OrderItem.product_id == product_id).count() == 0
+
+
 def test_order_line_reference_uses_permanent_document_sequence_not_date_tracking():
     customer_id, product_id = _seed_customer_and_product()
     db = TestingSessionLocal()

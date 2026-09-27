@@ -3891,11 +3891,11 @@ export interface components {
         /** ShippingReportRow */
         ShippingReportRow: {
             /** Delivery Id */
-            delivery_id: string;
+            delivery_id?: string | null;
             /** Delivery Item Id */
-            delivery_item_id: string;
+            delivery_item_id?: string | null;
             /** Delivery No */
-            delivery_no: string;
+            delivery_no?: string | null;
             /** Order Item Id */
             order_item_id: string;
             /**

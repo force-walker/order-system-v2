@@ -7570,6 +7570,7 @@ components:
             maxLength: 1000
           - type: 'null'
           title: Comment
+      additionalProperties: false
       type: object
       required:
       - product_id
@@ -7775,6 +7776,7 @@ components:
             maxLength: 1000
           - type: 'null'
           title: Comment
+      additionalProperties: false
       type: object
       title: OrderItemUpdateRequest
     OrderItemsBulkCreateRequest:
@@ -9439,13 +9441,19 @@ components:
     ShippingReportRow:
       properties:
         delivery_id:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Delivery Id
         delivery_item_id:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Delivery Item Id
         delivery_no:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Delivery No
         order_item_id:
           type: string
@@ -9473,9 +9481,6 @@ components:
           title: Unit
       type: object
       required:
-      - delivery_id
-      - delivery_item_id
-      - delivery_no
       - order_item_id
       - shipped_date
       - supplier_name

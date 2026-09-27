@@ -95,6 +95,10 @@ class OrderItemCreateRequest(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
     comment: str | None = Field(default=None, max_length=1000)
 
+    # The customer-facing UOM is never accepted from the client. It is always
+    # resolved from Product.order_uom through product_id.
+    model_config = {"extra": "forbid"}
+
 
 class OrderItemUpdateRequest(BaseModel):
     ordered_qty: float | None = Field(default=None, gt=0)
@@ -108,6 +112,9 @@ class OrderItemUpdateRequest(BaseModel):
     unit_price_uom_kg: float | None = Field(default=None, ge=0)
     note: str | None = Field(default=None, max_length=1000)
     comment: str | None = Field(default=None, max_length=1000)
+
+    # Keep Product.order_uom authoritative during edits as well as creation.
+    model_config = {"extra": "forbid"}
 
 
 class OrderItemResponse(BaseModel):

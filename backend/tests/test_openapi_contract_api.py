@@ -14,7 +14,11 @@ UUID_SCHEMA_FIELDS = {
     "InvoiceItemResponse": ("id", "uuid", "invoice_id", "order_item_id"),
     "DeliveryResponse": ("id", "uuid", "order_id"),
     "DeliveryItemResponse": ("id", "uuid", "delivery_id", "order_item_id"),
-    "ShippingReportRow": ("delivery_id", "delivery_item_id", "order_item_id"),
+    "ShippingReportRow": ("order_item_id",),
+}
+
+NULLABLE_UUID_SCHEMA_FIELDS = {
+    "ShippingReportRow": ("delivery_id", "delivery_item_id"),
 }
 
 
@@ -30,6 +34,17 @@ def test_committed_openapi_matches_runtime_uuid_contract():
         for field_name in field_names:
             assert committed_properties[field_name] == runtime_properties[field_name]
             assert committed_properties[field_name]["type"] == "string"
+
+    for schema_name, field_names in NULLABLE_UUID_SCHEMA_FIELDS.items():
+        committed_schema = committed["components"]["schemas"][schema_name]
+        runtime_schema = runtime["components"]["schemas"][schema_name]
+        required = set(committed_schema.get("required", []))
+        for field_name in field_names:
+            committed_field = committed_schema["properties"][field_name]
+            runtime_field = runtime_schema["properties"][field_name]
+            assert committed_field == runtime_field
+            assert committed_field["anyOf"] == [{"type": "string"}, {"type": "null"}]
+            assert field_name not in required
 
 
 def _responses(path: str, method: str) -> dict:

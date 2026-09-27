@@ -2,10 +2,11 @@ import type { EntityId } from 'shared/entityId';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { generatePurchaseConfirmationPdf, getShippingReport, type ShippingReportMode, type ShippingReportRow } from 'features/orders/services/shippingReportService';
+import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import { toActionableMessage } from 'shared/error';
 
 export const ShippingReportPage = () => {
-  const [shippedDate, setShippedDate] = useState('');
+  const [shippedDate, setShippedDate] = useState(getDefaultDeliveryDate);
   const [mode, setMode] = useState<ShippingReportMode | ''>('');
   const [rows, setRows] = useState<ShippingReportRow[] | null>(null);
   const [loading, setLoading] = useState(false);

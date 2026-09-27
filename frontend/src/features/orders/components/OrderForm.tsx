@@ -59,7 +59,7 @@ const newItem = (): ItemForm => ({
   productId: '',
   productName: '',
   quantity: '',
-  unit: 'kg',
+  unit: '',
   unitPrice: '',
   pricingBasis: 'uom_count',
   estimatedWeightKg: '',
@@ -466,7 +466,12 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
                   </label>
 
                   <label>
-                    <input value={row.unit} onChange={(ev) => handleItemChange(idx, 'unit', ev.target.value)} />
+                    <input
+                      aria-label={`明細 ${idx + 1} 受注単位`}
+                      value={row.unit}
+                      readOnly
+                      title="商品マスタの受注単位"
+                    />
                     {e.unit ? <small className="field-error">{e.unit}</small> : null}
                   </label>
 

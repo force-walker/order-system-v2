@@ -34,7 +34,15 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _seed_shipping_row(shipped_date: date, supplier_name: str, customer_name: str, product_name: str) -> None:
+def _seed_shipping_row(
+    shipped_date: date,
+    supplier_name: str,
+    customer_name: str,
+    product_name: str,
+    *,
+    order_status: OrderStatus = OrderStatus.allocated,
+    with_delivery: bool = True,
+) -> str:
     db = TestingSessionLocal()
 
     supplier = Supplier(supplier_code=f"SUP-{supplier_name}-{datetime.now(UTC).timestamp()}", name=supplier_name, active=True)
@@ -65,7 +73,7 @@ def _seed_shipping_row(shipped_date: date, supplier_name: str, customer_name: st
         order_datetime=datetime.now(UTC),
         delivery_date=shipped_date,
         shipped_date=shipped_date,
-        status=OrderStatus.allocated,
+        status=order_status,
         note=None,
     )
     db.add(order)
@@ -92,30 +100,33 @@ def _seed_shipping_row(shipped_date: date, supplier_name: str, customer_name: st
         )
     )
 
-    delivery = Delivery(
-        delivery_no=f"DLV-{shipped_date.strftime('%Y%m%d')}-{str(item.id)[-5:].zfill(5)}-01",
-        tracking_no=f"{shipped_date.strftime('%Y%m%d')}-{str(item.id)[-5:].zfill(5)}",
-        order_id=order.id,
-        customer_id=customer.id,
-        delivery_date=shipped_date,
-        shipped_date=shipped_date,
-    )
-    db.add(delivery)
-    db.flush()
-    db.add(
-        DeliveryItem(
-            delivery_id=delivery.id,
-            order_item_id=item.id,
-            product_id=product.id,
-            delivery_line_no=f"DLI-{str(item.id)[-5:].zfill(5)}-01-0001",
-            delivered_qty=5,
-            delivered_uom="count",
+    if with_delivery:
+        delivery = Delivery(
+            delivery_no=f"DLV-{shipped_date.strftime('%Y%m%d')}-{str(item.id)[-5:].zfill(5)}-01",
+            tracking_no=f"{shipped_date.strftime('%Y%m%d')}-{str(item.id)[-5:].zfill(5)}",
+            order_id=order.id,
+            customer_id=customer.id,
+            delivery_date=shipped_date,
             shipped_date=shipped_date,
         )
-    )
+        db.add(delivery)
+        db.flush()
+        db.add(
+            DeliveryItem(
+                delivery_id=delivery.id,
+                order_item_id=item.id,
+                product_id=product.id,
+                delivery_line_no=f"DLI-{str(item.id)[-5:].zfill(5)}-01-0001",
+                delivered_qty=5,
+                delivered_uom="count",
+                shipped_date=shipped_date,
+            )
+        )
 
     db.commit()
+    item_id = item.id
     db.close()
+    return item_id
 
 
 def test_shipping_report_same_date_and_sort_modes():
@@ -129,7 +140,7 @@ def test_shipping_report_same_date_and_sort_modes():
     assert len(by_supplier.json()) == 2
     assert by_supplier.json()[0]["delivery_no"].startswith("DLV-")
     assert by_supplier.json()[0]["supplier_name"] <= by_supplier.json()[1]["supplier_name"]
-    assert all(float(row["quantity"]) == 5 for row in by_supplier.json())
+    assert all(float(row["quantity"]) == 4 for row in by_supplier.json())
     assert all(row["unit"] == "count" for row in by_supplier.json())
 
     by_customer = client.get(f"/api/v1/reports/shipping?shipped_date={sdate}&mode=customer")
@@ -143,3 +154,51 @@ def test_shipping_report_empty_result_is_200_array():
     res = client.get("/api/v1/reports/shipping?shipped_date=2099-01-01&mode=supplier_product")
     assert res.status_code == 200
     assert res.json() == []
+
+
+def test_shipping_report_uses_explicit_operational_order_statuses():
+    shipped_date = date(2026, 4, 17)
+    included = {
+        OrderStatus.allocated,
+        OrderStatus.purchased,
+    }
+    excluded = {
+        OrderStatus.new,
+        OrderStatus.confirmed,
+        OrderStatus.shipped,
+        OrderStatus.invoiced,
+        OrderStatus.cancelled,
+    }
+    for status in included | excluded:
+        _seed_shipping_row(
+            shipped_date,
+            supplier_name=f"Supplier-{status.value}",
+            customer_name=f"Customer-{status.value}",
+            product_name=f"Product-{status.value}",
+            order_status=status,
+        )
+    no_delivery_ids = {
+        _seed_shipping_row(
+            shipped_date,
+            supplier_name=f"Supplier-no-delivery-{status.value}",
+            customer_name=f"Customer-no-delivery-{status.value}",
+            product_name=f"Product-no-delivery-{status.value}",
+            order_status=status,
+            with_delivery=False,
+        )
+        for status in included
+    }
+
+    response = _client().get(f"/api/v1/reports/shipping?shipped_date={shipped_date}&mode=supplier_product")
+
+    assert response.status_code == 200
+    product_names = {row["product_name"] for row in response.json()}
+    assert product_names == {
+        *(f"Product-{status.value}" for status in included),
+        *(f"Product-no-delivery-{status.value}" for status in included),
+    }
+    no_delivery_rows = [row for row in response.json() if row["order_item_id"] in no_delivery_ids]
+    assert len(no_delivery_rows) == 2
+    assert all(row["delivery_id"] is None for row in no_delivery_rows)
+    assert all(row["delivery_item_id"] is None for row in no_delivery_rows)
+    assert all(row["delivery_no"] is None for row in no_delivery_rows)

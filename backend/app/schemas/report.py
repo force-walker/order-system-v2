@@ -10,9 +10,9 @@ class ShippingReportSortMode(str, enum.Enum):
 
 
 class ShippingReportRow(BaseModel):
-    delivery_id: str
-    delivery_item_id: str
-    delivery_no: str
+    delivery_id: str | None = None
+    delivery_item_id: str | None = None
+    delivery_no: str | None = None
     order_item_id: str
     shipped_date: date
     supplier_name: str | None

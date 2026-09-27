@@ -9,6 +9,7 @@ import {
   updateInvoiceDraftItem,
 } from 'features/orders/services/invoiceService';
 import type { InvoiceDraftListRow, InvoiceStatus } from 'features/orders/types/order';
+import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import { toActionableMessage } from 'shared/error';
 
 const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
@@ -46,7 +47,7 @@ export const InvoiceDraftPage = () => {
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftListRow[]>([]);
   const [customerFilter, setCustomerFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState(getDefaultDeliveryDate);
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | ''>('draft');
   const [selectedByInvoiceId, setSelectedByInvoiceId] = useState<RowSelect>({});
   const [priceInputs, setPriceInputs] = useState<PriceInputMap>({});
