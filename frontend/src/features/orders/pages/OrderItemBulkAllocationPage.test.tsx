@@ -94,6 +94,25 @@ it('does not show an overwrite warning for the first save of an unsaved allocati
   expect(confirmSpy).not.toHaveBeenCalled();
 });
 
+it('blocks selected rows without a final supplier before calling the API', async () => {
+  const actor = userEvent.setup();
+  vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([{
+    ...savedRow,
+    allocationId: null,
+    allocationStatus: 'unallocated',
+    manualSupplierId: null,
+    manualQty: 2,
+  }]);
+  render(<MemoryRouter><OrderItemBulkAllocationPage /></MemoryRouter>);
+
+  const tableRow = (await screen.findByText('ORD-1')).closest('tr')!;
+  await actor.click(tableRow.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await actor.click(screen.getByRole('button', { name: '選択行を一括保存' }));
+
+  expect(await screen.findByText('仕入先を選択してください')).toBeTruthy();
+  expect(bulkSaveOrderItemAllocations).not.toHaveBeenCalled();
+});
+
 it('resaves an unchanged allocation without overwrite confirmation', async () => {
   const actor = userEvent.setup();
   const confirmSpy = vi.spyOn(window, 'confirm');

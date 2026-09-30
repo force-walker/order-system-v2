@@ -170,6 +170,17 @@ def bulk_save_allocations(
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth_context),
 ) -> BulkAllocationSaveResponse:
+    missing_supplier_item_ids = [str(row.order_item_id) for row in payload.items if row.supplier_id is None]
+    if missing_supplier_item_ids:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "ALLOCATION_SUPPLIER_REQUIRED",
+                "message": "final supplier is required for every saved allocation",
+                "details": [{"order_item_ids": missing_supplier_item_ids}],
+            },
+        )
+
     errors: list[BulkAllocationSaveError] = []
     succeeded = 0
     resolved_items = [(row, _get_order_item_by_identifier(db, row.order_item_id)) for row in payload.items]
@@ -205,7 +216,7 @@ def bulk_save_allocations(
         if product is None:
             errors.append(BulkAllocationSaveError(order_item_id=item.id, code="PRODUCT_NOT_FOUND", message="product not found"))
             continue
-        target_uom = product.purchase_uom if row.supplier_id is not None else None
+        target_uom = product.purchase_uom
         if alloc is not None and _same_allocation(alloc, row.supplier_id, row.allocated_qty, target_uom):
             succeeded += 1
             successful_order_ids.add(order.id)
@@ -220,48 +231,6 @@ def bulk_save_allocations(
                 status_code=409,
                 detail={"code": "ALLOCATION_LOCKED_BY_PURCHASE_RESULT", "message": "purchase result exists; allocation cannot be changed"},
             )
-
-        # unselect supplier = clear allocation
-        if row.supplier_id is None:
-            if row.allocated_qty is not None:
-                errors.append(
-                    BulkAllocationSaveError(
-                        order_item_id=row.order_item_id,
-                        code="UNASSIGN_WITH_QTY_NOT_ALLOWED",
-                        message="allocated_qty must be null when supplier_id is null",
-                    )
-                )
-                continue
-
-            if alloc is None:
-                succeeded += 1
-                successful_order_ids.add(order.id)
-                continue
-
-            before = {
-                "final_supplier_id": alloc.final_supplier_id,
-                "final_qty": float(alloc.final_qty) if alloc.final_qty is not None else None,
-                "final_uom": alloc.final_uom,
-            }
-            alloc.final_supplier_id = None
-            alloc.final_qty = None
-            alloc.final_uom = None
-            alloc.is_manual_override = True
-            alloc.override_reason_code = payload.override_reason_code
-            db.flush()
-            write_audit_log(
-                db,
-                entity_type="supplier_allocation",
-                entity_id=alloc.id,
-                action=AuditAction.OVERRIDE,
-                actor=auth.user_id,
-                reason_code=payload.override_reason_code,
-                before=before,
-                after={"final_supplier_id": None, "final_qty": None, "final_uom": None},
-            )
-            succeeded += 1
-            successful_order_ids.add(order.id)
-            continue
 
         supplier = db.query(Supplier).filter(Supplier.id == row.supplier_id).first()
         if supplier is None:

@@ -83,6 +83,32 @@ it('does not render the duplicate purchase work queue section', async () => {
   expect(screen.queryByText('作業キュー（納品確認）')).toBeNull();
 });
 
+it('keeps an allocated uom_count CTN line visible without requiring actual weight', async () => {
+  const actor = userEvent.setup();
+  vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([rows[0]]);
+  vi.mocked(getProductDetail).mockResolvedValue({
+    id: 1,
+    sku: 'SKU-COUNT-CTN',
+    name: 'Product A',
+    orderUom: 'CTN',
+    purchaseUom: 'CTN',
+    invoiceUom: 'CTN',
+    pricingBasisDefault: 'uom_count',
+    isCatchWeight: false,
+    weightCaptureRequired: false,
+    active: true,
+  });
+  renderPurchasePage();
+
+  const tableRow = (await screen.findByText('ORD-A')).closest('tr')!;
+  expect(screen.queryByRole('spinbutton', { name: 'Product A 実測重量' })).toBeNull();
+  await actor.click(tableRow.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await actor.click(screen.getByRole('button', { name: '選択行を保存 (1)' }));
+  await waitFor(() => expect(bulkUpsertPurchaseResults).toHaveBeenCalledWith([
+    expect.objectContaining({ allocationId: 11, purchasedQty: 2, purchasedUom: 'CTN', actualWeightKg: undefined }),
+  ]));
+});
+
 it('requires actual weight for a uom_kg line even when product catch-weight flags are false', async () => {
   const actor = userEvent.setup();
   vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([{ ...rows[1], pricingBasis: 'uom_kg' }]);

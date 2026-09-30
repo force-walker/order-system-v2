@@ -273,6 +273,25 @@ export type InvoiceDraftCandidate = {
   deliveryDate: string;
   itemCount: number;
   purchaseResultIds: number[];
+  items: InvoiceDraftCandidateItem[];
+};
+
+export type InvoiceDraftCandidateItem = {
+  orderItemId: EntityId;
+  productSku: string;
+  productName: string;
+  purchaseResultIds: number[];
+  billableQty?: number;
+  billableUom: string;
+  salesUnitPrice: number;
+  unitCostBasis?: number;
+  autoPriceError?: string;
+  lineAmount?: number;
+  grossProfitAmount?: number;
+  grossMarginPct?: number;
+  grossMarginUnavailable: boolean;
+  validationCode?: string;
+  validationMessage?: string;
 };
 
 export type InvoiceSummaryRow = {

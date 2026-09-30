@@ -284,10 +284,21 @@ export const OrderItemBulkAllocationPage = () => {
 
   const saveBulk = async () => {
     const selectedRows = sortedItems.filter((row) => editById[row.orderItemId]?.selected);
+    const missingSupplierIds = selectedRows
+      .filter((row) => editById[row.orderItemId]?.manualSupplierId == null)
+      .map((row) => row.orderItemId);
+    if (missingSupplierIds.length > 0) {
+      const missingSet = new Set(missingSupplierIds);
+      setEditById((prev) => Object.fromEntries(
+        Object.entries(prev).map(([id, row]) => [id, missingSet.has(id) ? { ...row, rowError: '仕入先を選択してください' } : row]),
+      ));
+      setToast({ type: 'error', message: '仕入先が未選択の行があります。該当行の仕入先を選択してください。' });
+      return;
+    }
     const payload = selectedRows.map((row) => {
       const edit = editById[row.orderItemId];
-      const supplierId = edit.manualSupplierId == null ? null : Number(edit.manualSupplierId);
-      const allocatedQty = supplierId == null ? null : Number(edit.manualQty);
+      const supplierId = Number(edit.manualSupplierId);
+      const allocatedQty = Number(edit.manualQty);
       return {
         orderItemId: row.orderItemId,
         supplierId,
@@ -474,7 +485,7 @@ export const OrderItemBulkAllocationPage = () => {
           <button type="button" className="secondary" onClick={resetFilters}>フィルターを初期値に戻す</button>
           <div className="filter-gap" />
           <label className="filter-label">
-            選択行へ一括仕入先適用（未選択=未割当へ戻す）
+            選択行へ一括仕入先適用
             <input
               list="supplier-bulk-options"
               value={bulkSupplierQuery}

@@ -8,7 +8,7 @@ import { getDefaultDeliveryDate } from '../utils/deliveryDate';
 import { finalizeInvoiceDraftsBatch, listInvoiceDraftCandidates, listInvoiceDraftListRows, updateInvoiceDraftItem } from '../services/invoiceService';
 import { generateDraftInvoiceFromPurchase } from '../services/purchaseService';
 import { listCustomers } from '../services/ordersService';
-import type { InvoiceDraftListRow } from '../types/order';
+import type { InvoiceDraftCandidate, InvoiceDraftListRow } from '../types/order';
 
 vi.mock('../services/invoiceService', () => ({
   finalizeInvoiceDraftsBatch: vi.fn(),
@@ -55,6 +55,31 @@ const rows = [
   row('abc-trading-later', 'ABC Trading', nextDate),
 ];
 
+const candidate = (orderId: string, itemIds = ['item-1']): InvoiceDraftCandidate => ({
+  orderId,
+  orderNo: `ORD-${orderId}`,
+  orderStatus: 'purchased',
+  customerId: 1,
+  customerName: 'ABC Trading',
+  deliveryDate: defaultDate,
+  itemCount: itemIds.length,
+  purchaseResultIds: itemIds.map((_, index) => 101 + index),
+  items: itemIds.map((itemId, index) => ({
+    orderItemId: itemId,
+    productSku: `SKU-${index + 1}`,
+    productName: `Candidate Product ${index + 1}`,
+    purchaseResultIds: [101 + index],
+    billableQty: 2,
+    billableUom: 'CTN',
+    salesUnitPrice: 100,
+    unitCostBasis: 60,
+    lineAmount: 200,
+    grossProfitAmount: 80,
+    grossMarginPct: 40,
+    grossMarginUnavailable: false,
+  })),
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(listInvoiceDraftListRows).mockResolvedValue(rows);
@@ -69,65 +94,70 @@ beforeEach(() => {
 
 it('shows a purchased order without a Delivery as an invoice candidate and creates its draft', async () => {
   const actor = userEvent.setup();
-  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([{
-    orderId: 'order-purchased',
-    orderNo: 'ORD-PURCHASED',
-    orderStatus: 'purchased',
-    customerId: 1,
-    customerName: 'ABC Trading',
-    deliveryDate: defaultDate,
-    itemCount: 2,
-    purchaseResultIds: [101, 102],
-  }]);
+  const purchaseCandidate = candidate('PURCHASED', ['item-1', 'item-2']);
+  purchaseCandidate.orderId = 'order-purchased';
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([purchaseCandidate]);
   vi.mocked(generateDraftInvoiceFromPurchase).mockResolvedValue('invoice-new');
   vi.mocked(listInvoiceDraftCandidates)
-    .mockResolvedValueOnce([{
-      orderId: 'order-purchased',
-      orderNo: 'ORD-PURCHASED',
-      orderStatus: 'purchased',
-      customerId: 1,
-      customerName: 'ABC Trading',
-      deliveryDate: defaultDate,
-      itemCount: 2,
-      purchaseResultIds: [101, 102],
-    }])
+    .mockResolvedValueOnce([purchaseCandidate])
     .mockResolvedValueOnce([]);
   vi.mocked(listInvoiceDraftListRows)
     .mockResolvedValueOnce(rows)
     .mockResolvedValueOnce([...rows, row('new', 'ABC Trading')]);
   renderPage();
 
-  expect(await screen.findByText('ORD-PURCHASED')).toBeTruthy();
+  expect(await screen.findAllByText('ORD-PURCHASED')).toHaveLength(2);
   expect(screen.queryByRole('heading', { name: '請求候補' })).toBeNull();
-  await actor.click(screen.getByRole('button', { name: 'ドラフト作成' }));
+  await actor.click(screen.getByRole('checkbox', { name: 'ORD-PURCHASED SKU-1 を選択' }));
+  await actor.click(screen.getByRole('checkbox', { name: 'ORD-PURCHASED SKU-2 を選択' }));
+  await actor.clear(screen.getByLabelText('ORD-PURCHASED SKU-1 請求単価'));
+  await actor.type(screen.getByLabelText('ORD-PURCHASED SKU-1 請求単価'), '123.45');
+  await actor.click(screen.getByRole('button', { name: '選択した候補からドラフト作成 (2)' }));
 
   await waitFor(() => expect(generateDraftInvoiceFromPurchase).toHaveBeenCalledWith({
     orderId: 'order-purchased',
     invoiceDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     purchaseResultIds: [101, 102],
+    salesUnitPrices: { 'item-1': 123.45, 'item-2': 100 },
   }));
   expect(await screen.findByText('IVD-new')).toBeTruthy();
-  expect(screen.queryByText('ORD-PURCHASED')).toBeNull();
+  expect(screen.queryAllByText('ORD-PURCHASED')).toHaveLength(0);
 });
 
 it('shows the backend UOM validation reason when candidate draft creation fails', async () => {
   const actor = userEvent.setup();
-  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([{
-    orderId: 'order-sku-9',
-    orderNo: 'ORD-SKU-9',
-    orderStatus: 'purchased',
-    customerId: 1,
-    customerName: 'ABC Trading',
-    deliveryDate: defaultDate,
-    itemCount: 1,
-    purchaseResultIds: [109],
-  }]);
-  vi.mocked(generateDraftInvoiceFromPurchase).mockRejectedValue(new Error('INVOICE_UOM_UNSUPPORTED: catch-weight item must use KG invoice_uom'));
+  const invalid = candidate('SKU-9');
+  invalid.orderId = 'order-sku-9';
+  invalid.items[0].productSku = 'SKU-000009';
+  invalid.items[0].validationCode = 'INVOICE_UOM_UNSUPPORTED';
+  invalid.items[0].validationMessage = 'SKU-000009: 不定貫商品の請求単位がCASEです。';
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([invalid]);
   renderPage();
-  await screen.findByText('ORD-SKU-9');
-  await actor.click(screen.getByRole('button', { name: 'ドラフト作成' }));
+  expect(await screen.findAllByText('ORD-SKU-9')).toHaveLength(1);
+  expect(await screen.findByText(/SKU-000009: 不定貫商品の請求単位がCASE/)).toBeTruthy();
+  expect(generateDraftInvoiceFromPurchase).not.toHaveBeenCalled();
+});
 
-  expect(await screen.findByText(/INVOICE_UOM_UNSUPPORTED/)).toBeTruthy();
+it('toggles candidate checkboxes, supports multi-select/select-all and shows pricing and profit previews', async () => {
+  const actor = userEvent.setup();
+  vi.mocked(listInvoiceDraftListRows).mockResolvedValue([]);
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([candidate('MULTI', ['candidate-a', 'candidate-b'])]);
+  renderPage();
+
+  const first = await screen.findByRole('checkbox', { name: 'ORD-MULTI SKU-1 を選択' });
+  const second = screen.getByRole('checkbox', { name: 'ORD-MULTI SKU-2 を選択' });
+  const all = screen.getByRole('checkbox', { name: '表示中の選択可能行を全選択' });
+  await actor.click(first);
+  expect((first as HTMLInputElement).checked).toBe(true);
+  expect((all as HTMLInputElement).indeterminate).toBe(true);
+  await actor.click(second);
+  expect((all as HTMLInputElement).checked).toBe(true);
+  await actor.click(all);
+  expect((first as HTMLInputElement).checked).toBe(false);
+  expect((second as HTMLInputElement).checked).toBe(false);
+  expect(screen.getAllByDisplayValue('100')).toHaveLength(2);
+  expect(screen.getAllByText('￥80')).toHaveLength(2);
+  expect(screen.getAllByText('40.0%')).toHaveLength(2);
 });
 
 afterEach(cleanup);

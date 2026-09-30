@@ -6359,6 +6359,11 @@ components:
             type: integer
           type: array
           title: Purchase Result Ids
+        items:
+          items:
+            $ref: '#/components/schemas/InvoiceDraftCandidateItem'
+          type: array
+          title: Items
       type: object
       required:
       - order_id
@@ -6369,7 +6374,83 @@ components:
       - delivery_date
       - item_count
       - purchase_result_ids
+      - items
       title: InvoiceDraftCandidate
+    InvoiceDraftCandidateItem:
+      properties:
+        order_item_id:
+          type: string
+          title: Order Item Id
+        product_sku:
+          type: string
+          title: Product Sku
+        product_name:
+          type: string
+          title: Product Name
+        purchase_result_ids:
+          items:
+            type: integer
+          type: array
+          title: Purchase Result Ids
+        billable_qty:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Billable Qty
+        billable_uom:
+          type: string
+          title: Billable Uom
+        sales_unit_price:
+          type: number
+          title: Sales Unit Price
+        unit_cost_basis:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Unit Cost Basis
+        auto_price_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Auto Price Error
+        line_amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Line Amount
+        gross_profit_amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Gross Profit Amount
+        gross_margin_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Gross Margin Pct
+        gross_margin_unavailable:
+          type: boolean
+          title: Gross Margin Unavailable
+          default: false
+        validation_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Validation Code
+        validation_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Validation Message
+      type: object
+      required:
+      - order_item_id
+      - product_sku
+      - product_name
+      - purchase_result_ids
+      - billable_uom
+      - sales_unit_price
+      title: InvoiceDraftCandidateItem
     InvoiceDraftFromPurchaseResultsRequest:
       properties:
         order_id:
@@ -6393,6 +6474,11 @@ components:
           type: array
           minItems: 1
           title: Purchase Result Ids
+        sales_unit_prices:
+          additionalProperties:
+            type: number
+          type: object
+          title: Sales Unit Prices
       type: object
       required:
       - order_id
@@ -9584,8 +9670,10 @@ components:
     SplitPart:
       properties:
         final_supplier_id:
-          type: integer
-          exclusiveMinimum: 0.0
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
           title: Final Supplier Id
         final_qty:
           type: number
@@ -9598,7 +9686,6 @@ components:
           title: Final Uom
       type: object
       required:
-      - final_supplier_id
       - final_qty
       - final_uom
       title: SplitPart

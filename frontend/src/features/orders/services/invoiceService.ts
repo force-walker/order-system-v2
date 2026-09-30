@@ -65,6 +65,23 @@ type ApiInvoiceDraftCandidate = {
   delivery_date: string;
   item_count: number;
   purchase_result_ids: number[];
+  items: Array<{
+    order_item_id: EntityId;
+    product_sku: string;
+    product_name: string;
+    purchase_result_ids: number[];
+    billable_qty: number | null;
+    billable_uom: string;
+    sales_unit_price: number;
+    unit_cost_basis: number | null;
+    auto_price_error: string | null;
+    line_amount: number | null;
+    gross_profit_amount: number | null;
+    gross_margin_pct: number | null;
+    gross_margin_unavailable: boolean;
+    validation_code: string | null;
+    validation_message: string | null;
+  }>;
 };
 
 type ApiInvoiceReportLine = {
@@ -263,6 +280,23 @@ export const listInvoiceDraftCandidates = async (): Promise<InvoiceDraftCandidat
     deliveryDate: row.delivery_date,
     itemCount: row.item_count,
     purchaseResultIds: row.purchase_result_ids,
+    items: row.items.map((item) => ({
+      orderItemId: item.order_item_id,
+      productSku: item.product_sku,
+      productName: item.product_name,
+      purchaseResultIds: item.purchase_result_ids,
+      billableQty: item.billable_qty ?? undefined,
+      billableUom: item.billable_uom,
+      salesUnitPrice: item.sales_unit_price,
+      unitCostBasis: item.unit_cost_basis ?? undefined,
+      autoPriceError: item.auto_price_error ?? undefined,
+      lineAmount: item.line_amount ?? undefined,
+      grossProfitAmount: item.gross_profit_amount ?? undefined,
+      grossMarginPct: item.gross_margin_pct ?? undefined,
+      grossMarginUnavailable: item.gross_margin_unavailable,
+      validationCode: item.validation_code ?? undefined,
+      validationMessage: item.validation_message ?? undefined,
+    })),
   }));
 };
 export const updateInvoiceDraftItem = async (

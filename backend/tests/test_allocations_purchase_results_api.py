@@ -154,6 +154,22 @@ def test_allocation_validation_error_is_422():
     assert bad.status_code == 422
 
 
+def test_split_allocation_requires_supplier_on_every_part():
+    aid = _seed_allocation()
+    response = _client().post(
+        f"/api/v1/allocations/{aid}/split-line",
+        json={
+            "parts": [
+                {"final_supplier_id": 201, "final_qty": 1, "final_uom": "count"},
+                {"final_supplier_id": None, "final_qty": 1, "final_uom": "count"},
+            ],
+            "override_reason_code": "split",
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "ALLOCATION_SUPPLIER_REQUIRED"
+
+
 @pytest.mark.parametrize(
     "order_status",
     [OrderStatus.purchased, OrderStatus.shipped, OrderStatus.invoiced, OrderStatus.cancelled],

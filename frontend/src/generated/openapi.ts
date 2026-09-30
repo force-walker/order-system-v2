@@ -2524,6 +2524,44 @@ export interface components {
             item_count: number;
             /** Purchase Result Ids */
             purchase_result_ids: number[];
+            /** Items */
+            items: components["schemas"]["InvoiceDraftCandidateItem"][];
+        };
+        /** InvoiceDraftCandidateItem */
+        InvoiceDraftCandidateItem: {
+            /** Order Item Id */
+            order_item_id: string;
+            /** Product Sku */
+            product_sku: string;
+            /** Product Name */
+            product_name: string;
+            /** Purchase Result Ids */
+            purchase_result_ids: number[];
+            /** Billable Qty */
+            billable_qty?: number | null;
+            /** Billable Uom */
+            billable_uom: string;
+            /** Sales Unit Price */
+            sales_unit_price: number;
+            /** Unit Cost Basis */
+            unit_cost_basis?: number | null;
+            /** Auto Price Error */
+            auto_price_error?: string | null;
+            /** Line Amount */
+            line_amount?: number | null;
+            /** Gross Profit Amount */
+            gross_profit_amount?: number | null;
+            /** Gross Margin Pct */
+            gross_margin_pct?: number | null;
+            /**
+             * Gross Margin Unavailable
+             * @default false
+             */
+            gross_margin_unavailable: boolean;
+            /** Validation Code */
+            validation_code?: string | null;
+            /** Validation Message */
+            validation_message?: string | null;
         };
         /** InvoiceDraftFromPurchaseResultsRequest */
         InvoiceDraftFromPurchaseResultsRequest: {
@@ -2538,6 +2576,10 @@ export interface components {
             due_date?: string | null;
             /** Purchase Result Ids */
             purchase_result_ids: number[];
+            /** Sales Unit Prices */
+            sales_unit_prices?: {
+                [key: string]: number;
+            };
         };
         /** InvoiceDraftGenerateResult */
         InvoiceDraftGenerateResult: {
@@ -3961,7 +4003,7 @@ export interface components {
         /** SplitPart */
         SplitPart: {
             /** Final Supplier Id */
-            final_supplier_id: number;
+            final_supplier_id?: number | null;
             /** Final Qty */
             final_qty: number;
             /** Final Uom */

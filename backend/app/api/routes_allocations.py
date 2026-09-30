@@ -123,6 +123,14 @@ def split_allocation(
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth_context),
 ) -> list[AllocationResponse]:
+    if any(part.final_supplier_id is None for part in payload.parts):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "ALLOCATION_SUPPLIER_REQUIRED",
+                "message": "final supplier is required for every split allocation row",
+            },
+        )
     row = db.query(SupplierAllocation).filter(SupplierAllocation.id == allocation_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "ALLOCATION_NOT_FOUND", "message": "allocation not found"})

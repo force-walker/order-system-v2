@@ -527,6 +527,7 @@ def test_generate_draft_from_purchase_results_for_shipped_order_resolves_deliver
 
 
 def test_invoice_candidates_include_purchased_without_delivery_and_legacy_shipped_orders():
+    _seed_system_settings()
     purchased_order_id = _seed_order(with_items=True)
     purchased_result_id = _seed_purchase_result_for_order(purchased_order_id, purchased_qty=2)
     shipped_order_id = _seed_order(with_items=True)
@@ -562,10 +563,92 @@ def test_invoice_candidates_include_purchased_without_delivery_and_legacy_shippe
     assert response.status_code == 200, response.text
     by_order = {row["order_id"]: row for row in response.json()}
     assert by_order[purchased_order_id]["purchase_result_ids"] == [purchased_result_id]
+    assert by_order[purchased_order_id]["items"][0]["purchase_result_ids"] == [purchased_result_id]
+    assert by_order[purchased_order_id]["items"][0]["product_sku"]
+    assert by_order[purchased_order_id]["items"][0]["sales_unit_price"] >= 0
     assert by_order[purchased_order_id]["order_status"] == "purchased"
     assert by_order[shipped_order_id]["purchase_result_ids"] == [shipped_result_id]
     assert by_order[shipped_order_id]["order_status"] == "shipped"
     assert allocated_order_id not in by_order
+
+
+def test_uom_kg_pricing_uses_actual_weight_without_inheriting_true_catch_weight_kg_master_rule():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    db = TestingSessionLocal()
+    item = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.created_at.asc()).first()
+    assert item is not None
+    product = db.query(Product).filter(Product.id == item.product_id).one()
+    product.sku = "SKU-UOM-KG-NON-CATCH"
+    product.order_uom = "case"
+    product.purchase_uom = "case"
+    product.invoice_uom = "case"
+    product.is_catch_weight = False
+    product.weight_capture_required = False
+    item.pricing_basis = PricingBasis.uom_kg
+    item.unit_price_uom_count = None
+    item.unit_price_uom_kg = 100
+    item_id = item.id
+    db.commit()
+    db.close()
+    result_id = _seed_purchase_result_for_order(
+        order_id,
+        purchased_qty=2,
+        order_item_id=item_id,
+        purchased_uom="case",
+        actual_weight_kg=21.73,
+        final_unit_cost=1000,
+    )
+
+    response = _client().post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [result_id],
+            "sales_unit_prices": {item_id: 88.5},
+        },
+    )
+    assert response.status_code == 201, response.text
+    invoice_item = _client().get(f"/api/v1/invoices/{response.json()['invoice_id']}/items").json()[0]
+    assert float(invoice_item["billable_qty"]) == 21.73
+    assert invoice_item["billable_uom"] == "case"
+    assert float(invoice_item["sales_unit_price"]) == 88.5
+
+
+def test_true_catch_weight_non_kg_invoice_uom_is_rejected_with_sku():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    db = TestingSessionLocal()
+    item = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.created_at.asc()).first()
+    assert item is not None
+    product = db.query(Product).filter(Product.id == item.product_id).one()
+    product.sku = "SKU-TRUE-CATCH"
+    product.order_uom = "case"
+    product.purchase_uom = "case"
+    product.invoice_uom = "case"
+    product.is_catch_weight = True
+    item.pricing_basis = PricingBasis.uom_kg
+    item.unit_price_uom_count = None
+    item.unit_price_uom_kg = 100
+    item_id = item.id
+    db.commit()
+    db.close()
+    result_id = _seed_purchase_result_for_order(
+        order_id,
+        purchased_qty=2,
+        order_item_id=item_id,
+        purchased_uom="case",
+        actual_weight_kg=21.73,
+    )
+
+    response = _client().post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={"order_id": order_id, "invoice_date": str(date.today()), "purchase_result_ids": [result_id]},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "INVOICE_UOM_UNSUPPORTED"
+    assert "SKU-TRUE-CATCH" in response.json()["detail"]["message"]
 
 
 def test_purchase_result_draft_requires_purchased_or_legacy_shipped_status():

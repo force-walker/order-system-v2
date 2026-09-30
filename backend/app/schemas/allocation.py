@@ -12,7 +12,7 @@ class AllocationOverrideRequest(BaseModel):
 
 
 class SplitPart(BaseModel):
-    final_supplier_id: int = Field(gt=0)
+    final_supplier_id: int | None = Field(default=None, gt=0)
     final_qty: float = Field(ge=0)
     final_uom: str = Field(min_length=1, max_length=32)
 

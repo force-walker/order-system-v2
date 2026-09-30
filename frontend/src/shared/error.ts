@@ -75,7 +75,9 @@ export const parseApiErrorPayload = async (res: Response): Promise<ServiceError>
   const detailMessage = payload?.detail?.message;
 
   const statusMessage = STATUS_MESSAGES[status];
-  const codeMessage = code ? CODE_MESSAGES[code] : undefined;
+  const codeMessage = code === 'INVOICE_UOM_UNSUPPORTED' && detailMessage
+    ? detailMessage
+    : code ? CODE_MESSAGES[code] : undefined;
 
   const message = codeMessage || detailMessage || statusMessage || enrichUnknownMessage(status, code, detailMessage);
 

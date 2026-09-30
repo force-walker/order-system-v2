@@ -64,6 +64,7 @@ it('sends purchase-result IDs and consumes invoice_id without a frontend draft n
       order_id: 'order-uuid',
       invoice_date: '2026-09-22',
       purchase_result_ids: [101, 202],
+      sales_unit_prices: {},
     },
   });
   const body = request.mock.calls[0][1]?.body as Record<string, unknown>;

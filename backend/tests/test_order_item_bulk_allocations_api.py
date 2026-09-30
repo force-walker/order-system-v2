@@ -37,7 +37,13 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _seed_order_item(product_name: str = "P", customer_name: str = "C") -> tuple[str, int, int, str]:
+def _seed_order_item(
+    product_name: str = "P",
+    customer_name: str = "C",
+    *,
+    uom: str = "count",
+    pricing_basis: PricingBasis = PricingBasis.uom_count,
+) -> tuple[str, int, int, str]:
     db = TestingSessionLocal()
     supplier = Supplier(supplier_code=f"SUP-{datetime.now(UTC).timestamp()}", name="S", active=True)
     db.add(supplier)
@@ -50,12 +56,12 @@ def _seed_order_item(product_name: str = "P", customer_name: str = "C") -> tuple
     product = Product(
         sku=f"SKU-{datetime.now(UTC).timestamp()}",
         name=product_name,
-        order_uom="count",
-        purchase_uom="count",
-        invoice_uom="count",
+        order_uom=uom,
+        purchase_uom=uom,
+        invoice_uom=uom,
         is_catch_weight=False,
         weight_capture_required=False,
-        pricing_basis_default=PricingBasis.uom_count,
+        pricing_basis_default=pricing_basis,
         active=True,
     )
     db.add(product)
@@ -76,7 +82,7 @@ def _seed_order_item(product_name: str = "P", customer_name: str = "C") -> tuple
         order_id=order.id,
         product_id=product.id,
         ordered_qty=5,
-        pricing_basis=PricingBasis.uom_count,
+        pricing_basis=pricing_basis,
         unit_price_uom_count=100,
         unit_price_uom_kg=None,
     )
@@ -234,7 +240,7 @@ def test_bulk_save_partial_success_and_validation_conflict():
     assert missing_qty.json()["errors"][0]["code"] == "ALLOCATED_QTY_REQUIRED"
 
 
-def test_bulk_save_can_unassign_supplier_with_null_values():
+def test_bulk_save_requires_a_final_supplier_and_does_not_clear_saved_quantity():
     order_item_id, supplier_id, _, _ = _seed_order_item()
     client = _client()
 
@@ -249,22 +255,42 @@ def test_bulk_save_can_unassign_supplier_with_null_values():
         "/api/v1/order-item-allocations/bulk-save",
         json={"items": [{"order_item_id": order_item_id, "supplier_id": None, "allocated_qty": None}]},
     )
-    assert unassigned.status_code == 200
-    assert unassigned.json()["succeeded"] == 1
+    assert unassigned.status_code == 422
+    assert unassigned.json()["detail"]["code"] == "ALLOCATION_SUPPLIER_REQUIRED"
 
     worklist = client.get("/api/v1/order-item-allocations")
     assert worklist.status_code == 200
     row = [x for x in worklist.json() if x["order_item_id"] == order_item_id][0]
-    assert row["allocated_supplier_id"] is None
-    assert row["allocated_qty"] is None
+    assert row["allocated_supplier_id"] == supplier_id
+    assert float(row["allocated_qty"]) == 3
 
     bad_unassign = client.post(
         "/api/v1/order-item-allocations/bulk-save",
         json={"items": [{"order_item_id": order_item_id, "supplier_id": None, "allocated_qty": 1}]},
     )
-    assert bad_unassign.status_code == 200
-    assert bad_unassign.json()["failed"] == 1
-    assert bad_unassign.json()["errors"][0]["code"] == "UNASSIGN_WITH_QTY_NOT_ALLOWED"
+    assert bad_unassign.status_code == 422
+    assert bad_unassign.json()["detail"]["code"] == "ALLOCATION_SUPPLIER_REQUIRED"
+
+
+def test_uom_count_allocation_quantity_and_uom_survive_reload_for_ctn_and_pc():
+    client = _client()
+    for uom in ("CTN", "PC"):
+        order_item_id, supplier_id, _, _ = _seed_order_item(product_name=f"Count {uom}", uom=uom)
+        saved = client.post(
+            "/api/v1/order-item-allocations/bulk-save",
+            json={"items": [{"order_item_id": order_item_id, "supplier_id": supplier_id, "allocated_qty": 2}]},
+        )
+        assert saved.status_code == 200, saved.text
+        db = TestingSessionLocal()
+        allocation = db.query(SupplierAllocation).filter(SupplierAllocation.order_item_id == order_item_id).one()
+        assert float(allocation.final_qty) == 2
+        assert allocation.final_uom == uom
+        db.close()
+        reloaded = client.get("/api/v1/order-item-allocations")
+        row = next(row for row in reloaded.json() if row["order_item_id"] == order_item_id)
+        assert row["pricing_basis"] == "uom_count"
+        assert row["allocation_status"] == "allocated"
+        assert float(row["allocated_qty"]) == 2
 
 
 def test_worklist_filters_by_product_and_customer_with_paging():
@@ -358,11 +384,11 @@ def test_two_line_order_advances_only_after_whole_order_is_complete():
     assert [item.line_status for item in items] == [LineStatus.allocated, LineStatus.open]
     db.close()
 
-    cleared = client.post(
+    reduced = client.post(
         "/api/v1/order-item-allocations/bulk-save",
-        json={"items": [{"order_item_id": item_ids[0], "supplier_id": None, "allocated_qty": None}]},
+        json={"items": [{"order_item_id": item_ids[0], "supplier_id": supplier_id, "allocated_qty": 4}]},
     )
-    assert cleared.status_code == 200
+    assert reduced.status_code == 200
     db = TestingSessionLocal()
     order = db.query(Order).filter(Order.id == order_id).one()
     items = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.line_no).all()

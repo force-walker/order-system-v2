@@ -124,13 +124,14 @@ export const undeferPurchaseResult = async (resultId: number): Promise<PurchaseR
   return toItem((await res.json()) as ApiPurchaseResultResponse);
 };
 
-export const generateDraftInvoiceFromPurchase = async (payload: { orderId: EntityId; invoiceDate: string; purchaseResultIds: number[] }): Promise<EntityId> => {
+export const generateDraftInvoiceFromPurchase = async (payload: { orderId: EntityId; invoiceDate: string; purchaseResultIds: number[]; salesUnitPrices?: Record<EntityId, number> }): Promise<EntityId> => {
   const res = await fetchWithAuth('/api/v1/invoices/generate-draft-from-purchase-results', {
     method: 'POST',
     body: {
       order_id: payload.orderId,
       invoice_date: payload.invoiceDate,
       purchase_result_ids: payload.purchaseResultIds,
+      sales_unit_prices: payload.salesUnitPrices ?? {},
     },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);

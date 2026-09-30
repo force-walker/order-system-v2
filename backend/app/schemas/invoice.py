@@ -70,6 +70,7 @@ class InvoiceDraftFromPurchaseResultsRequest(BaseModel):
     invoice_date: date
     due_date: date | None = None
     purchase_result_ids: list[int] = Field(min_length=1)
+    sales_unit_prices: dict[str, float] = Field(default_factory=dict)
 
     @field_validator("order_id")
     @classmethod
@@ -83,6 +84,13 @@ class InvoiceDraftFromPurchaseResultsRequest(BaseModel):
             raise ValueError("purchase_result_ids must contain only positive IDs")
         if len(value) != len(set(value)):
             raise ValueError("purchase_result_ids must not contain duplicates")
+        return value
+
+    @field_validator("sales_unit_prices")
+    @classmethod
+    def validate_sales_unit_prices(cls, value: dict[str, float]) -> dict[str, float]:
+        if any(not order_item_id or price < 0 for order_item_id, price in value.items()):
+            raise ValueError("sales_unit_prices must map order item IDs to non-negative prices")
         return value
 
 
@@ -172,6 +180,24 @@ class InvoiceDraftListRow(BaseModel):
     gross_margin_unavailable: bool = False
 
 
+class InvoiceDraftCandidateItem(BaseModel):
+    order_item_id: str
+    product_sku: str
+    product_name: str
+    purchase_result_ids: list[int]
+    billable_qty: float | None = None
+    billable_uom: str
+    sales_unit_price: float
+    unit_cost_basis: float | None = None
+    auto_price_error: str | None = None
+    line_amount: float | None = None
+    gross_profit_amount: float | None = None
+    gross_margin_pct: float | None = None
+    gross_margin_unavailable: bool = False
+    validation_code: str | None = None
+    validation_message: str | None = None
+
+
 class InvoiceDraftCandidate(BaseModel):
     order_id: str
     order_no: str
@@ -181,6 +207,7 @@ class InvoiceDraftCandidate(BaseModel):
     delivery_date: date
     item_count: int
     purchase_result_ids: list[int]
+    items: list[InvoiceDraftCandidateItem]
 
 
 class InvoiceItemUpdateRequest(BaseModel):
