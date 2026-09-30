@@ -2,7 +2,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field
 
-from app.models.entities import OrderStatus
+from app.models.entities import OrderStatus, PricingBasis
 
 
 class OrderItemAllocationWorkItem(BaseModel):
@@ -14,6 +14,7 @@ class OrderItemAllocationWorkItem(BaseModel):
     customer_name: str
     product_id: int
     product_name: str
+    pricing_basis: PricingBasis
     ordered_qty: float
     delivery_date: date
     shipped_date: date | None = None

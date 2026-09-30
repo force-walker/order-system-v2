@@ -1013,6 +1013,45 @@ def test_generate_draft_uses_purchase_result_actual_weight_and_claims_selected_s
     db.close()
 
 
+def test_uom_kg_pricing_uses_purchase_result_actual_weight_without_product_catch_weight_flag():
+    order_id = _seed_order(with_items=True, include_kg_without_weight=False)
+    db = TestingSessionLocal()
+    item = (
+        db.query(OrderItem)
+        .join(Product, Product.id == OrderItem.product_id)
+        .filter(OrderItem.order_id == order_id, OrderItem.pricing_basis == PricingBasis.uom_kg)
+        .one()
+    )
+    product = db.get(Product, item.product_id)
+    product.is_catch_weight = False
+    product.weight_capture_required = False
+    product.invoice_uom = "kg"
+    item_id = item.id
+    db.commit()
+    db.close()
+    result_id = _seed_purchase_result_for_order(
+        order_id,
+        purchased_qty=1,
+        order_item_id=item_id,
+        purchased_uom="kg",
+        actual_weight_kg=21.73,
+        final_unit_cost=1000,
+    )
+    _seed_system_settings()
+
+    response = _client().post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={"order_id": order_id, "invoice_date": str(date.today()), "purchase_result_ids": [result_id]},
+    )
+    assert response.status_code == 201, response.text
+    db = TestingSessionLocal()
+    invoice_item = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == response.json()["invoice_id"]).one()
+    assert float(invoice_item.billable_qty) == 21.73
+    assert invoice_item.billable_uom == "kg"
+    assert db.get(OrderItem, item_id).actual_weight_kg == 1.25
+    db.close()
+
+
 def test_generate_draft_missing_selected_actual_weight_rolls_back_all_claims():
     order_id = _seed_order(with_items=True, include_kg_without_weight=True)
     db = TestingSessionLocal()
@@ -1133,6 +1172,7 @@ def test_generate_draft_rejects_cancelled_order_and_selected_cancelled_item():
         partially_cancelled_order_id,
         final_unit_cost=1000,
         order_item_id=active_item_id,
+        actual_weight_kg=1.25,
     )
     _seed_system_settings()
     client = _client()
@@ -1319,6 +1359,7 @@ def test_partial_invoices_and_reset_preserve_other_invoice_statuses():
         order_id,
         final_unit_cost=1000,
         order_item_id=second_item_id,
+        actual_weight_kg=1.25,
     )
     client = _client()
 

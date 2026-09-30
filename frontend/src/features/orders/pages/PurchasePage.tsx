@@ -1,6 +1,6 @@
 import type { EntityId } from 'shared/entityId';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   listOrderItemAllocationWorkItems,
@@ -11,7 +11,6 @@ import {
 import {
   bulkUpsertPurchaseResults,
   listPurchaseResults,
-  listPurchaseWorkQueue,
 } from 'features/orders/services/purchaseService';
 import type { OrderStatus, PurchaseResultItem } from 'features/orders/types/order';
 import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
@@ -54,12 +53,10 @@ const consumePurchaseTargetAllocationIds = (): number[] | null => {
 };
 
 export const PurchasePage = () => {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rows, setRows] = useState<OrderItemAllocationWorkItem[]>([]);
-  const [queueItems, setQueueItems] = useState<PurchaseResultItem[]>([]);
   const [purchaseResultByAllocationId, setPurchaseResultByAllocationId] = useState<Record<number, PurchaseResultItem>>({});
   const [suppliers, setSuppliers] = useState<SupplierFilterOption[]>([]);
   const [unitsByProductId, setUnitsByProductId] = useState<Record<number, UnitPair>>({});
@@ -97,14 +94,12 @@ export const PurchasePage = () => {
     setLoading(true);
     setError('');
     try {
-      const [all, supplierOptions, queue, persisted] = await Promise.all([
+      const [all, supplierOptions, persisted] = await Promise.all([
         listOrderItemAllocationWorkItems({ unallocatedOnly: false, deliveryDate, orderStatuses }),
         listSupplierFilterOptions(),
-        listPurchaseWorkQueue(),
         listPurchaseResults({ limit: 500, offset: 0 }),
       ]);
       setSuppliers(supplierOptions);
-      setQueueItems(queue.items);
 
       const actualWeightByAllocationId = new Map<number, number | undefined>();
       const unitCostByAllocationId = new Map<number, number | undefined>();
@@ -113,14 +108,6 @@ export const PurchasePage = () => {
         actualWeightByAllocationId.set(q.allocationId, q.actualWeightKg);
         unitCostByAllocationId.set(q.allocationId, q.unitCost);
         persistedByAllocationId[q.allocationId] = q;
-      });
-      queue.items.forEach((q) => {
-        if (!actualWeightByAllocationId.has(q.allocationId)) {
-          actualWeightByAllocationId.set(q.allocationId, q.actualWeightKg);
-        }
-        if (!persistedByAllocationId[q.allocationId]) {
-          persistedByAllocationId[q.allocationId] = q;
-        }
       });
       setPurchaseResultByAllocationId(persistedByAllocationId);
 
@@ -342,6 +329,13 @@ export const PurchasePage = () => {
       }
 
       const actualWeightRaw = editByItemId[p.orderItemId]?.actualWeightKg ?? '';
+      const workItem = selectedRows.find((row) => row.orderItemId === p.orderItemId);
+      const productUnits = workItem ? unitsByProductId[workItem.productId] : undefined;
+      const requiresActualWeight = Boolean(
+        workItem
+        && (workItem.pricingBasis === 'uom_kg' || productUnits?.isCatchWeight || productUnits?.weightCaptureRequired),
+      );
+      if (requiresActualWeight && actualWeightRaw.trim() === '') return true;
       if (actualWeightRaw.trim() !== '') {
         const parsed = Number(actualWeightRaw);
         if (Number.isNaN(parsed) || parsed <= 0) return true;
@@ -425,41 +419,6 @@ export const PurchasePage = () => {
           </fieldset>
         </div>
 
-        <div className="card" style={{ marginBottom: 12 }}>
-          <div className="list-header">
-            <h3>作業キュー（納品確認）</h3>
-            <button type="button" className="secondary" onClick={() => navigate('/invoices/drafts')}>請求ドラフト一覧へ</button>
-          </div>
-          {queueItems.length === 0 ? <p className="subtle">対象なし</p> : (
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>顧客</th>
-                  <th>商品</th>
-                  <th>仕入先</th>
-                  <th>受取</th>
-                  <th>請求</th>
-                  <th>結果</th>
-                </tr>
-              </thead>
-              <tbody>
-                {queueItems.map((q) => (
-                  <tr key={q.id}>
-                    <td>{q.id}</td>
-                    <td>{q.customerName ?? '-'}</td>
-                    <td>{q.productName ?? '-'}</td>
-                    <td>{q.supplierName ?? '-'}</td>
-                    <td>{q.receivedQty ?? q.purchasedQty} {q.purchaseUom ?? q.purchasedUom}</td>
-                    <td>{q.invoiceQty ?? ''} {q.invoiceUom ?? ''}</td>
-                    <td>{q.resultStatus}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
         <div className="list-controls" style={{ marginBottom: 12 }}>
           <label className="filter-label">
             顧客フィルター
@@ -522,7 +481,7 @@ export const PurchasePage = () => {
                       <td className="col-supplier">{supplierName}</td>
                       <td className="col-ordered">{r.orderedQty} {units.orderUom}</td>
                       <td className="col-invoice">
-                        {units.isCatchWeight || units.weightCaptureRequired ? <>
+                        {units.isCatchWeight || units.weightCaptureRequired || r.pricingBasis === 'uom_kg' ? <>
                           <input
                           type="number"
                           inputMode="decimal"

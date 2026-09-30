@@ -76,6 +76,7 @@ def list_order_item_allocation_work_items(
         .join(Order, OrderItem.order_id == Order.id)
         .join(Product, OrderItem.product_id == Product.id)
         .join(Customer, Order.customer_id == Customer.id)
+        .filter(Order.status != OrderStatus.new)
     )
 
     if delivery_date is not None:
@@ -108,6 +109,7 @@ def list_order_item_allocation_work_items(
                 customer_name=_customer.name,
                 product_id=product.id,
                 product_name=product.name,
+                pricing_basis=item.pricing_basis,
                 ordered_qty=float(item.ordered_qty),
                 delivery_date=order.delivery_date,
                 shipped_date=item.shipped_date,

@@ -4,7 +4,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
-from app.models.entities import LineStatus, Order, OrderItem, OrderStatus, PurchaseResult, SupplierAllocation
+from app.models.entities import LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, SupplierAllocation
 
 
 @dataclass(frozen=True)
@@ -37,6 +37,10 @@ def evaluate_order_purchase_completion(db: Session, order_id: str) -> PurchaseCo
 
     complete_item_ids: set[str] = set()
     for item in active_items:
+        product = db.query(Product).filter(Product.id == item.product_id).first()
+        if product is None:
+            continue
+        requires_weight = product.is_catch_weight or product.weight_capture_required or item.pricing_basis == PricingBasis.uom_kg
         allocations = (
             db.query(SupplierAllocation)
             .filter(SupplierAllocation.order_item_id == item.id)
@@ -71,6 +75,9 @@ def evaluate_order_purchase_completion(db: Session, order_id: str) -> PurchaseCo
                 item_complete = False
                 break
             if any(not result.invoiceable_flag for result in results):
+                item_complete = False
+                break
+            if requires_weight and any(result.actual_weight_kg is None for result in results):
                 item_complete = False
                 break
             expected_uom = _normalized_uom(allocation.final_uom)

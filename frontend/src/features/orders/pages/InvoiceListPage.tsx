@@ -1,6 +1,6 @@
 import type { EntityId } from 'shared/entityId';
 import { newestInvoiceFirst } from 'shared/entityId';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { PdfExportButton } from 'components/common/PdfExportButton';
@@ -17,6 +17,9 @@ export const InvoiceListPage = () => {
   const [rows, setRows] = useState<InvoiceSummaryRow[]>([]);
   const [pdfGeneratingId, setPdfGeneratingId] = useState<EntityId | null>(null);
   const [pdfError, setPdfError] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState('');
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<EntityId[]>([]);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -33,7 +36,26 @@ export const InvoiceListPage = () => {
     void load();
   }, []);
 
-  const sorted = useMemo(() => [...rows].sort(newestInvoiceFirst), [rows]);
+  const sorted = useMemo(
+    () => rows.filter((row) => !invoiceDate || row.invoiceDate === invoiceDate).sort(newestInvoiceFirst),
+    [rows, invoiceDate],
+  );
+  const visibleIds = useMemo(() => sorted.map((row) => row.invoiceId), [sorted]);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedInvoiceIds.includes(id));
+  const someVisibleSelected = visibleIds.some((id) => selectedInvoiceIds.includes(id));
+
+  useEffect(() => {
+    const visible = new Set(visibleIds);
+    setSelectedInvoiceIds((current) => current.filter((id) => visible.has(id)));
+  }, [invoiceDate, rows]);
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+  }, [allVisibleSelected, someVisibleSelected]);
+
+  const toggleAllVisible = (checked: boolean) => {
+    setSelectedInvoiceIds(checked ? visibleIds : []);
+  };
 
   const onGeneratePdf = async (invoiceId: EntityId) => {
     setPdfGeneratingId(invoiceId);
@@ -62,11 +84,28 @@ export const InvoiceListPage = () => {
             <p className="subtle">発行済み請求書の参照ページです。請求書PDF は帳票出力のみで、ステータス変更は行いません。</p>
           </div>
         </div>
+        <div className="list-controls" style={{ marginBottom: 12 }}>
+          <label className="filter-label">
+            請求日
+            <input aria-label="請求日" type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
+          </label>
+          <button type="button" className="secondary" onClick={() => setInvoiceDate('')}>全期間</button>
+        </div>
         {pdfError ? <p className="field-error" style={{ marginTop: 0, marginBottom: 12 }}>{pdfError}</p> : null}
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
+                <th>
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    aria-label="表示中の請求書を全選択"
+                    checked={allVisibleSelected}
+                    disabled={visibleIds.length === 0}
+                    onChange={(event) => toggleAllVisible(event.target.checked)}
+                  />
+                </th>
                 <th>請求書番号</th>
                 <th>取引先</th>
                 <th>日付</th>
@@ -78,8 +117,22 @@ export const InvoiceListPage = () => {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((r) => (
+              {sorted.length === 0 ? (
+                <tr><td colSpan={9} className="subtle">指定した請求日の請求書はありません。</td></tr>
+              ) : sorted.map((r) => (
                 <tr key={r.invoiceId}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`請求書 ${r.invoiceNo} を選択`}
+                      checked={selectedInvoiceIds.includes(r.invoiceId)}
+                      onChange={(event) => setSelectedInvoiceIds((current) => (
+                        event.target.checked
+                          ? [...new Set([...current, r.invoiceId])]
+                          : current.filter((id) => id !== r.invoiceId)
+                      ))}
+                    />
+                  </td>
                   <td>{r.invoiceNo}</td>
                   <td>{r.customerName}</td>
                   <td>{r.invoiceDate}</td>

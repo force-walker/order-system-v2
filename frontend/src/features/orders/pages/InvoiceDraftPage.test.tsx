@@ -80,9 +80,25 @@ it('shows a purchased order without a Delivery as an invoice candidate and creat
     purchaseResultIds: [101, 102],
   }]);
   vi.mocked(generateDraftInvoiceFromPurchase).mockResolvedValue('invoice-new');
+  vi.mocked(listInvoiceDraftCandidates)
+    .mockResolvedValueOnce([{
+      orderId: 'order-purchased',
+      orderNo: 'ORD-PURCHASED',
+      orderStatus: 'purchased',
+      customerId: 1,
+      customerName: 'ABC Trading',
+      deliveryDate: defaultDate,
+      itemCount: 2,
+      purchaseResultIds: [101, 102],
+    }])
+    .mockResolvedValueOnce([]);
+  vi.mocked(listInvoiceDraftListRows)
+    .mockResolvedValueOnce(rows)
+    .mockResolvedValueOnce([...rows, row('new', 'ABC Trading')]);
   renderPage();
 
   expect(await screen.findByText('ORD-PURCHASED')).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: '請求候補' })).toBeNull();
   await actor.click(screen.getByRole('button', { name: 'ドラフト作成' }));
 
   await waitFor(() => expect(generateDraftInvoiceFromPurchase).toHaveBeenCalledWith({
@@ -90,6 +106,8 @@ it('shows a purchased order without a Delivery as an invoice candidate and creat
     invoiceDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     purchaseResultIds: [101, 102],
   }));
+  expect(await screen.findByText('IVD-new')).toBeTruthy();
+  expect(screen.queryByText('ORD-PURCHASED')).toBeNull();
 });
 
 it('shows the backend UOM validation reason when candidate draft creation fails', async () => {

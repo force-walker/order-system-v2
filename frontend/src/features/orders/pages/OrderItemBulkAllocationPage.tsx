@@ -31,7 +31,6 @@ type SortState = {
 
 const DEFAULT_ORDER_STATUSES: OrderStatus[] = ['confirmed', 'allocated'];
 const ORDER_STATUS_OPTIONS: Array<{ value: OrderStatus; label: string }> = [
-  { value: 'new', label: '新規' },
   { value: 'confirmed', label: '確定' },
   { value: 'allocated', label: '引当済' },
   { value: 'purchased', label: '仕入済' },
@@ -302,6 +301,7 @@ export const OrderItemBulkAllocationPage = () => {
     }
 
     const changes = selectedRows.flatMap((row) => {
+      if (row.allocationStatus !== 'allocated') return [];
       const edit = editById[row.orderItemId];
       const nextSupplierId = edit.manualSupplierId == null ? null : Number(edit.manualSupplierId);
       const nextQty = nextSupplierId == null ? null : Number(edit.manualQty);
@@ -429,7 +429,7 @@ export const OrderItemBulkAllocationPage = () => {
               disabled={selectedOrderItemIds.length === 0 || labelGenerating}
               title={selectedOrderItemIds.length === 0 ? '明細を選択してください' : undefined}
             >
-              {labelGenerating ? 'ラベルPDF生成中...' : 'ラベルPDF生成'}
+              {labelGenerating ? '茶屋札PDF作成中...' : '茶屋札PDF作成'}
             </button>
             <button type="button" className="secondary" onClick={moveToPurchaseResult}>保存済み行を納品確認へ進める</button>
           </div>

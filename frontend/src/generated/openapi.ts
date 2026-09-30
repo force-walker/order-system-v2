@@ -3139,6 +3139,7 @@ export interface components {
             product_id: number;
             /** Product Name */
             product_name: string;
+            pricing_basis: components["schemas"]["PricingBasis"];
             /** Ordered Qty */
             ordered_qty: number;
             /**

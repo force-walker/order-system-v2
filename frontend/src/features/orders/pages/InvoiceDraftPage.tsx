@@ -34,6 +34,7 @@ type ToastPayload = {
 type RowSelect = Record<EntityId, boolean>;
 type PriceInputMap = Record<EntityId, string>;
 type SavingMap = Record<EntityId, boolean>;
+type InvoiceViewStatus = InvoiceStatus | 'uncreated' | '';
 const ALL_CUSTOMERS_LABEL = '全取引先';
 
 const customerName = (customer: CustomerOption) => {
@@ -66,7 +67,7 @@ export const InvoiceDraftPage = () => {
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS_LABEL);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [dateFilter, setDateFilter] = useState(getDefaultDeliveryDate);
-  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | ''>('draft');
+  const [statusFilter, setStatusFilter] = useState<InvoiceViewStatus>('');
   const [selectedByInvoiceId, setSelectedByInvoiceId] = useState<RowSelect>({});
   const [priceInputs, setPriceInputs] = useState<PriceInputMap>({});
   const [savingByItemId, setSavingByItemId] = useState<SavingMap>({});
@@ -138,6 +139,7 @@ export const InvoiceDraftPage = () => {
   }, [rows, customers, customerFilter, selectedCustomerId, dateFilter, statusFilter]);
 
   const filteredCandidates = useMemo(() => {
+    if (statusFilter && statusFilter !== 'uncreated') return [];
     const customerQuery = customerFilter.trim().toLocaleLowerCase();
     const selectedCustomer = selectedCustomerId == null ? undefined : customers.find((customer) => customer.id === selectedCustomerId);
     const selectedCustomerName = selectedCustomer ? customerName(selectedCustomer).toLocaleLowerCase() : undefined;
@@ -162,7 +164,7 @@ export const InvoiceDraftPage = () => {
       ) return false;
       return true;
     });
-  }, [candidates, customers, customerFilter, selectedCustomerId, dateFilter]);
+  }, [candidates, customers, customerFilter, selectedCustomerId, dateFilter, statusFilter]);
 
   const resetCustomerFilter = () => {
     setSelectedCustomerId(null);
@@ -346,9 +348,10 @@ export const InvoiceDraftPage = () => {
           <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
         </label>
         <label className="filter-label">
-          作成済みステータス
-          <select value={statusFilter} onChange={(e) => setStatusFilter((e.target.value || '') as InvoiceStatus | '')}>
+          状態
+          <select value={statusFilter} onChange={(e) => setStatusFilter((e.target.value || '') as InvoiceViewStatus)}>
             <option value="">all</option>
+            <option value="uncreated">未作成</option>
             <option value="draft">draft</option>
             <option value="finalized">finalized</option>
             <option value="sent">sent</option>
@@ -356,48 +359,11 @@ export const InvoiceDraftPage = () => {
           </select>
         </label>
       </div>
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="list-header">
-          <div>
-            <h2>請求候補</h2>
-            <p className="subtle">仕入結果が完了した注文から請求ドラフトを作成します。Deliveryの作成は必要ありません。</p>
-          </div>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr><th>注文番号</th><th>取引先名</th><th>納品日</th><th>状態</th><th>明細数</th><th>操作</th></tr>
-            </thead>
-            <tbody>
-              {filteredCandidates.length === 0 ? (
-                <tr><td colSpan={6} className="subtle">条件に合う請求候補がありません。</td></tr>
-              ) : filteredCandidates.map((candidate) => (
-                <tr key={candidate.orderId}>
-                  <td>{candidate.orderNo}</td>
-                  <td>{candidate.customerName}</td>
-                  <td>{candidate.deliveryDate}</td>
-                  <td>{candidate.orderStatus}</td>
-                  <td>{candidate.itemCount}</td>
-                  <td>
-                    <button
-                      type="button"
-                      onClick={() => void onCreateDraft(candidate)}
-                      disabled={creatingOrderId !== null}
-                    >
-                      {creatingOrderId === candidate.orderId ? '作成中...' : 'ドラフト作成'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
       <div className="card">
         <div className="list-header">
           <div>
-            <h2>作成済みDraft</h2>
-            <p className="subtle">請求明細行を一覧で確認し、請求単価の調整と請求書発行を行います。</p>
+            <h2>請求ドラフト</h2>
+            <p className="subtle">未作成の注文と作成済みDraftを同じ一覧で確認します。Deliveryの作成は必要ありません。</p>
           </div>
           <div className="list-controls">
             <button type="button" onClick={() => void onFinalizeBulk()} disabled={bulkFinalizing || selectedDraftIds.length === 0}>
@@ -435,15 +401,43 @@ export const InvoiceDraftPage = () => {
                 <th style={{ textAlign: 'right' }}>請求数量</th>
                 <th style={{ textAlign: 'right' }}>請求金額</th>
                 <th style={{ textAlign: 'right' }}>粗利%</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {filteredCandidates.length === 0 && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="subtle">条件に合う請求データがありません。</td>
+                  <td colSpan={14} className="subtle">条件に合う請求データがありません。</td>
                 </tr>
               ) : (
-                filtered.map((row) => {
+                <>
+                  {filteredCandidates.map((candidate) => (
+                    <tr key={`candidate-${candidate.orderId}`}>
+                      <td>-</td>
+                      <td>-</td>
+                      <td>{candidate.orderNo}</td>
+                      <td>-</td>
+                      <td>{candidate.customerName}</td>
+                      <td>-</td>
+                      <td>{candidate.deliveryDate}</td>
+                      <td>未作成</td>
+                      <td style={{ textAlign: 'right' }}>-</td>
+                      <td style={{ textAlign: 'right' }}>-</td>
+                      <td style={{ textAlign: 'right' }}>{candidate.itemCount}明細</td>
+                      <td style={{ textAlign: 'right' }}>-</td>
+                      <td style={{ textAlign: 'right' }}>-</td>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => void onCreateDraft(candidate)}
+                          disabled={creatingOrderId !== null}
+                        >
+                          {creatingOrderId === candidate.orderId ? '作成中...' : 'ドラフト作成'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filtered.map((row) => {
                   const isDraft = row.status === 'draft';
                   const isSaving = Boolean(savingByItemId[row.invoiceItemId]);
                   return (
@@ -492,9 +486,11 @@ export const InvoiceDraftPage = () => {
                       <td style={{ textAlign: 'right' }}>{formatNumber(row.billableQty)}</td>
                       <td style={{ textAlign: 'right' }}>{currency.format(row.lineAmount)}</td>
                       <td style={{ textAlign: 'right' }}>{formatGrossMargin(row)}</td>
+                      <td>-</td>
                     </tr>
                   );
-                })
+                  })}
+                </>
               )}
             </tbody>
           </table>

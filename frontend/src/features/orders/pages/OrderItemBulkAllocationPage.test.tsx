@@ -37,7 +37,8 @@ it('defaults to confirmed and allocated orders on the shared delivery date', asy
   await screen.findByText('条件に合う受注アイテムがありません。');
   expect((screen.getByRole('checkbox', { name: '確定' }) as HTMLInputElement).checked).toBe(true);
   expect((screen.getByRole('checkbox', { name: '引当済' }) as HTMLInputElement).checked).toBe(true);
-  expect((screen.getByRole('checkbox', { name: '新規' }) as HTMLInputElement).checked).toBe(false);
+  expect(screen.queryByRole('checkbox', { name: '新規' })).toBeNull();
+  expect(screen.getByRole('button', { name: '茶屋札PDF作成' })).toBeTruthy();
   expect((screen.getByLabelText('納品日') as HTMLInputElement).value).toBe(getDefaultDeliveryDate());
 
   await waitFor(() => expect(listOrderItemAllocationWorkItems).toHaveBeenCalledWith({
@@ -57,6 +58,7 @@ const savedRow = {
   customerName: 'Customer A',
   productId: 1,
   productName: 'Product A',
+  pricingBasis: 'uom_count' as const,
   orderedQty: 2,
   deliveryDate: getDefaultDeliveryDate(),
   shippedDate: null,
@@ -66,6 +68,31 @@ const savedRow = {
   manualSupplierId: 1,
   manualQty: 2,
 };
+
+it('does not show an overwrite warning for the first save of an unsaved allocation', async () => {
+  const actor = userEvent.setup();
+  const confirmSpy = vi.spyOn(window, 'confirm');
+  vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([{
+    ...savedRow,
+    allocationId: 99,
+    allocationStatus: 'unallocated',
+    proposedSupplierId: null,
+    proposedQty: null,
+    manualSupplierId: null,
+    manualQty: null,
+  }]);
+  vi.mocked(listSupplierFilterOptions).mockResolvedValue([{ id: 1, label: '1: Supplier A' }]);
+  render(<MemoryRouter><OrderItemBulkAllocationPage /></MemoryRouter>);
+
+  const row = (await screen.findByText('ORD-1')).closest('tr')!;
+  await actor.selectOptions(row.querySelector('select')!, '1');
+  await actor.type(row.querySelector<HTMLInputElement>('input[type="number"]')!, '2');
+  await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await actor.click(screen.getByRole('button', { name: '選択行を一括保存' }));
+
+  await waitFor(() => expect(bulkSaveOrderItemAllocations).toHaveBeenCalledTimes(1));
+  expect(confirmSpy).not.toHaveBeenCalled();
+});
 
 it('resaves an unchanged allocation without overwrite confirmation', async () => {
   const actor = userEvent.setup();

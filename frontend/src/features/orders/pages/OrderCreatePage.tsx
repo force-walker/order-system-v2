@@ -4,7 +4,6 @@ import { OrderForm } from 'features/orders/components/OrderForm';
 import { createOrder, listCustomers, listProducts } from 'features/orders/services/ordersService';
 import type { CustomerOption, ProductOption } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
-import { useNavigate } from 'react-router-dom';
 
 import { apiRequestWithAuth as apiRequest } from 'shared/authenticatedApiClient';
 
@@ -14,12 +13,13 @@ type CheckResult = {
 };
 
 export const OrderCreatePage = () => {
-  const navigate = useNavigate();
   const [customers, setCustomers] = useState<CustomerOption[] | null>(null);
   const [products, setProducts] = useState<ProductOption[] | null>(null);
   const [error, setError] = useState('');
   const [checkResult, setCheckResult] = useState<CheckResult | null>(null);
   const [checking, setChecking] = useState(false);
+  const [formGeneration, setFormGeneration] = useState(0);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     Promise.all([listCustomers(), listProducts()])
@@ -51,8 +51,8 @@ export const OrderCreatePage = () => {
 
   const handleSubmit = async (payload: Parameters<typeof createOrder>[0]) => {
     const created = await createOrder(payload);
-    sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `注文を保存しました（ID: ${created.id}）` }));
-    navigate('/orders');
+    setSuccessMessage(`${created.orderNo} を作成しました。`);
+    setFormGeneration((current) => current + 1);
   };
 
   if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
@@ -62,6 +62,7 @@ export const OrderCreatePage = () => {
 
   return (
     <section>
+      {successMessage ? <div className="toast success" role="status">{successMessage}</div> : null}
       <div className="card" style={{ marginBottom: 12 }}>
         <button type="button" className="secondary" onClick={runConnectivityCheck} disabled={checking}>
           {checking ? '接続確認中...' : '接続確認'}
@@ -72,7 +73,7 @@ export const OrderCreatePage = () => {
           </p>
         ) : null}
       </div>
-      <OrderForm onSubmit={handleSubmit} customers={customers} products={products} />
+      <OrderForm key={formGeneration} onSubmit={handleSubmit} customers={customers} products={products} />
     </section>
   );
 };

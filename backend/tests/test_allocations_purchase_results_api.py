@@ -849,3 +849,47 @@ def test_purchase_result_update_is_noop_or_audited_change_before_claim():
     assert audit is not None and audit.before_json and audit.after_json
     assert audit.changed_by == "business-test"
     db.close()
+
+
+def test_uom_kg_purchase_result_requires_actual_weight_even_without_product_catch_weight_flags():
+    allocation_id = _seed_allocation(final_qty=3, final_supplier_id=101)
+    db = TestingSessionLocal()
+    allocation = db.get(SupplierAllocation, allocation_id)
+    item = db.get(OrderItem, allocation.order_item_id)
+    product = db.get(Product, item.product_id)
+    order = db.get(Order, item.order_id)
+    item.pricing_basis = PricingBasis.uom_kg
+    item.unit_price_uom_count = None
+    item.unit_price_uom_kg = 10
+    item.line_status = LineStatus.allocated
+    product.invoice_uom = "kg"
+    product.is_catch_weight = False
+    product.weight_capture_required = False
+    order.status = OrderStatus.allocated
+    order_id = order.id
+    item_id = item.id
+    db.commit()
+    db.close()
+
+    payload = {
+        "allocation_id": allocation_id,
+        "purchased_qty": 3,
+        "purchased_uom": "count",
+        "result_status": "filled",
+        "invoiceable_flag": True,
+    }
+    missing = _client().post("/api/v1/purchase-results/bulk-upsert", json={"items": [payload]})
+    assert missing.status_code == 422
+    assert missing.json()["detail"]["code"] == "ACTUAL_WEIGHT_REQUIRED"
+
+    saved = _client().post(
+        "/api/v1/purchase-results/bulk-upsert",
+        json={"items": [{**payload, "actual_weight_kg": 21.73}]},
+    )
+    assert saved.status_code == 200, saved.text
+    db = TestingSessionLocal()
+    assert float(db.get(PurchaseResult, saved.json()["purchase_result_ids"][0]).actual_weight_kg) == 21.73
+    assert db.get(OrderItem, item_id).actual_weight_kg is None
+    assert db.get(OrderItem, item_id).line_status == LineStatus.purchased
+    assert db.get(Order, order_id).status == OrderStatus.purchased
+    db.close()

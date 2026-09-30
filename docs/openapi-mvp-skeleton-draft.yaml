@@ -7553,6 +7553,8 @@ components:
         product_name:
           type: string
           title: Product Name
+        pricing_basis:
+          $ref: '#/components/schemas/PricingBasis'
         ordered_qty:
           type: number
           title: Ordered Qty
@@ -7588,6 +7590,7 @@ components:
       - customer_name
       - product_id
       - product_name
+      - pricing_basis
       - ordered_qty
       - delivery_date
       - allocation_status

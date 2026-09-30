@@ -1420,7 +1420,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
             )
         purchase_uom = product.purchase_uom.strip().casefold()
         invoice_uom = product.invoice_uom.strip().casefold()
-        is_catch_weight = product.is_catch_weight or product.weight_capture_required
+        is_catch_weight = product.is_catch_weight or product.weight_capture_required or item.pricing_basis == PricingBasis.uom_kg
 
         invalid_uom_ids = [
             pr.id

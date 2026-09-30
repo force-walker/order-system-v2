@@ -302,6 +302,9 @@ def test_worklist_filters_by_product_and_customer_with_paging():
     assert excluded.status_code == 200
     assert excluded.json() == []
 
+    first = confirmed.json()[0]
+    assert first["pricing_basis"] in {"uom_count", "uom_kg"}
+
 
 def test_worklist_combines_delivery_date_and_order_status_filters():
     selected_date = date.today()

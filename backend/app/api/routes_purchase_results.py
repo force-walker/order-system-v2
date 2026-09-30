@@ -9,7 +9,7 @@ from app.core.audit import AuditAction, write_audit_log
 from app.core.auth import AuthContext, get_auth_context
 from app.core.purchase_completion import synchronize_order_purchase_status
 from app.db.session import get_db
-from app.models.entities import Customer, Order, OrderItem, Product, PurchaseResult, Supplier, SupplierAllocation
+from app.models.entities import Customer, Order, OrderItem, PricingBasis, Product, PurchaseResult, Supplier, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.purchase_result import (
     PurchaseResultBulkUpsertRequest,
@@ -114,6 +114,32 @@ def _validate_purchase_uom(db: Session, *, alloc: SupplierAllocation, purchased_
             },
         )
     return product
+
+
+def _validate_actual_weight_required(
+    db: Session,
+    *,
+    alloc: SupplierAllocation,
+    actual_weight_kg: float | None,
+) -> None:
+    row = (
+        db.query(OrderItem, Product)
+        .join(Product, Product.id == OrderItem.product_id)
+        .filter(OrderItem.id == alloc.order_item_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "allocation product not found"})
+    item, product = row
+    requires_weight = product.is_catch_weight or product.weight_capture_required or item.pricing_basis == PricingBasis.uom_kg
+    if requires_weight and actual_weight_kg is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "ACTUAL_WEIGHT_REQUIRED",
+                "message": "actual_weight_kg is required for catch-weight or uom_kg purchase results",
+            },
+        )
 
 
 def _validate_quantity_limit(
@@ -227,6 +253,7 @@ def _to_purchase_result_response(db: Session, row: PurchaseResult) -> PurchaseRe
 def create_purchase_result(payload: PurchaseResultCreateRequest, db: Session = Depends(get_db)) -> PurchaseResultResponse:
     alloc = _get_allocation_or_404(db, payload.allocation_id)
     _validate_purchase_uom(db, alloc=alloc, purchased_uom=payload.purchased_uom)
+    _validate_actual_weight_required(db, alloc=alloc, actual_weight_kg=payload.actual_weight_kg)
     _validate_quantity_limit(db, alloc=alloc, incoming_qty=payload.purchased_qty)
 
     row = PurchaseResult(
@@ -420,6 +447,7 @@ def update_purchase_result(
         setattr(row, k, v)
 
     _validate_purchase_uom(db, alloc=alloc, purchased_uom=row.purchased_uom)
+    _validate_actual_weight_required(db, alloc=alloc, actual_weight_kg=row.actual_weight_kg)
     _validate_quantity_limit(db, alloc=alloc, incoming_qty=row.purchased_qty, exclude_result_id=row.id)
 
     if row.supplier_id is None:
@@ -496,6 +524,7 @@ def bulk_upsert_purchase_results(
         alloc = _get_allocation_or_404(db, item.allocation_id)
         touched_allocations[alloc.id] = alloc
         _validate_purchase_uom(db, alloc=alloc, purchased_uom=item.purchased_uom)
+        _validate_actual_weight_required(db, alloc=alloc, actual_weight_kg=item.actual_weight_kg)
 
         row = db.query(PurchaseResult).filter(PurchaseResult.allocation_id == item.allocation_id).with_for_update().first()
         if row is None:

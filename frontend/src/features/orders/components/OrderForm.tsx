@@ -1,5 +1,5 @@
 import type { EntityId } from 'shared/entityId';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
 import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import { toActionableMessage } from 'shared/error';
@@ -381,10 +381,10 @@ export const OrderForm = ({ onSubmit, customers, products, initialValue, submitL
               {customers.map((c) => {
                 const name = c.label.split(':')[1]?.split('(')[0]?.trim() ?? c.label;
                 return (
-                  <>
-                    <option key={`${c.id}-label`} value={c.label} />
-                    <option key={`${c.id}-name`} value={name} />
-                  </>
+                  <Fragment key={c.id}>
+                    <option value={c.label} />
+                    <option value={name} />
+                  </Fragment>
                 );
               })}
             </datalist>

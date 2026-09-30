@@ -11,7 +11,6 @@ import {
 import {
   bulkUpsertPurchaseResults,
   listPurchaseResults,
-  listPurchaseWorkQueue,
 } from 'features/orders/services/purchaseService';
 import { getProductDetail } from 'features/products/services/productsService';
 import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
@@ -23,7 +22,6 @@ vi.mock('features/orders/services/orderItemAllocationsService', () => ({
 vi.mock('features/orders/services/purchaseService', () => ({
   bulkUpsertPurchaseResults: vi.fn(),
   listPurchaseResults: vi.fn(),
-  listPurchaseWorkQueue: vi.fn(),
 }));
 vi.mock('features/products/services/productsService', () => ({ getProductDetail: vi.fn() }));
 
@@ -31,12 +29,14 @@ const rows = [
   {
     orderItemId: 'item-a', allocationId: 11, orderId: 'order-a', orderNo: 'ORD-A',
     orderStatus: 'allocated' as const, customerName: 'Customer A', productId: 1, productName: 'Product A', orderedQty: 2,
+    pricingBasis: 'uom_count' as const,
     deliveryDate: '2026-09-22', shippedDate: null, allocationStatus: 'allocated',
     proposedSupplierId: 1, proposedQty: 2, manualSupplierId: 1, manualQty: 2,
   },
   {
     orderItemId: 'item-b', allocationId: 22, orderId: 'order-b', orderNo: 'ORD-B',
     orderStatus: 'purchased' as const, customerName: 'Customer B', productId: 2, productName: 'Product B', orderedQty: 3,
+    pricingBasis: 'uom_count' as const,
     deliveryDate: '2026-09-22', shippedDate: null, allocationStatus: 'allocated',
     proposedSupplierId: 2, proposedQty: 3, manualSupplierId: 2, manualQty: 3,
   },
@@ -50,7 +50,6 @@ beforeEach(() => {
     { id: 1, label: '1: Supplier A' },
     { id: 2, label: '2: Supplier B' },
   ]);
-  vi.mocked(listPurchaseWorkQueue).mockResolvedValue({ items: [], total: 0 });
   vi.mocked(listPurchaseResults).mockResolvedValue({ items: [], total: 0 });
   vi.mocked(getProductDetail).mockImplementation(async (id) => ({
     id,
@@ -76,6 +75,43 @@ it('shows both orders on the same delivery date when there is no handoff filter'
   expect(await screen.findByText('ORD-A')).toBeTruthy();
   expect(screen.getByText('ORD-B')).toBeTruthy();
   expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('does not render the duplicate purchase work queue section', async () => {
+  renderPurchasePage();
+  await screen.findByText('ORD-A');
+  expect(screen.queryByText('作業キュー（納品確認）')).toBeNull();
+});
+
+it('requires actual weight for a uom_kg line even when product catch-weight flags are false', async () => {
+  const actor = userEvent.setup();
+  vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([{ ...rows[1], pricingBasis: 'uom_kg' }]);
+  vi.mocked(getProductDetail).mockResolvedValue({
+    id: 2,
+    sku: 'SKU-2',
+    name: 'Product B',
+    orderUom: 'PC',
+    purchaseUom: 'PC',
+    invoiceUom: 'KG',
+    pricingBasisDefault: 'uom_kg',
+    isCatchWeight: false,
+    weightCaptureRequired: false,
+    active: true,
+  });
+  renderPurchasePage();
+
+  const row = (await screen.findByText('ORD-B')).closest('tr')!;
+  const weight = screen.getByRole('spinbutton', { name: 'Product B 実測重量' });
+  await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await actor.click(screen.getByRole('button', { name: '選択行を保存 (1)' }));
+  expect(await screen.findByText('受取数量/実測重量の数値入力を確認してください。')).toBeTruthy();
+  expect(bulkUpsertPurchaseResults).not.toHaveBeenCalled();
+
+  await actor.type(weight, '8.25');
+  await actor.click(screen.getByRole('button', { name: '選択行を保存 (1)' }));
+  await waitFor(() => expect(bulkUpsertPurchaseResults).toHaveBeenCalledWith([
+    expect.objectContaining({ allocationId: 22, actualWeightKg: 8.25 }),
+  ]));
 });
 
 it('uses the shared delivery date and allocated plus purchased as its default API filters', async () => {
