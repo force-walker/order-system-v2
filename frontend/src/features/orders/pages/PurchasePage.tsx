@@ -10,7 +10,6 @@ import {
 } from 'features/orders/services/orderItemAllocationsService';
 import {
   bulkUpsertPurchaseResults,
-  generateDraftInvoiceFromPurchase,
   listPurchaseResults,
   listPurchaseWorkQueue,
 } from 'features/orders/services/purchaseService';
@@ -61,9 +60,6 @@ export const PurchasePage = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [rows, setRows] = useState<OrderItemAllocationWorkItem[]>([]);
   const [queueItems, setQueueItems] = useState<PurchaseResultItem[]>([]);
-  const [queueResultMessage, setQueueResultMessage] = useState<Record<EntityId, string>>({});
-  const [queueDraftInvoiceId, setQueueDraftInvoiceId] = useState<Record<EntityId, EntityId>>({});
-  const [orderIdByAllocationId, setOrderIdByAllocationId] = useState<Record<EntityId, EntityId>>({});
   const [purchaseResultByAllocationId, setPurchaseResultByAllocationId] = useState<Record<number, PurchaseResultItem>>({});
   const [suppliers, setSuppliers] = useState<SupplierFilterOption[]>([]);
   const [unitsByProductId, setUnitsByProductId] = useState<Record<number, UnitPair>>({});
@@ -129,14 +125,6 @@ export const PurchasePage = () => {
       setPurchaseResultByAllocationId(persistedByAllocationId);
 
       const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
-      const orderMap: Record<EntityId, EntityId> = {};
-      allocated.forEach((r) => {
-        if (typeof r.allocationId === 'number' && r.orderId != null) {
-          orderMap[r.allocationId] = r.orderId;
-        }
-      });
-      setOrderIdByAllocationId(orderMap);
-
       const validAllocationIds = new Set(
         allocated
           .map((row) => row.allocationId)
@@ -312,13 +300,6 @@ export const PurchasePage = () => {
 
   const selectedCount = useMemo(() => handoffRows.filter((r) => editByItemId[r.orderItemId]?.selected).length, [handoffRows, editByItemId]);
 
-  const createDraftForOrder = async (orderId: EntityId, markerId: EntityId, purchaseResultIds: number[]) => {
-    const invoiceDate = new Date().toISOString().slice(0, 10);
-    const invoiceId = await generateDraftInvoiceFromPurchase({ orderId, invoiceDate, purchaseResultIds });
-    setQueueDraftInvoiceId((prev) => ({ ...prev, [markerId]: invoiceId }));
-    return invoiceId;
-  };
-
   const saveBulk = async () => {
     const selectedRows = handoffRows.filter((r) => editByItemId[r.orderItemId]?.selected);
     if (selectedRows.length === 0) {
@@ -395,29 +376,7 @@ export const PurchasePage = () => {
     setSaving(true);
     try {
       const upserted = await bulkUpsertPurchaseResults(payload.map((p) => p.row));
-
-      const uniqueOrderIds = Array.from(
-        new Set(
-          selectedRows
-            .map((r) => r.orderId)
-            .filter((id): id is EntityId => id != null),
-        ),
-      );
-
-      let draftCreated = 0;
-      for (const oid of uniqueOrderIds) {
-        try {
-          const resultIds = selectedRows
-            .map((row, index) => (row.orderId === oid ? upserted.resultIds[index] : undefined))
-            .filter((id): id is number => id !== undefined);
-          await createDraftForOrder(oid, oid, resultIds);
-          draftCreated += 1;
-        } catch {
-          // keep partial success: purchase save should remain successful even if draft generation fails for some orders
-        }
-      }
-
-      setToast({ type: 'success', message: `納品確認を保存しました（${upserted.count}件）。請求ドラフト作成: ${draftCreated}件` });
+      setToast({ type: 'success', message: `納品確認を保存しました（${upserted.count}件）。完了した注文は請求ドラフト候補に移動します。` });
       await load();
     } catch (e) {
       setToast({ type: 'error', message: toActionableMessage(e, '納品確認の保存に失敗しました。') });
@@ -493,15 +452,7 @@ export const PurchasePage = () => {
                     <td>{q.supplierName ?? '-'}</td>
                     <td>{q.receivedQty ?? q.purchasedQty} {q.purchaseUom ?? q.purchasedUom}</td>
                     <td>{q.invoiceQty ?? ''} {q.invoiceUom ?? ''}</td>
-                    <td>
-                      {queueResultMessage[q.id] ?? ''}
-                      {queueDraftInvoiceId[q.id] ? (
-                        <>
-                          {' '}
-                          <Link to={`/invoices/drafts/${queueDraftInvoiceId[q.id]}`}>確認</Link>
-                        </>
-                      ) : null}
-                    </td>
+                    <td>{q.resultStatus}</td>
                   </tr>
                 ))}
               </tbody>

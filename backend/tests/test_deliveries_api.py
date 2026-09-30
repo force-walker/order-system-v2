@@ -200,11 +200,18 @@ def test_catch_weight_split_purchase_results_keep_delivery_ctn_and_invoice_kg():
     )
     db = TestingSessionLocal()
     item = db.query(OrderItem).filter(OrderItem.order_id == order_id).one()
+    allocation = SupplierAllocation(
+        order_item_id=item.id,
+        suggested_supplier_id=101,
+        suggested_qty=2,
+        final_supplier_id=101,
+        final_qty=2,
+        final_uom="CTN",
+    )
+    db.add(allocation)
+    db.flush()
     result_ids: list[int] = []
     for weight in (10.42, 11.31):
-        allocation = SupplierAllocation(order_item_id=item.id, final_qty=1, final_uom="CTN")
-        db.add(allocation)
-        db.flush()
         result = PurchaseResult(
             allocation_id=allocation.id,
             purchased_qty=1,

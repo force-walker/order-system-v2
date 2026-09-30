@@ -6,12 +6,13 @@ import { ShippingReportPage } from './ShippingReportPage';
 import { InvoiceDraftPage } from './InvoiceDraftPage';
 import { getDefaultDeliveryDate } from '../utils/deliveryDate';
 import { getShippingReport } from '../services/shippingReportService';
-import { listInvoiceDraftListRows } from '../services/invoiceService';
+import { listInvoiceDraftCandidates, listInvoiceDraftListRows } from '../services/invoiceService';
 import { listCustomers } from '../services/ordersService';
 
 vi.mock('../services/shippingReportService', () => ({ getShippingReport: vi.fn(), generatePurchaseConfirmationPdf: vi.fn() }));
 vi.mock('../services/invoiceService', () => ({
   listInvoiceDraftListRows: vi.fn(),
+  listInvoiceDraftCandidates: vi.fn(),
   finalizeInvoiceDraftsBatch: vi.fn(),
   updateInvoiceDraftItem: vi.fn(),
 }));
@@ -21,6 +22,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getShippingReport).mockResolvedValue([]);
   vi.mocked(listInvoiceDraftListRows).mockResolvedValue([]);
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([]);
   vi.mocked(listCustomers).mockResolvedValue([]);
 });
 

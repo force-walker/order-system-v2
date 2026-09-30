@@ -5,15 +5,18 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { InvoiceDraftPage } from './InvoiceDraftPage';
 import { getDefaultDeliveryDate } from '../utils/deliveryDate';
-import { finalizeInvoiceDraftsBatch, listInvoiceDraftListRows, updateInvoiceDraftItem } from '../services/invoiceService';
+import { finalizeInvoiceDraftsBatch, listInvoiceDraftCandidates, listInvoiceDraftListRows, updateInvoiceDraftItem } from '../services/invoiceService';
+import { generateDraftInvoiceFromPurchase } from '../services/purchaseService';
 import { listCustomers } from '../services/ordersService';
 import type { InvoiceDraftListRow } from '../types/order';
 
 vi.mock('../services/invoiceService', () => ({
   finalizeInvoiceDraftsBatch: vi.fn(),
+  listInvoiceDraftCandidates: vi.fn(),
   listInvoiceDraftListRows: vi.fn(),
   updateInvoiceDraftItem: vi.fn(),
 }));
+vi.mock('../services/purchaseService', () => ({ generateDraftInvoiceFromPurchase: vi.fn() }));
 vi.mock('../services/ordersService', () => ({ listCustomers: vi.fn() }));
 
 const defaultDate = getDefaultDeliveryDate();
@@ -55,12 +58,58 @@ const rows = [
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(listInvoiceDraftListRows).mockResolvedValue(rows);
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([]);
   vi.mocked(listCustomers).mockResolvedValue([
     { id: 1, label: '1: ABC Trading (CUST-ABC)', customerCode: 'CUST-ABC' },
     { id: 2, label: '2: ABC Foods (CUST-FOODS)', customerCode: 'CUST-FOODS' },
     { id: 3, label: '3: Other Corp (CUST-OTHER)', customerCode: 'CUST-OTHER' },
   ]);
   vi.mocked(finalizeInvoiceDraftsBatch).mockResolvedValue({ success_count: 1, failure_count: 0, results: [] });
+});
+
+it('shows a purchased order without a Delivery as an invoice candidate and creates its draft', async () => {
+  const actor = userEvent.setup();
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([{
+    orderId: 'order-purchased',
+    orderNo: 'ORD-PURCHASED',
+    orderStatus: 'purchased',
+    customerId: 1,
+    customerName: 'ABC Trading',
+    deliveryDate: defaultDate,
+    itemCount: 2,
+    purchaseResultIds: [101, 102],
+  }]);
+  vi.mocked(generateDraftInvoiceFromPurchase).mockResolvedValue('invoice-new');
+  renderPage();
+
+  expect(await screen.findByText('ORD-PURCHASED')).toBeTruthy();
+  await actor.click(screen.getByRole('button', { name: 'ドラフト作成' }));
+
+  await waitFor(() => expect(generateDraftInvoiceFromPurchase).toHaveBeenCalledWith({
+    orderId: 'order-purchased',
+    invoiceDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    purchaseResultIds: [101, 102],
+  }));
+});
+
+it('shows the backend UOM validation reason when candidate draft creation fails', async () => {
+  const actor = userEvent.setup();
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([{
+    orderId: 'order-sku-9',
+    orderNo: 'ORD-SKU-9',
+    orderStatus: 'purchased',
+    customerId: 1,
+    customerName: 'ABC Trading',
+    deliveryDate: defaultDate,
+    itemCount: 1,
+    purchaseResultIds: [109],
+  }]);
+  vi.mocked(generateDraftInvoiceFromPurchase).mockRejectedValue(new Error('INVOICE_UOM_UNSUPPORTED: catch-weight item must use KG invoice_uom'));
+  renderPage();
+  await screen.findByText('ORD-SKU-9');
+  await actor.click(screen.getByRole('button', { name: 'ドラフト作成' }));
+
+  expect(await screen.findByText(/INVOICE_UOM_UNSUPPORTED/)).toBeTruthy();
 });
 
 afterEach(cleanup);

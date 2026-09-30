@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.entities import InvoiceStatus
+from app.models.entities import InvoiceStatus, OrderStatus
 
 
 class InvoiceCreateRequest(BaseModel):
@@ -170,6 +170,17 @@ class InvoiceDraftListRow(BaseModel):
     line_amount: float
     gross_margin_pct: float | None = None
     gross_margin_unavailable: bool = False
+
+
+class InvoiceDraftCandidate(BaseModel):
+    order_id: str
+    order_no: str
+    order_status: OrderStatus
+    customer_id: int
+    customer_name: str
+    delivery_date: date
+    item_count: int
+    purchase_result_ids: list[int]
 
 
 class InvoiceItemUpdateRequest(BaseModel):

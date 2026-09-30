@@ -1397,6 +1397,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoices/draft-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invoice Draft Candidates */
+        get: operations["list_invoice_draft_candidates_api_v1_invoices_draft_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invoices/{invoice_id}": {
         parameters: {
             query?: never;
@@ -2486,6 +2503,27 @@ export interface components {
             invoice_date: string;
             /** Due Date */
             due_date?: string | null;
+        };
+        /** InvoiceDraftCandidate */
+        InvoiceDraftCandidate: {
+            /** Order Id */
+            order_id: string;
+            /** Order No */
+            order_no: string;
+            order_status: components["schemas"]["OrderStatus"];
+            /** Customer Id */
+            customer_id: number;
+            /** Customer Name */
+            customer_name: string;
+            /**
+             * Delivery Date
+             * Format: date
+             */
+            delivery_date: string;
+            /** Item Count */
+            item_count: number;
+            /** Purchase Result Ids */
+            purchase_result_ids: number[];
         };
         /** InvoiceDraftFromPurchaseResultsRequest */
         InvoiceDraftFromPurchaseResultsRequest: {
@@ -8219,6 +8257,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvoiceDraftListRow"][];
+                };
+            };
+        };
+    };
+    list_invoice_draft_candidates_api_v1_invoices_draft_candidates_get: {
+        parameters: {
+            query?: {
+                delivery_date?: string | null;
+                customer_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDraftCandidate"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

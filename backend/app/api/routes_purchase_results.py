@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
 from app.core.auth import AuthContext, get_auth_context
+from app.core.purchase_completion import synchronize_order_purchase_status
 from app.db.session import get_db
 from app.models.entities import Customer, Order, OrderItem, Product, PurchaseResult, Supplier, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
@@ -87,6 +88,15 @@ def _get_product_for_allocation(db: Session, alloc: SupplierAllocation) -> Produ
     if product is None:
         raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "allocation product not found"})
     return product
+
+
+def _lock_and_sync_purchase_order(db: Session, alloc: SupplierAllocation, *, actor: str | None = None) -> None:
+    item = db.query(OrderItem).filter(OrderItem.id == alloc.order_item_id).first()
+    if item is None:
+        return
+    order = db.query(Order).filter(Order.id == item.order_id).with_for_update().first()
+    if order is not None:
+        synchronize_order_purchase_status(db, order, actor=actor)
 
 
 def _validate_purchase_uom(db: Session, *, alloc: SupplierAllocation, purchased_uom: str) -> Product:
@@ -226,6 +236,7 @@ def create_purchase_result(payload: PurchaseResultCreateRequest, db: Session = D
     db.add(row)
     db.flush()
     write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.CREATE)
+    _lock_and_sync_purchase_order(db, alloc)
     db.commit()
     db.refresh(row)
     return _to_purchase_result_response(db, row)
@@ -416,6 +427,7 @@ def update_purchase_result(
 
     db.flush()
     write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.UPDATE, actor=auth.user_id, before=before, after=_purchase_result_snapshot(row))
+    _lock_and_sync_purchase_order(db, alloc, actor=auth.user_id)
     db.commit()
     db.refresh(row)
     return _to_purchase_result_response(db, row)
@@ -479,8 +491,10 @@ def bulk_upsert_purchase_results(
 ) -> PurchaseResultBulkUpsertResponse:
     count = 0
     result_ids: list[int] = []
+    touched_allocations: dict[int, SupplierAllocation] = {}
     for item in payload.items:
         alloc = _get_allocation_or_404(db, item.allocation_id)
+        touched_allocations[alloc.id] = alloc
         _validate_purchase_uom(db, alloc=alloc, purchased_uom=item.purchased_uom)
 
         row = db.query(PurchaseResult).filter(PurchaseResult.allocation_id == item.allocation_id).with_for_update().first()
@@ -515,6 +529,23 @@ def bulk_upsert_purchase_results(
             write_audit_log(db, entity_type="purchase_result", entity_id=row.id, action=AuditAction.BULK_UPSERT_UPDATE, actor=auth.user_id, before=before, after=_purchase_result_snapshot(row))
         count += 1
         result_ids.append(row.id)
+
+    touched_order_ids: set[str] = set()
+    for alloc in touched_allocations.values():
+        order_item = db.query(OrderItem).filter(OrderItem.id == alloc.order_item_id).first()
+        if order_item is not None:
+            touched_order_ids.add(order_item.order_id)
+    locked_orders = (
+        db.query(Order)
+        .filter(Order.id.in_(sorted(touched_order_ids)))
+        .order_by(Order.id.asc())
+        .with_for_update()
+        .all()
+        if touched_order_ids
+        else []
+    )
+    for order in locked_orders:
+        synchronize_order_purchase_status(db, order, actor=auth.user_id)
 
     db.commit()
     return PurchaseResultBulkUpsertResponse(upserted_count=count, purchase_result_ids=result_ids)

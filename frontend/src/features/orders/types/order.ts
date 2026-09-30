@@ -264,6 +264,17 @@ export type InvoiceDraftListRow = {
   grossMarginUnavailable?: boolean;
 };
 
+export type InvoiceDraftCandidate = {
+  orderId: EntityId;
+  orderNo: string;
+  orderStatus: 'purchased' | 'shipped';
+  customerId: number;
+  customerName: string;
+  deliveryDate: string;
+  itemCount: number;
+  purchaseResultIds: number[];
+};
+
 export type InvoiceSummaryRow = {
   invoiceId: EntityId;
   invoiceNo: string;

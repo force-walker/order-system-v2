@@ -5,11 +5,13 @@ import { Link } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   finalizeInvoiceDraftsBatch,
+  listInvoiceDraftCandidates,
   listInvoiceDraftListRows,
   updateInvoiceDraftItem,
 } from 'features/orders/services/invoiceService';
 import { listCustomers } from 'features/orders/services/ordersService';
-import type { CustomerOption, InvoiceDraftListRow, InvoiceStatus } from 'features/orders/types/order';
+import { generateDraftInvoiceFromPurchase } from 'features/orders/services/purchaseService';
+import type { CustomerOption, InvoiceDraftCandidate, InvoiceDraftListRow, InvoiceStatus } from 'features/orders/types/order';
 import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import { toActionableMessage } from 'shared/error';
 
@@ -59,6 +61,7 @@ export const InvoiceDraftPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftListRow[]>([]);
+  const [candidates, setCandidates] = useState<InvoiceDraftCandidate[]>([]);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS_LABEL);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
@@ -68,17 +71,20 @@ export const InvoiceDraftPage = () => {
   const [priceInputs, setPriceInputs] = useState<PriceInputMap>({});
   const [savingByItemId, setSavingByItemId] = useState<SavingMap>({});
   const [bulkFinalizing, setBulkFinalizing] = useState(false);
+  const [creatingOrderId, setCreatingOrderId] = useState<EntityId | null>(null);
   const [toast, setToast] = useState<ToastPayload | null>(null);
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const [nextRows, customerOptions] = await Promise.all([
+      const [nextRows, nextCandidates, customerOptions] = await Promise.all([
         listInvoiceDraftListRows(),
+        listInvoiceDraftCandidates(),
         listCustomers(true),
       ]);
       setRows(nextRows);
+      setCandidates(nextCandidates);
       setCustomers(customerOptions);
       setSelectedByInvoiceId((prev) =>
         Object.fromEntries([...new Set(nextRows.map((row) => row.invoiceId))].map((invoiceId) => [invoiceId, prev[invoiceId] ?? false])),
@@ -130,6 +136,33 @@ export const InvoiceDraftPage = () => {
       })
       .sort((a, b) => newestInvoiceFirst(a, b) || compareIds(a.invoiceItemId, b.invoiceItemId));
   }, [rows, customers, customerFilter, selectedCustomerId, dateFilter, statusFilter]);
+
+  const filteredCandidates = useMemo(() => {
+    const customerQuery = customerFilter.trim().toLocaleLowerCase();
+    const selectedCustomer = selectedCustomerId == null ? undefined : customers.find((customer) => customer.id === selectedCustomerId);
+    const selectedCustomerName = selectedCustomer ? customerName(selectedCustomer).toLocaleLowerCase() : undefined;
+    const matchingCustomerNames = new Set(
+      customerQuery && customerQuery !== ALL_CUSTOMERS_LABEL.toLocaleLowerCase()
+        ? customers
+          .filter((customer) => [customer.label, customerName(customer), customer.customerCode ?? '']
+            .some((value) => value.toLocaleLowerCase().includes(customerQuery)))
+          .map((customer) => customerName(customer).toLocaleLowerCase())
+        : [],
+    );
+    return candidates.filter((candidate) => {
+      if (dateFilter && candidate.deliveryDate !== dateFilter) return false;
+      const name = candidate.customerName.toLocaleLowerCase();
+      if (selectedCustomerName && name !== selectedCustomerName) return false;
+      if (
+        !selectedCustomerName
+        && customerQuery
+        && customerQuery !== ALL_CUSTOMERS_LABEL.toLocaleLowerCase()
+        && !name.includes(customerQuery)
+        && !matchingCustomerNames.has(name)
+      ) return false;
+      return true;
+    });
+  }, [candidates, customers, customerFilter, selectedCustomerId, dateFilter]);
 
   const resetCustomerFilter = () => {
     setSelectedCustomerId(null);
@@ -209,6 +242,24 @@ export const InvoiceDraftPage = () => {
     }
   };
 
+  const onCreateDraft = async (candidate: InvoiceDraftCandidate) => {
+    setCreatingOrderId(candidate.orderId);
+    setError('');
+    try {
+      await generateDraftInvoiceFromPurchase({
+        orderId: candidate.orderId,
+        invoiceDate: new Date().toISOString().slice(0, 10),
+        purchaseResultIds: candidate.purchaseResultIds,
+      });
+      await load();
+      setToast({ type: 'success', message: `請求ドラフトを作成しました: ${candidate.orderNo}` });
+    } catch (e) {
+      setToast({ type: 'error', message: toActionableMessage(e, '請求ドラフトの作成に失敗しました。') });
+    } finally {
+      setCreatingOrderId(null);
+    }
+  };
+
   const commitSalesUnitPrice = async (row: InvoiceDraftListRow) => {
     const rawValue = priceInputs[row.invoiceItemId]?.trim() ?? '';
     if (rawValue.length === 0) {
@@ -268,10 +319,84 @@ export const InvoiceDraftPage = () => {
   return (
     <section>
       {toast ? <div className={`toast ${toast.type}`}>{toast.message}</div> : null}
+      <div className="list-controls card" style={{ marginBottom: 16 }}>
+        <label className="filter-label">
+          取引先
+          <input
+            aria-label="取引先"
+            list="invoice-draft-customer-options"
+            value={customerFilter}
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => onCustomerFilterChange(event.target.value)}
+            onBlur={() => {
+              if (!customerFilter.trim()) resetCustomerFilter();
+            }}
+            placeholder="取引先名 / 取引先コードで検索"
+          />
+          <datalist id="invoice-draft-customer-options">
+            <option value={ALL_CUSTOMERS_LABEL} />
+            {customers.map((customer) => (
+              <option key={customer.id} value={customerDisplayLabel(customer)}>{customer.label}</option>
+            ))}
+          </datalist>
+        </label>
+        <button type="button" className="secondary" onClick={resetCustomerFilter}>全取引先</button>
+        <label className="filter-label">
+          納品日
+          <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+        </label>
+        <label className="filter-label">
+          作成済みステータス
+          <select value={statusFilter} onChange={(e) => setStatusFilter((e.target.value || '') as InvoiceStatus | '')}>
+            <option value="">all</option>
+            <option value="draft">draft</option>
+            <option value="finalized">finalized</option>
+            <option value="sent">sent</option>
+            <option value="cancelled">cancelled</option>
+          </select>
+        </label>
+      </div>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="list-header">
+          <div>
+            <h2>請求候補</h2>
+            <p className="subtle">仕入結果が完了した注文から請求ドラフトを作成します。Deliveryの作成は必要ありません。</p>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr><th>注文番号</th><th>取引先名</th><th>納品日</th><th>状態</th><th>明細数</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              {filteredCandidates.length === 0 ? (
+                <tr><td colSpan={6} className="subtle">条件に合う請求候補がありません。</td></tr>
+              ) : filteredCandidates.map((candidate) => (
+                <tr key={candidate.orderId}>
+                  <td>{candidate.orderNo}</td>
+                  <td>{candidate.customerName}</td>
+                  <td>{candidate.deliveryDate}</td>
+                  <td>{candidate.orderStatus}</td>
+                  <td>{candidate.itemCount}</td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => void onCreateDraft(candidate)}
+                      disabled={creatingOrderId !== null}
+                    >
+                      {creatingOrderId === candidate.orderId ? '作成中...' : 'ドラフト作成'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div className="card">
         <div className="list-header">
           <div>
-            <h2>請求ドラフト一覧</h2>
+            <h2>作成済みDraft</h2>
             <p className="subtle">請求明細行を一覧で確認し、請求単価の調整と請求書発行を行います。</p>
           </div>
           <div className="list-controls">
@@ -283,44 +408,6 @@ export const InvoiceDraftPage = () => {
 
         <div className="subtle" style={{ marginBottom: 12 }}>
           draft 件数: {draftInvoiceIds.length} / finalized 件数: {finalizedInvoiceIds.length}
-        </div>
-
-        <div className="list-controls" style={{ marginBottom: 12 }}>
-          <label className="filter-label">
-            取引先
-            <input
-              aria-label="取引先"
-              list="invoice-draft-customer-options"
-              value={customerFilter}
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => onCustomerFilterChange(event.target.value)}
-              onBlur={() => {
-                if (!customerFilter.trim()) resetCustomerFilter();
-              }}
-              placeholder="取引先名 / 取引先コードで検索"
-            />
-            <datalist id="invoice-draft-customer-options">
-              <option value={ALL_CUSTOMERS_LABEL} />
-              {customers.map((customer) => (
-                <option key={customer.id} value={customerDisplayLabel(customer)}>{customer.label}</option>
-              ))}
-            </datalist>
-          </label>
-          <button type="button" className="secondary" onClick={resetCustomerFilter}>全取引先</button>
-          <label className="filter-label">
-            納品日
-            <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-          </label>
-          <label className="filter-label">
-            ステータス
-            <select value={statusFilter} onChange={(e) => setStatusFilter((e.target.value || '') as InvoiceStatus | '')}>
-              <option value="">all</option>
-              <option value="draft">draft</option>
-              <option value="finalized">finalized</option>
-              <option value="sent">sent</option>
-              <option value="cancelled">cancelled</option>
-            </select>
-          </label>
         </div>
 
         <div className="table-wrap">

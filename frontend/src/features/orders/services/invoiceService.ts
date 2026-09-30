@@ -1,7 +1,7 @@
 import type { EntityId } from 'shared/entityId';
 import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClient';
 import { parseApiErrorPayload } from 'shared/error';
-import type { InvoiceDetailView, InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceStatus, InvoiceSummaryRow } from 'features/orders/types/order';
+import type { InvoiceDetailView, InvoiceDraftCandidate, InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceStatus, InvoiceSummaryRow } from 'features/orders/types/order';
 import { markOrdersStatusDirty } from './ordersService';
 
 type ApiInvoiceSummary = {
@@ -54,6 +54,17 @@ type ApiInvoiceDraftListRow = {
   line_amount: number;
   gross_margin_pct: number | null;
   gross_margin_unavailable: boolean;
+};
+
+type ApiInvoiceDraftCandidate = {
+  order_id: EntityId;
+  order_no: string;
+  order_status: 'purchased' | 'shipped';
+  customer_id: number;
+  customer_name: string;
+  delivery_date: string;
+  item_count: number;
+  purchase_result_ids: number[];
 };
 
 type ApiInvoiceReportLine = {
@@ -236,6 +247,22 @@ export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]>
     lineAmount: r.line_amount,
     grossMarginPct: r.gross_margin_pct ?? undefined,
     grossMarginUnavailable: r.gross_margin_unavailable,
+  }));
+};
+
+export const listInvoiceDraftCandidates = async (): Promise<InvoiceDraftCandidate[]> => {
+  const res = await fetchWithAuth('/api/v1/invoices/draft-candidates', { method: 'GET' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const rows = (await res.json()) as ApiInvoiceDraftCandidate[];
+  return rows.map((row) => ({
+    orderId: row.order_id,
+    orderNo: row.order_no,
+    orderStatus: row.order_status,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    deliveryDate: row.delivery_date,
+    itemCount: row.item_count,
+    purchaseResultIds: row.purchase_result_ids,
   }));
 };
 export const updateInvoiceDraftItem = async (

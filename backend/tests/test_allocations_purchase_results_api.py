@@ -351,6 +351,163 @@ def test_purchase_result_defaults_supplier_from_allocation():
     assert created.json()["supplier_id"] == 777
 
 
+def test_purchase_result_completion_advances_items_individually_and_header_when_all_complete():
+    first_allocation_id = _seed_allocation(final_qty=3, final_supplier_id=101)
+    db = TestingSessionLocal()
+    first_allocation = db.query(SupplierAllocation).filter(SupplierAllocation.id == first_allocation_id).one()
+    first_item = db.query(OrderItem).filter(OrderItem.id == first_allocation.order_item_id).one()
+    order = db.query(Order).filter(Order.id == first_item.order_id).one()
+    product = db.query(Product).filter(Product.id == first_item.product_id).one()
+    order.status = OrderStatus.allocated
+    first_item.line_status = LineStatus.allocated
+    second_item = OrderItem(
+        order_id=order.id,
+        product_id=product.id,
+        ordered_qty=2,
+        pricing_basis=PricingBasis.uom_count,
+        unit_price_uom_count=10,
+        unit_price_uom_kg=None,
+        line_status=LineStatus.allocated,
+    )
+    db.add(second_item)
+    db.flush()
+    second_allocation = SupplierAllocation(
+        order_item_id=second_item.id,
+        suggested_supplier_id=101,
+        suggested_qty=2,
+        final_supplier_id=101,
+        final_qty=2,
+        final_uom="count",
+    )
+    db.add(second_allocation)
+    db.commit()
+    order_id = order.id
+    first_item_id = first_item.id
+    second_item_id = second_item.id
+    second_allocation_id = second_allocation.id
+    db.close()
+
+    client = _client()
+    first = client.post(
+        "/api/v1/purchase-results/bulk-upsert",
+        json={"items": [{
+            "allocation_id": first_allocation_id,
+            "purchased_qty": 3,
+            "purchased_uom": "count",
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        }]},
+    )
+    assert first.status_code == 200, first.text
+    db = TestingSessionLocal()
+    assert db.query(OrderItem).filter(OrderItem.id == first_item_id).one().line_status == LineStatus.purchased
+    assert db.query(OrderItem).filter(OrderItem.id == second_item_id).one().line_status == LineStatus.allocated
+    assert db.query(Order).filter(Order.id == order_id).one().status == OrderStatus.allocated
+    db.close()
+
+    second = client.post(
+        "/api/v1/purchase-results/bulk-upsert",
+        json={"items": [{
+            "allocation_id": second_allocation_id,
+            "purchased_qty": 2,
+            "purchased_uom": "count",
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        }]},
+    )
+    assert second.status_code == 200, second.text
+    db = TestingSessionLocal()
+    assert db.query(OrderItem).filter(OrderItem.id == first_item_id).one().line_status == LineStatus.purchased
+    assert db.query(OrderItem).filter(OrderItem.id == second_item_id).one().line_status == LineStatus.purchased
+    assert db.query(Order).filter(Order.id == order_id).one().status == OrderStatus.purchased
+    db.close()
+
+    repeated = client.post(
+        "/api/v1/purchase-results/bulk-upsert",
+        json={"items": [{
+            "allocation_id": second_allocation_id,
+            "purchased_qty": 2,
+            "purchased_uom": "count",
+            "result_status": "filled",
+            "invoiceable_flag": True,
+        }]},
+    )
+    assert repeated.status_code == 200, repeated.text
+    db = TestingSessionLocal()
+    assert db.query(Order).filter(Order.id == order_id).one().status == OrderStatus.purchased
+    assert db.query(OrderItem).filter(OrderItem.id == second_item_id).one().line_status == LineStatus.purchased
+    db.close()
+
+
+def test_purchase_completion_supports_split_allocations_and_excludes_cancelled_items():
+    parent_id = _seed_allocation(final_qty=3, final_supplier_id=101)
+    db = TestingSessionLocal()
+    parent = db.query(SupplierAllocation).filter(SupplierAllocation.id == parent_id).one()
+    item = db.query(OrderItem).filter(OrderItem.id == parent.order_item_id).one()
+    order = db.query(Order).filter(Order.id == item.order_id).one()
+    product = db.query(Product).filter(Product.id == item.product_id).one()
+    order.status = OrderStatus.allocated
+    item.line_status = LineStatus.allocated
+    parent.split_group_id = "split-purchase-completion"
+    children = [
+        SupplierAllocation(
+            order_item_id=item.id,
+            suggested_supplier_id=101 + index,
+            suggested_qty=qty,
+            final_supplier_id=101 + index,
+            final_qty=qty,
+            final_uom="count",
+            split_group_id=parent.split_group_id,
+            parent_allocation_id=parent.id,
+            is_split_child=True,
+        )
+        for index, qty in enumerate((1, 2))
+    ]
+    db.add_all(children)
+    cancelled_item = OrderItem(
+        order_id=order.id,
+        product_id=product.id,
+        ordered_qty=1,
+        pricing_basis=PricingBasis.uom_count,
+        unit_price_uom_count=10,
+        unit_price_uom_kg=None,
+        line_status=LineStatus.cancelled,
+    )
+    db.add(cancelled_item)
+    db.commit()
+    child_ids = [child.id for child in children]
+    order_id = order.id
+    item_id = item.id
+    cancelled_item_id = cancelled_item.id
+    db.close()
+
+    response = _client().post(
+        "/api/v1/purchase-results/bulk-upsert",
+        json={"items": [
+            {
+                "allocation_id": child_ids[0],
+                "purchased_qty": 1,
+                "purchased_uom": "count",
+                "result_status": "filled",
+                "invoiceable_flag": True,
+            },
+            {
+                "allocation_id": child_ids[1],
+                "purchased_qty": 2,
+                "purchased_uom": "count",
+                "result_status": "filled",
+                "invoiceable_flag": True,
+            },
+        ]},
+    )
+    assert response.status_code == 200, response.text
+    db = TestingSessionLocal()
+    assert db.query(OrderItem).filter(OrderItem.id == item_id).one().line_status == LineStatus.purchased
+    assert db.query(OrderItem).filter(OrderItem.id == cancelled_item_id).one().line_status == LineStatus.cancelled
+    assert db.query(Order).filter(Order.id == order_id).one().status == OrderStatus.purchased
+    db.close()
+
+
 def test_purchase_result_quantity_limit_is_422():
     aid = _seed_allocation(final_qty=3)
     client = _client()

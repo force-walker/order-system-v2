@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,6 +26,7 @@ from app.schemas.invoice import (
     InvoiceCreateRequest,
     InvoiceCreateFromDeliveryRequest,
     InvoiceDraftFromPurchaseResultsRequest,
+    InvoiceDraftCandidate,
     InvoiceDraftGenerateResult,
     InvoiceDraftListRow,
     InvoiceDraftRecalculateResponse,
@@ -45,6 +46,9 @@ from app.schemas.invoice import (
 )
 
 router = APIRouter(prefix="/api/v1/invoices", tags=["invoices"])
+
+INVOICE_PURCHASE_ORDER_STATUSES = {OrderStatus.purchased, OrderStatus.shipped}
+INVOICE_PURCHASE_LINE_STATUSES = {LineStatus.purchased, LineStatus.shipped}
 
 INVOICE_COMMON_ERROR_RESPONSES = {
     422: {"model": ApiErrorResponse, "description": "Validation Error"},
@@ -296,6 +300,10 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
 
     for order_id in order_ids:
         lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
+        invoice_line_ids = {
+            order_item_id
+            for (order_item_id,) in db.query(InvoiceItem.order_item_id).filter(InvoiceItem.invoice_id == invoice.id).all()
+        }
         for line in lines:
             # Cancellation is a terminal business decision. Invoice status
             # synchronization must never revive a cancelled line that is not
@@ -309,7 +317,12 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
                 .first()
                 is not None
             )
-            target_line_status = LineStatus.invoiced if has_finalized_invoice else LineStatus.shipped
+            if has_finalized_invoice:
+                target_line_status = LineStatus.invoiced
+            elif line.id in invoice_line_ids:
+                target_line_status = LineStatus.purchased
+            else:
+                continue
             if target_line_status == line.line_status:
                 continue
 
@@ -331,20 +344,14 @@ def _sync_order_statuses_for_invoice(db: Session, invoice: Invoice) -> None:
         all_invoiced = bool(invoiceable_lines) and all(line.line_status == LineStatus.invoiced for line in invoiceable_lines)
         if all_invoiced:
             target_order_status = OrderStatus.invoiced
-        elif invoiceable_lines:
-            target_order_status = OrderStatus.shipped
+        elif invoiceable_lines and order.status == OrderStatus.invoiced:
+            target_order_status = OrderStatus.purchased
         else:
             target_order_status = order.status
 
         if target_order_status != order.status:
             before = {"order_status": order.status.value}
             order.status = target_order_status
-            if order.status in {OrderStatus.shipped, OrderStatus.invoiced}:
-                ensure_order_delivery_number(db, order)
-                delivery = ensure_delivery_document(db, order)
-                invoice.delivery_id = delivery.id
-                invoice.delivery_no = delivery.delivery_no
-                invoice.delivery_date = delivery.delivery_date
             order.updated_by = "system_api"
             write_audit_log(
                 db,
@@ -553,6 +560,117 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
         )
 
     return result
+
+
+def _current_allocation_targets(db: Session, order_item_id: str) -> list[SupplierAllocation]:
+    allocations = (
+        db.query(SupplierAllocation)
+        .filter(SupplierAllocation.order_item_id == order_item_id)
+        .order_by(SupplierAllocation.id.asc())
+        .all()
+    )
+    parents = [allocation for allocation in allocations if not allocation.is_split_child]
+    parent = parents[-1] if parents else None
+    if parent is None:
+        return []
+    if parent.split_group_id is None:
+        return [parent]
+    return [
+        allocation
+        for allocation in allocations
+        if allocation.is_split_child
+        and allocation.parent_allocation_id == parent.id
+        and allocation.split_group_id == parent.split_group_id
+    ]
+
+
+def _unclaimed_complete_result_ids(db: Session, item: OrderItem) -> list[int] | None:
+    has_existing_invoice = (
+        db.query(InvoiceItem.id)
+        .join(Invoice, Invoice.id == InvoiceItem.invoice_id)
+        .filter(
+            InvoiceItem.order_item_id == item.id,
+            Invoice.status.in_({InvoiceStatus.draft, InvoiceStatus.finalized, InvoiceStatus.sent}),
+        )
+        .first()
+        is not None
+    )
+    if has_existing_invoice:
+        return None
+    targets = _current_allocation_targets(db, item.id)
+    if not targets or (targets[0].is_split_child and len(targets) < 2):
+        return None
+    result_ids: list[int] = []
+    for allocation in targets:
+        if allocation.final_qty is None or allocation.final_supplier_id is None:
+            return None
+        results = (
+            db.query(PurchaseResult)
+            .filter(PurchaseResult.allocation_id == allocation.id)
+            .order_by(PurchaseResult.id.asc())
+            .all()
+        )
+        if not results or any(not result.invoiceable_flag or result.invoice_qty is not None for result in results):
+            return None
+        expected_uom = (allocation.final_uom or "").strip().casefold()
+        if not expected_uom or any(result.purchased_uom.strip().casefold() != expected_uom for result in results):
+            return None
+        if sum((Decimal(str(result.purchased_qty)) for result in results), Decimal("0")) != Decimal(str(allocation.final_qty)):
+            return None
+        result_ids.extend(result.id for result in results)
+    return result_ids
+
+
+@router.get("/draft-candidates", response_model=list[InvoiceDraftCandidate])
+def list_invoice_draft_candidates(
+    delivery_date: date | None = Query(default=None),
+    customer_id: int | None = Query(default=None, gt=0),
+    db: Session = Depends(get_db),
+) -> list[InvoiceDraftCandidate]:
+    query = (
+        db.query(Order, Customer)
+        .join(Customer, Customer.id == Order.customer_id)
+        .filter(Order.status.in_(INVOICE_PURCHASE_ORDER_STATUSES))
+    )
+    if delivery_date is not None:
+        query = query.filter(Order.delivery_date == delivery_date)
+    if customer_id is not None:
+        query = query.filter(Order.customer_id == customer_id)
+
+    candidates: list[InvoiceDraftCandidate] = []
+    for order, customer in query.order_by(Order.delivery_date.asc(), Order.order_no.asc()).all():
+        items = (
+            db.query(OrderItem)
+            .filter(
+                OrderItem.order_id == order.id,
+                OrderItem.line_status.in_(INVOICE_PURCHASE_LINE_STATUSES),
+            )
+            .order_by(OrderItem.line_no.asc(), OrderItem.id.asc())
+            .all()
+        )
+        result_ids: list[int] = []
+        complete_item_count = 0
+        for item in items:
+            item_result_ids = _unclaimed_complete_result_ids(db, item)
+            if item_result_ids is None:
+                continue
+            result_ids.extend(item_result_ids)
+            complete_item_count += 1
+        if not result_ids:
+            continue
+        candidates.append(
+            InvoiceDraftCandidate(
+                order_id=order.id,
+                order_no=order.order_no,
+                order_status=order.status.value,
+                customer_id=order.customer_id,
+                customer_name=customer.name,
+                delivery_date=order.delivery_date,
+                item_count=complete_item_count,
+                purchase_result_ids=result_ids,
+            )
+        )
+    return candidates
 
 
 @router.get(
@@ -1207,6 +1325,14 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     order = _get_order_or_404(db, payload.order_id)
     if order.status == OrderStatus.cancelled:
         raise HTTPException(status_code=422, detail={"code": "CANCELLED_ORDER_NOT_INVOICEABLE", "message": "cancelled order cannot be invoiced"})
+    if order.status not in INVOICE_PURCHASE_ORDER_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ORDER_NOT_PURCHASED",
+                "message": "invoice draft generation requires a purchased order (legacy shipped orders are also supported)",
+            },
+        )
 
     rows_query = (
         db.query(PurchaseResult, SupplierAllocation, OrderItem, Product)
@@ -1252,6 +1378,17 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
             },
         )
 
+    ineligible_item_ids = sorted({item.id for _, _, item, _ in rows if item.line_status not in INVOICE_PURCHASE_LINE_STATUSES})
+    if ineligible_item_ids:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ORDER_ITEM_NOT_PURCHASED",
+                "message": "invoice draft generation requires purchased order items",
+                "details": [{"field": "order_item_ids", "ids": ineligible_item_ids}],
+            },
+        )
+
     claimed_ids = [pr.id for pr, _, _, _ in rows if pr.invoice_qty is not None]
     if claimed_ids:
         raise HTTPException(
@@ -1270,6 +1407,17 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
     contribution_by_result_id: dict[int, Decimal] = {}
     for grouped in grouped_rows.values():
         _, _, item, product = grouped[0]
+        expected_result_ids = _unclaimed_complete_result_ids(db, item)
+        selected_result_ids = {pr.id for pr, _, _, _ in grouped}
+        if expected_result_ids is None or selected_result_ids != set(expected_result_ids):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "PURCHASE_RESULT_SET_INCOMPLETE",
+                    "message": "all complete, unclaimed purchase results for each selected order item are required",
+                    "details": [{"order_item_id": item.id, "expected_ids": expected_result_ids or [], "selected_ids": sorted(selected_result_ids)}],
+                },
+            )
         purchase_uom = product.purchase_uom.strip().casefold()
         invoice_uom = product.invoice_uom.strip().casefold()
         is_catch_weight = product.is_catch_weight or product.weight_capture_required
@@ -1321,7 +1469,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
             for pr, _, _, _ in grouped:
                 contribution_by_result_id[pr.id] = Decimal(str(pr.purchased_qty))
 
-    delivery = _resolve_delivery_for_order(db, order, create_if_missing=True)
+    delivery = _resolve_delivery_for_order(db, order, create_if_missing=False)
 
     invoice = Invoice(
         invoice_no=f"pending-{datetime.now().timestamp()}-{order.id}",

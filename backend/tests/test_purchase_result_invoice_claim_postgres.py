@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes_invoices import generate_draft_from_purchase_results
 from app.core.numbering import ensure_order_header_numbers, ensure_order_item_number
-from app.models.entities import Customer, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, PurchaseResultStatus, SupplierAllocation, SystemSettings
+from app.models.entities import Customer, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, PurchaseResultStatus, SupplierAllocation, SystemSettings
 from app.schemas.invoice import InvoiceDraftFromPurchaseResultsRequest
 
 
@@ -57,7 +57,7 @@ def test_concurrent_draft_generation_claims_purchase_result_once():
                 customer_id=customer.id,
                 order_datetime=datetime.now(UTC),
                 delivery_date=date.today(),
-                status=OrderStatus.confirmed,
+                status=OrderStatus.purchased,
                 created_by="pr-claim-test",
                 updated_by="pr-claim-test",
             )
@@ -72,11 +72,19 @@ def test_concurrent_draft_generation_claims_purchase_result_once():
                 order_uom_type=PricingBasis.uom_count,
                 pricing_basis=PricingBasis.uom_count,
                 unit_price_uom_count=100,
+                line_status=LineStatus.purchased,
             )
             ensure_order_item_number(db, order, item)
             db.add(item)
             db.flush()
-            allocation = SupplierAllocation(order_item_id=item.id, final_qty=2, final_uom="PC")
+            allocation = SupplierAllocation(
+                order_item_id=item.id,
+                suggested_supplier_id=101,
+                suggested_qty=2,
+                final_supplier_id=101,
+                final_qty=2,
+                final_uom="PC",
+            )
             db.add(allocation)
             db.flush()
             result = PurchaseResult(

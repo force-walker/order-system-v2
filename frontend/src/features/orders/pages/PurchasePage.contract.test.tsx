@@ -10,7 +10,6 @@ import {
 } from 'features/orders/services/orderItemAllocationsService';
 import {
   bulkUpsertPurchaseResults,
-  generateDraftInvoiceFromPurchase,
   listPurchaseResults,
   listPurchaseWorkQueue,
 } from 'features/orders/services/purchaseService';
@@ -23,7 +22,6 @@ vi.mock('features/orders/services/orderItemAllocationsService', () => ({
 }));
 vi.mock('features/orders/services/purchaseService', () => ({
   bulkUpsertPurchaseResults: vi.fn(),
-  generateDraftInvoiceFromPurchase: vi.fn(),
   listPurchaseResults: vi.fn(),
   listPurchaseWorkQueue: vi.fn(),
 }));
@@ -63,9 +61,6 @@ beforeEach(() => {
     weightCaptureRequired: id === 1,
   } as Awaited<ReturnType<typeof getProductDetail>>));
   vi.mocked(bulkUpsertPurchaseResults).mockResolvedValue({ count: 2, resultIds: [101, 202] });
-  vi.mocked(generateDraftInvoiceFromPurchase)
-    .mockResolvedValueOnce('invoice-a')
-    .mockResolvedValueOnce('invoice-b');
 });
 
 afterEach(() => {
@@ -173,7 +168,7 @@ it('falls back to all orders when the handed-off allocation ID is stale', async 
   expect(sessionStorage.getItem('osv2_purchase_target_allocations')).toBeNull();
 });
 
-it('passes only each order\'s returned purchase-result IDs to draft generation', async () => {
+it('saves purchase results without generating invoice drafts automatically', async () => {
   const actor = userEvent.setup();
   renderPurchasePage();
 
@@ -184,23 +179,13 @@ it('passes only each order\'s returned purchase-result IDs to draft generation',
   await actor.click(rowB!.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await actor.click(screen.getByRole('button', { name: '選択行を保存 (2)' }));
 
-  await waitFor(() => expect(generateDraftInvoiceFromPurchase).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(bulkUpsertPurchaseResults).toHaveBeenCalledTimes(1));
   expect(bulkUpsertPurchaseResults).toHaveBeenCalledTimes(1);
   expect(bulkUpsertPurchaseResults).toHaveBeenCalledWith([
     expect.objectContaining({ allocationId: 11, purchasedUom: 'CTN', actualWeightKg: 21.73 }),
     expect.objectContaining({ allocationId: 22, purchasedUom: 'PC', actualWeightKg: undefined }),
   ]);
-  expect(generateDraftInvoiceFromPurchase).toHaveBeenNthCalledWith(1, {
-    orderId: 'order-a',
-    invoiceDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-    purchaseResultIds: [101],
-  });
-  expect(generateDraftInvoiceFromPurchase).toHaveBeenNthCalledWith(2, {
-    orderId: 'order-b',
-    invoiceDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-    purchaseResultIds: [202],
-  });
-  expect(JSON.stringify(vi.mocked(generateDraftInvoiceFromPurchase).mock.calls)).not.toContain('DRAFT-');
+  expect(await screen.findByText(/完了した注文は請求ドラフト候補に移動します/)).toBeTruthy();
 });
 
 const persistedResult = (invoiceQty: number | undefined = undefined) => ({

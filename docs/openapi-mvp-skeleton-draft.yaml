@@ -3876,6 +3876,50 @@ paths:
                   Get
       security:
       - HTTPBearer: []
+  /api/v1/invoices/draft-candidates:
+    get:
+      tags:
+      - invoices
+      summary: List Invoice Draft Candidates
+      operationId: list_invoice_draft_candidates_api_v1_invoices_draft_candidates_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: delivery_date
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Delivery Date
+      - name: customer_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          title: Customer Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvoiceDraftCandidate'
+                title: Response List Invoice Draft Candidates Api V1 Invoices Draft
+                  Candidates Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/invoices/{invoice_id}:
     get:
       tags:
@@ -6287,6 +6331,45 @@ components:
       - order_id
       - invoice_date
       title: InvoiceCreateRequest
+    InvoiceDraftCandidate:
+      properties:
+        order_id:
+          type: string
+          title: Order Id
+        order_no:
+          type: string
+          title: Order No
+        order_status:
+          $ref: '#/components/schemas/OrderStatus'
+        customer_id:
+          type: integer
+          title: Customer Id
+        customer_name:
+          type: string
+          title: Customer Name
+        delivery_date:
+          type: string
+          format: date
+          title: Delivery Date
+        item_count:
+          type: integer
+          title: Item Count
+        purchase_result_ids:
+          items:
+            type: integer
+          type: array
+          title: Purchase Result Ids
+      type: object
+      required:
+      - order_id
+      - order_no
+      - order_status
+      - customer_id
+      - customer_name
+      - delivery_date
+      - item_count
+      - purchase_result_ids
+      title: InvoiceDraftCandidate
     InvoiceDraftFromPurchaseResultsRequest:
       properties:
         order_id:

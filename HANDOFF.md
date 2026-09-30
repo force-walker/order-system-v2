@@ -110,6 +110,8 @@ npm run sync:openapi
 - Purchase Result UOM semantics are explicit: `purchased_qty` / `purchased_uom` use `Product.purchase_uom`; catch-weight measurements use only `PurchaseResult.actual_weight_kg` (the legacy `OrderItem.actual_weight_kg` column is not synchronized).
 - `PurchaseResult.invoice_qty` is server-managed. Draft generation locks and atomically claims every selected Purchase Result, storing the actual invoiced quantity snapshot (`purchased_qty` for fixed-unit items, `actual_weight_kg` for catch-weight items). Finalize/reset/cancel do not release that claim. A direct PurchaseResult-to-InvoiceItem link is still required before cancel/rebilling can be supported safely.
 - Delivery quantity is independent from Invoice quantity: `DeliveryItem.delivered_qty` stays on the Order quantity axis and `delivered_uom` is `Product.order_uom`. Catch-weight is not copied into Delivery; `PurchaseResult.actual_weight_kg` remains authoritative for Invoice billing.
+- The standard billing workflow is `confirmed -> allocated -> purchased -> Invoice Draft -> invoiced`. Delivery and `shipped` remain available for delivery operations and existing-data compatibility, but a Delivery document is not created or required by Purchase Result-based Invoice Draft generation. Existing `shipped` Orders remain invoice-eligible.
+- Purchase Result saves promote each completed non-cancelled Order Item from `allocated` to `purchased`; the Order Header becomes `purchased` only after every non-cancelled Item is complete. Invoice reset returns affected billed lines to `purchased` without releasing Purchase Result claims.
 - The frontend production bundle still emits the existing large-chunk warning.
 
 ## Recent completed work
@@ -126,4 +128,5 @@ npm run sync:openapi
 - Permanent Header/Detail numbering with immutable UUID-independent business references
 - Empty Header prevention, last Order-detail deletion rejection, and deprecated Header-only create APIs
 - Purchase-to-Invoice Draft frontend/API contract aligned (`purchase_result_ids` / `invoice_id`)
+- Explicit Invoice Draft candidates for completed `purchased` Orders; Purchase Result save no longer auto-creates or silently drops Invoice Draft failures
 - Tailscale-oriented host startup and user documentation

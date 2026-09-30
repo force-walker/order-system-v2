@@ -201,6 +201,11 @@ def _seed_purchase_result_for_order(
         invoiceable_flag=True,
     )
     db.add(pr)
+    order = db.query(Order).filter(Order.id == order_id).one()
+    if item.line_status != LineStatus.cancelled and item.line_status in {LineStatus.open, LineStatus.allocated, LineStatus.purchased}:
+        item.line_status = LineStatus.purchased
+    if order.status not in {OrderStatus.cancelled, OrderStatus.shipped, OrderStatus.invoiced}:
+        order.status = OrderStatus.purchased
     db.commit()
     rid = pr.id
     db.close()
@@ -339,9 +344,9 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert report.status_code == 200
     assert report_by_uuid.json() == report.json()
     assert report_by_uuid.json()["invoice_id"] == invoice_id
-    assert report_by_uuid.json()["delivery_no"].startswith("DEL-")
-    assert report_by_uuid.json()["delivery_id"] is not None
-    assert report_by_uuid.json()["delivery_uuid"] is not None
+    assert report_by_uuid.json()["delivery_no"] is None
+    assert report_by_uuid.json()["delivery_id"] is None
+    assert report_by_uuid.json()["delivery_uuid"] is None
     assert all(item["line_no"] is not None for item in report_by_uuid.json()["items"])
     assert all(item["line_ref"] for item in report_by_uuid.json()["items"])
 
@@ -352,9 +357,8 @@ def test_create_finalize_unlock_reset_invoice_flow():
     assert order is not None
     assert invoice is not None
     assert order.status == OrderStatus.invoiced
-    assert order.delivery_no is not None
-    assert order.delivery_no.startswith("DEL-")
-    assert invoice.delivery_no == order.delivery_no
+    assert order.delivery_no is None
+    assert invoice.delivery_no is None
     assert all(line.line_status == LineStatus.invoiced for line in lines)
     db.close()
 
@@ -379,8 +383,8 @@ def test_create_finalize_unlock_reset_invoice_flow():
     order = db.query(Order).filter(Order.id == order_id).first()
     lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id.asc()).all()
     assert order is not None
-    assert order.status == OrderStatus.shipped
-    assert all(line.line_status == LineStatus.shipped for line in lines)
+    assert order.status == OrderStatus.purchased
+    assert all(line.line_status == LineStatus.purchased for line in lines)
     db.close()
 
 
@@ -520,6 +524,91 @@ def test_generate_draft_from_purchase_results_for_shipped_order_resolves_deliver
     assert invoice.json()["delivery_id"] == delivery_id
     assert invoice.json()["delivery_uuid"] == delivery_id
     assert invoice.json()["delivery_no"].startswith("DLV-")
+
+
+def test_invoice_candidates_include_purchased_without_delivery_and_legacy_shipped_orders():
+    purchased_order_id = _seed_order(with_items=True)
+    purchased_result_id = _seed_purchase_result_for_order(purchased_order_id, purchased_qty=2)
+    shipped_order_id = _seed_order(with_items=True)
+    shipped_result_id = _seed_purchase_result_for_order(shipped_order_id, purchased_qty=2)
+    allocated_order_id = _seed_order(with_items=True)
+    _seed_purchase_result_for_order(allocated_order_id, purchased_qty=2)
+    db = TestingSessionLocal()
+    shipped_order = db.query(Order).filter(Order.id == shipped_order_id).one()
+    shipped_order.status = OrderStatus.shipped
+    shipped_item = (
+        db.query(OrderItem)
+        .join(SupplierAllocation, SupplierAllocation.order_item_id == OrderItem.id)
+        .join(PurchaseResult, PurchaseResult.allocation_id == SupplierAllocation.id)
+        .filter(OrderItem.order_id == shipped_order_id, PurchaseResult.id == shipped_result_id)
+        .one()
+    )
+    shipped_item.line_status = LineStatus.shipped
+    allocated_order = db.query(Order).filter(Order.id == allocated_order_id).one()
+    allocated_order.status = OrderStatus.allocated
+    allocated_item = (
+        db.query(OrderItem)
+        .join(SupplierAllocation, SupplierAllocation.order_item_id == OrderItem.id)
+        .join(PurchaseResult, PurchaseResult.allocation_id == SupplierAllocation.id)
+        .filter(OrderItem.order_id == allocated_order_id)
+        .one()
+    )
+    allocated_item.line_status = LineStatus.allocated
+    assert db.query(Delivery).filter(Delivery.order_id == purchased_order_id).count() == 0
+    db.commit()
+    db.close()
+
+    response = _client().get("/api/v1/invoices/draft-candidates")
+    assert response.status_code == 200, response.text
+    by_order = {row["order_id"]: row for row in response.json()}
+    assert by_order[purchased_order_id]["purchase_result_ids"] == [purchased_result_id]
+    assert by_order[purchased_order_id]["order_status"] == "purchased"
+    assert by_order[shipped_order_id]["purchase_result_ids"] == [shipped_result_id]
+    assert by_order[shipped_order_id]["order_status"] == "shipped"
+    assert allocated_order_id not in by_order
+
+
+def test_purchase_result_draft_requires_purchased_or_legacy_shipped_status():
+    order_id = _seed_order(with_items=True)
+    purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2)
+    _seed_system_settings()
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).one()
+    item = (
+        db.query(OrderItem)
+        .join(SupplierAllocation, SupplierAllocation.order_item_id == OrderItem.id)
+        .join(PurchaseResult, PurchaseResult.allocation_id == SupplierAllocation.id)
+        .filter(OrderItem.order_id == order_id, PurchaseResult.id == purchase_result_id)
+        .one()
+    )
+    item_id = item.id
+    order.status = OrderStatus.allocated
+    item.line_status = LineStatus.allocated
+    db.commit()
+    db.close()
+
+    rejected = _client().post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={"order_id": order_id, "invoice_date": str(date.today()), "purchase_result_ids": [purchase_result_id]},
+    )
+    assert rejected.status_code == 409
+    assert rejected.json()["detail"]["code"] == "ORDER_NOT_PURCHASED"
+
+    db = TestingSessionLocal()
+    order = db.query(Order).filter(Order.id == order_id).one()
+    item = db.query(OrderItem).filter(OrderItem.id == item_id).one()
+    order.status = OrderStatus.purchased
+    item.line_status = LineStatus.purchased
+    db.commit()
+    db.close()
+    accepted = _client().post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={"order_id": order_id, "invoice_date": str(date.today()), "purchase_result_ids": [purchase_result_id]},
+    )
+    assert accepted.status_code == 201, accepted.text
+    db = TestingSessionLocal()
+    assert db.query(Delivery).filter(Delivery.order_id == order_id).count() == 0
+    db.close()
 
 
 def test_draft_generation_requires_exact_unique_purchase_result_ids_for_order():
@@ -829,7 +918,7 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
     order = db.query(Order).filter(Order.id == order_id).first()
     lines = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
     assert order is not None
-    assert order.status == OrderStatus.shipped
+    assert order.status == OrderStatus.purchased
     assert sum(1 for line in lines if line.line_status == LineStatus.invoiced) == 1
     assert sum(1 for line in lines if line.line_status != LineStatus.invoiced) == 1
     db.close()
@@ -854,17 +943,53 @@ def test_generate_draft_uses_purchase_result_actual_weight_and_claims_selected_s
     db.commit()
     db.close()
 
-    first_id = _seed_purchase_result_for_order(
-        order_id, purchased_qty=1, final_unit_cost=1000, order_item_id=catch_item_id,
-        purchased_uom="CTN", actual_weight_kg=10.42,
+    db = TestingSessionLocal()
+    allocation = SupplierAllocation(
+        order_item_id=catch_item_id,
+        suggested_supplier_id=101,
+        suggested_qty=2,
+        final_supplier_id=101,
+        final_qty=2,
+        final_uom="CTN",
     )
-    second_id = _seed_purchase_result_for_order(
-        order_id, purchased_qty=1, final_unit_cost=1000, order_item_id=catch_item_id,
-        purchased_uom="CTN", actual_weight_kg=11.31,
+    db.add(allocation)
+    db.flush()
+    first = PurchaseResult(
+        allocation_id=allocation.id,
+        supplier_id=101,
+        purchased_qty=1,
+        purchased_uom="CTN",
+        actual_weight_kg=10.42,
+        final_unit_cost=1000,
+        result_status=PurchaseResultStatus.filled,
+        invoiceable_flag=True,
     )
+    second = PurchaseResult(
+        allocation_id=allocation.id,
+        supplier_id=101,
+        purchased_qty=1,
+        purchased_uom="CTN",
+        actual_weight_kg=11.31,
+        final_unit_cost=1000,
+        result_status=PurchaseResultStatus.filled,
+        invoiceable_flag=True,
+    )
+    db.add_all([first, second])
+    db.query(OrderItem).filter(OrderItem.id == catch_item_id).one().line_status = LineStatus.purchased
+    db.commit()
+    first_id = first.id
+    second_id = second.id
+    db.close()
+
+    db = TestingSessionLocal()
+    other_item_id = db.query(OrderItem.id).filter(OrderItem.order_id == order_id, OrderItem.id != catch_item_id).scalar()
+    db.close()
+    assert other_item_id is not None
     unselected_id = _seed_purchase_result_for_order(
-        order_id, purchased_qty=1, final_unit_cost=1000, order_item_id=catch_item_id,
-        purchased_uom="CTN", actual_weight_kg=5.0,
+        order_id,
+        purchased_qty=1,
+        final_unit_cost=1000,
+        order_item_id=other_item_id,
     )
     _seed_system_settings()
 
@@ -902,10 +1027,40 @@ def test_generate_draft_missing_selected_actual_weight_rolls_back_all_claims():
     product.purchase_uom = "CTN"
     product.invoice_uom = "KG"
     catch_item_id = catch_item.id
+    catch_item.line_status = LineStatus.purchased
+    db.query(Order).filter(Order.id == order_id).one().status = OrderStatus.purchased
+    allocation = SupplierAllocation(
+        order_item_id=catch_item_id,
+        suggested_supplier_id=101,
+        suggested_qty=2,
+        final_supplier_id=101,
+        final_qty=2,
+        final_uom="CTN",
+    )
+    db.add(allocation)
+    db.flush()
+    complete = PurchaseResult(
+        allocation_id=allocation.id,
+        supplier_id=101,
+        purchased_qty=1,
+        purchased_uom="CTN",
+        actual_weight_kg=10.42,
+        result_status=PurchaseResultStatus.filled,
+        invoiceable_flag=True,
+    )
+    missing = PurchaseResult(
+        allocation_id=allocation.id,
+        supplier_id=101,
+        purchased_qty=1,
+        purchased_uom="CTN",
+        result_status=PurchaseResultStatus.filled,
+        invoiceable_flag=True,
+    )
+    db.add_all([complete, missing])
     db.commit()
+    complete_id = complete.id
+    missing_id = missing.id
     db.close()
-    complete_id = _seed_purchase_result_for_order(order_id, order_item_id=catch_item_id, purchased_uom="CTN", actual_weight_kg=10.42)
-    missing_id = _seed_purchase_result_for_order(order_id, order_item_id=catch_item_id, purchased_uom="CTN")
     _seed_system_settings()
 
     response = _client().post(
@@ -1079,7 +1234,7 @@ def test_finalize_reset_and_refinalize_keep_header_item_and_order_statuses_consi
         json={"reset_reason_code": "data_error", "reason_note": "verify status cycle"},
     )
     assert reset.status_code == 200
-    assert_statuses(InvoiceStatus.draft, InvoiceLineStatus.uninvoiced, OrderStatus.shipped, LineStatus.shipped)
+    assert_statuses(InvoiceStatus.draft, InvoiceLineStatus.uninvoiced, OrderStatus.purchased, LineStatus.purchased)
 
     refinalized = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert refinalized.status_code == 200
@@ -1138,9 +1293,9 @@ def test_finalize_and_reset_do_not_revive_cancelled_order_item():
     cancelled_item = db.query(OrderItem).filter(OrderItem.id == cancelled_item_id).one()
     order = db.query(Order).filter(Order.id == order_id).one()
     purchase_result = db.query(PurchaseResult).filter(PurchaseResult.id == active_result_id).one()
-    assert active_item.line_status == LineStatus.shipped
+    assert active_item.line_status == LineStatus.purchased
     assert cancelled_item.line_status == LineStatus.cancelled
-    assert order.status == OrderStatus.shipped
+    assert order.status == OrderStatus.purchased
     assert float(purchase_result.invoice_qty) == float(purchase_result.purchased_qty)
     db.close()
 
@@ -1184,8 +1339,8 @@ def test_partial_invoices_and_reset_preserve_other_invoice_statuses():
     first_item = db.query(OrderItem).filter(OrderItem.id == first_item_id).one()
     second_item = db.query(OrderItem).filter(OrderItem.id == second_item_id).one()
     assert first_item.line_status == LineStatus.invoiced
-    assert second_item.line_status == LineStatus.shipped
-    assert order.status == OrderStatus.shipped
+    assert second_item.line_status == LineStatus.purchased
+    assert order.status == OrderStatus.purchased
     db.close()
 
     second_draft = client.post(
@@ -1221,9 +1376,9 @@ def test_partial_invoices_and_reset_preserve_other_invoice_statuses():
     second_item = db.query(OrderItem).filter(OrderItem.id == second_item_id).one()
     first_invoice_items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == first_invoice_id).all()
     second_invoice_items = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == second_invoice_id).all()
-    assert first_item.line_status == LineStatus.shipped
+    assert first_item.line_status == LineStatus.purchased
     assert second_item.line_status == LineStatus.invoiced
-    assert order.status == OrderStatus.shipped
+    assert order.status == OrderStatus.purchased
     assert all(item.invoice_line_status == InvoiceLineStatus.uninvoiced for item in first_invoice_items)
     assert all(item.invoice_line_status == InvoiceLineStatus.invoiced for item in second_invoice_items)
     db.close()

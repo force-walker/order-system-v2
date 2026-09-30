@@ -41,6 +41,8 @@ const CODE_MESSAGES: Record<string, string> = {
   SUPPLIER_PRODUCT_NOT_FOUND: '仕入先と商品の紐づけが見つかりません。',
   ALLOCATION_LOCKED_BY_PURCHASE_RESULT: '仕入結果登録済みのため、割当内容は変更できません。',
   PURCHASE_RESULT_ALREADY_CLAIMED: '請求ドラフトで使用済みのため、仕入結果は変更できません。',
+  INVOICE_UOM_UNSUPPORTED: '不定貫商品の請求単位がKGではありません。商品マスタを確認してください。',
+  ACTUAL_WEIGHT_REQUIRED: '不定貫商品の実測重量が不足しています。納品確認で重量を入力してください。',
 };
 
 const STATUS_MESSAGES: Record<number, string> = {
