@@ -100,6 +100,13 @@ npm run sync:openapi
 - Run focused tests and then the relevant full suite before committing.
 - Treat migrations and cleanup commands as data-sensitive operations.
 
+## Production database initialization
+
+- Do not clean and reuse the Development database for Production.
+- Start Production with a new empty PostgreSQL database, apply the complete Alembic migration chain, and then import only reviewed and validated Master data.
+- Confirm that Order, Allocation, Purchase Result, Delivery, and Invoice transaction tables contain zero rows before Production use.
+- Resetting Development business-number or identity sequences is a Development-only maintenance operation and must never be performed on an operating Production database.
+
 ## Known remaining product risks
 
 - Fine-grained role permissions and customer-level data isolation are incomplete.
