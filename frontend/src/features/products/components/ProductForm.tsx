@@ -11,23 +11,28 @@ type Props = {
 
 type FormState = ProductCreateRequest & { active: boolean };
 
-const toInitial = (initial?: ProductDetail): FormState => ({
-  name: initial?.name ?? '',
-  orderUom: initial?.orderUom ?? 'kg',
-  purchaseUom: initial?.purchaseUom ?? 'kg',
-  invoiceUom: initial?.invoiceUom ?? 'kg',
-  freightWeight: initial?.freightWeight ?? 0,
-  pricingBasisDefault: initial?.pricingBasisDefault ?? 'uom_count',
-  isCatchWeight: initial?.isCatchWeight ?? false,
-  weightCaptureRequired: initial?.weightCaptureRequired ?? false,
-  active: initial?.active ?? true,
-});
+const toInitial = (initial?: ProductDetail): FormState => {
+  const pricingBasisDefault = initial?.pricingBasisDefault ?? 'uom_count';
+  const usesKgPricing = pricingBasisDefault === 'uom_kg';
+  return {
+    name: initial?.name ?? '',
+    orderUom: initial?.orderUom ?? 'kg',
+    purchaseUom: initial?.purchaseUom ?? 'kg',
+    invoiceUom: usesKgPricing ? 'KG' : (initial?.invoiceUom ?? 'kg'),
+    freightWeight: initial?.freightWeight ?? 0,
+    pricingBasisDefault,
+    isCatchWeight: usesKgPricing || (initial?.isCatchWeight ?? false),
+    weightCaptureRequired: usesKgPricing || (initial?.weightCaptureRequired ?? false),
+    active: initial?.active ?? true,
+  };
+};
 
 export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
   const [form, setForm] = useState<FormState>(toInitial(initialValue));
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
+  const usesKgPricing = form.pricingBasisDefault === 'uom_kg';
 
   useEffect(() => {
     setForm(toInitial(initialValue));
@@ -82,7 +87,7 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
       </label>
       <label>
         請求単位
-        <input value={form.invoiceUom} onChange={(e) => setForm((p) => ({ ...p, invoiceUom: e.target.value }))} />
+        <input value={form.invoiceUom} disabled={usesKgPricing} onChange={(e) => setForm((p) => ({ ...p, invoiceUom: e.target.value }))} />
       </label>
       <label>
         運賃重量
@@ -97,21 +102,26 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
       </label>
       <label>
         課金基準
-        <select value={form.pricingBasisDefault} onChange={(e) => setForm((p) => ({ ...p, pricingBasisDefault: e.target.value as 'uom_count' | 'uom_kg' }))}>
+        <select value={form.pricingBasisDefault} onChange={(e) => setForm((p) => {
+          const pricingBasisDefault = e.target.value as 'uom_count' | 'uom_kg';
+          return pricingBasisDefault === 'uom_kg'
+            ? { ...p, pricingBasisDefault, invoiceUom: 'KG', isCatchWeight: true, weightCaptureRequired: true }
+            : { ...p, pricingBasisDefault };
+        })}>
           <option value="uom_count">uom_count</option>
           <option value="uom_kg">uom_kg</option>
         </select>
       </label>
       <label>
         キャッチウェイト
-        <select value={form.isCatchWeight ? 'true' : 'false'} onChange={(e) => setForm((p) => ({ ...p, isCatchWeight: e.target.value === 'true' }))}>
+        <select disabled={usesKgPricing} value={form.isCatchWeight ? 'true' : 'false'} onChange={(e) => setForm((p) => ({ ...p, isCatchWeight: e.target.value === 'true' }))}>
           <option value="false">いいえ</option>
           <option value="true">はい</option>
         </select>
       </label>
       <label>
         重量入力必須
-        <select value={form.weightCaptureRequired ? 'true' : 'false'} onChange={(e) => setForm((p) => ({ ...p, weightCaptureRequired: e.target.value === 'true' }))}>
+        <select disabled={usesKgPricing} value={form.weightCaptureRequired ? 'true' : 'false'} onChange={(e) => setForm((p) => ({ ...p, weightCaptureRequired: e.target.value === 'true' }))}>
           <option value="false">いいえ</option>
           <option value="true">はい</option>
         </select>

@@ -535,7 +535,7 @@ def test_catch_weight_allocation_uses_ctn_and_ignores_actual_weight():
     db.close()
 
 
-def test_order_purchase_uom_mismatch_requires_master_correction():
+def test_cross_unit_purchase_quantity_completes_without_conversion():
     order_id, item_ids, supplier_id = _seed_order_with_items(
         item_count=1,
         order_uom="PC",
@@ -547,14 +547,14 @@ def test_order_purchase_uom_mismatch_requires_master_correction():
         SupplierAllocation(
             order_item_id=item_ids[0],
             final_supplier_id=supplier_id,
-            final_qty=5,
+            final_qty=18.5,
             final_uom="kg",
         )
     )
     db.flush()
     result = evaluate_order_allocation_completion(db, order_id)
-    assert result.complete is False
-    assert "UOM_MISMATCH_REQUIRES_MASTER_CORRECTION" in {reason.code for reason in result.reasons}
+    assert result.complete is True
+    assert result.reasons == ()
     db.rollback()
     db.close()
 
@@ -590,7 +590,7 @@ def test_manual_confirmed_to_allocated_rejects_missing_and_partial_allocations()
     assert partial.json()["detail"]["code"] == "ALLOCATION_INCOMPLETE"
 
 
-def test_manual_confirmed_to_allocated_rejects_master_uom_mismatch():
+def test_manual_confirmed_to_allocated_accepts_explicit_cross_unit_purchase_quantity():
     order_id, item_ids, supplier_id = _seed_order_with_items(
         item_count=1,
         order_uom="PC",
@@ -602,7 +602,7 @@ def test_manual_confirmed_to_allocated_rejects_master_uom_mismatch():
         SupplierAllocation(
             order_item_id=item_ids[0],
             final_supplier_id=supplier_id,
-            final_qty=5,
+            final_qty=18.5,
             final_uom="kg",
         )
     )
@@ -613,11 +613,52 @@ def test_manual_confirmed_to_allocated_rejects_master_uom_mismatch():
         f"/api/v1/orders/{order_id}/bulk-transition",
         json={"from_status": "confirmed", "to_status": "allocated"},
     )
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "ALLOCATION_INCOMPLETE"
-    assert "UOM_MISMATCH_REQUIRES_MASTER_CORRECTION" in {
-        detail["code"] for detail in response.json()["detail"]["details"]
-    }
+    assert response.status_code == 200
+
+
+def test_cross_unit_bulk_save_requires_explicit_qty_and_uses_purchase_uom():
+    order_id, item_ids, supplier_id = _seed_order_with_items(
+        item_count=1,
+        ordered_qty=3,
+        order_uom="piece",
+        purchase_uom="kg",
+        invoice_uom="kg",
+    )
+    client = _client()
+
+    listed = client.get(f"/api/v1/order-item-allocations?order_status=confirmed")
+    row = next(row for row in listed.json() if row["order_item_id"] == item_ids[0])
+    assert row["order_uom"] == "piece"
+    assert row["purchase_uom"] == "kg"
+    assert row["allocated_qty"] is None
+
+    suggested = client.post(
+        "/api/v1/order-item-allocations/suggestions",
+        json={"order_item_ids": [item_ids[0]]},
+    )
+    assert suggested.status_code == 200
+    assert suggested.json()[0]["suggested_qty"] is None
+
+    missing = client.post(
+        "/api/v1/order-item-allocations/bulk-save",
+        json={"items": [{"order_item_id": item_ids[0], "supplier_id": supplier_id, "allocated_qty": None}]},
+    )
+    assert missing.status_code == 200
+    assert missing.json()["errors"][0]["code"] == "ALLOCATED_QTY_REQUIRED"
+
+    saved = client.post(
+        "/api/v1/order-item-allocations/bulk-save",
+        json={"items": [{"order_item_id": item_ids[0], "supplier_id": supplier_id, "allocated_qty": 18.5}]},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["succeeded"] == 1
+
+    db = TestingSessionLocal()
+    allocation = db.query(SupplierAllocation).filter(SupplierAllocation.order_item_id == item_ids[0]).one()
+    assert float(allocation.final_qty) == 18.5
+    assert allocation.final_uom == "kg"
+    assert db.get(Order, order_id).status == OrderStatus.allocated
+    db.close()
 
 
 def test_manual_confirmed_to_allocated_succeeds_when_complete_and_preserves_cancelled_item():

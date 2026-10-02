@@ -93,8 +93,10 @@ def test_product_enum_all_values_acceptance(basis: str):
         "name": "Enum Product",
         "order_uom": "count",
         "purchase_uom": "count",
-        "invoice_uom": "count",
+        "invoice_uom": "KG" if basis == "uom_kg" else "count",
         "pricing_basis_default": basis,
+        "is_catch_weight": basis == "uom_kg",
+        "weight_capture_required": basis == "uom_kg",
     }
     res = client.post("/api/v1/products", json=payload)
     assert res.status_code == 201

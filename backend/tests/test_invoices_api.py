@@ -616,6 +616,52 @@ def test_uom_kg_pricing_uses_actual_weight_without_inheriting_true_catch_weight_
     assert float(invoice_item["sales_unit_price"]) == 88.5
 
 
+def test_cross_unit_purchase_invoices_actual_weight_in_kg():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    db = TestingSessionLocal()
+    item = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.created_at.asc()).first()
+    assert item is not None
+    product = db.query(Product).filter(Product.id == item.product_id).one()
+    product.sku = "SKU-CROSS-UNIT-KG"
+    product.order_uom = "piece"
+    product.purchase_uom = "kg"
+    product.invoice_uom = "KG"
+    product.pricing_basis_default = PricingBasis.uom_kg
+    product.is_catch_weight = True
+    product.weight_capture_required = True
+    item.ordered_qty = 3
+    item.pricing_basis = PricingBasis.uom_kg
+    item.unit_price_uom_count = None
+    item.unit_price_uom_kg = 120
+    item_id = item.id
+    db.commit()
+    db.close()
+
+    result_id = _seed_purchase_result_for_order(
+        order_id,
+        purchased_qty=18.5,
+        order_item_id=item_id,
+        purchased_uom="kg",
+        actual_weight_kg=18.2,
+        final_unit_cost=1000,
+    )
+
+    response = _client().post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [result_id],
+            "sales_unit_prices": {item_id: 120},
+        },
+    )
+    assert response.status_code == 201, response.text
+    invoice_item = _client().get(f"/api/v1/invoices/{response.json()['invoice_id']}/items").json()[0]
+    assert float(invoice_item["billable_qty"]) == 18.2
+    assert invoice_item["billable_uom"] == "KG"
+
+
 def test_true_catch_weight_non_kg_invoice_uom_is_rejected_with_sku():
     order_id = _seed_order(with_items=True)
     _seed_system_settings()

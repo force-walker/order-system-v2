@@ -3184,6 +3184,10 @@ export interface components {
             pricing_basis: components["schemas"]["PricingBasis"];
             /** Ordered Qty */
             ordered_qty: number;
+            /** Order Uom */
+            order_uom: string;
+            /** Purchase Uom */
+            purchase_uom: string;
             /**
              * Delivery Date
              * Format: date

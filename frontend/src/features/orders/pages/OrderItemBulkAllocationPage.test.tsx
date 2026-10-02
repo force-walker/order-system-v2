@@ -60,6 +60,8 @@ const savedRow = {
   productName: 'Product A',
   pricingBasis: 'uom_count' as const,
   orderedQty: 2,
+  orderUom: 'count',
+  purchaseUom: 'count',
   deliveryDate: getDefaultDeliveryDate(),
   shippedDate: null,
   allocationStatus: 'allocated' as const,
@@ -111,6 +113,41 @@ it('blocks selected rows without a final supplier before calling the API', async
 
   expect(await screen.findByText('仕入先を選択してください')).toBeTruthy();
   expect(bulkSaveOrderItemAllocations).not.toHaveBeenCalled();
+});
+
+it('keeps cross-unit purchase quantity blank and requires explicit input', async () => {
+  const actor = userEvent.setup();
+  vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([{
+    ...savedRow,
+    allocationId: null,
+    allocationStatus: 'unallocated',
+    manualSupplierId: null,
+    manualQty: null,
+    orderedQty: 3,
+    orderUom: 'piece',
+    purchaseUom: 'kg',
+  }]);
+  vi.mocked(listSupplierFilterOptions).mockResolvedValue([{ id: 1, label: '1: Supplier A' }]);
+  render(<MemoryRouter><OrderItemBulkAllocationPage /></MemoryRouter>);
+
+  const row = (await screen.findByText('ORD-1')).closest('tr')!;
+  const qty = row.querySelector<HTMLInputElement>('input[type="number"]')!;
+  expect(qty.value).toBe('');
+  expect(row.textContent).toContain('異単位（手入力）');
+
+  await actor.selectOptions(row.querySelector('select')!, '1');
+  await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+  await actor.click(screen.getByRole('button', { name: '選択行を一括保存' }));
+  expect(await screen.findByText('仕入数量を入力してください')).toBeTruthy();
+  expect(bulkSaveOrderItemAllocations).not.toHaveBeenCalled();
+
+  await actor.type(qty, '18.5');
+  await actor.click(screen.getByRole('button', { name: '選択行を一括保存' }));
+  await waitFor(() => expect(bulkSaveOrderItemAllocations).toHaveBeenCalledWith([{
+    orderItemId: 'item-1',
+    supplierId: 1,
+    allocatedQty: 18.5,
+  }]));
 });
 
 it('resaves an unchanged allocation without overwrite confirmation', async () => {

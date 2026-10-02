@@ -63,24 +63,12 @@ def evaluate_order_allocation_completion(db: Session, order_id: str) -> Allocati
         item_reasons: list[AllocationIncompleteReason] = []
         order_uom = normalize_product_uom(product.order_uom)
         purchase_uom = normalize_product_uom(product.purchase_uom)
-        if order_uom != purchase_uom:
-            item_reasons.append(
-                AllocationIncompleteReason(
-                    item.id,
-                    "UOM_MISMATCH_REQUIRES_MASTER_CORRECTION",
-                    (
-                        "order UOM and purchase UOM must match until an explicit "
-                        f"conversion workflow exists ({product.order_uom} != {product.purchase_uom})"
-                    ),
-                )
-            )
         item_allocations = by_item.get(item.id, [])
         parents = [allocation for allocation in item_allocations if not allocation.is_split_child]
         parent = parents[-1] if parents else None
         if parent is None:
             item_reasons.append(AllocationIncompleteReason(item.id, "ALLOCATION_MISSING", "allocation is missing"))
         else:
-            expected_quantity = Decimal(str(item.ordered_qty))
             expected_uom = purchase_uom
             split_children = [
                 allocation
@@ -118,12 +106,15 @@ def evaluate_order_allocation_completion(db: Session, order_id: str) -> Allocati
                         )
                     )
 
-            if total_quantity != expected_quantity:
+            # Same-unit purchasing can be checked against the ordered quantity.
+            # Cross-unit purchasing has no implicit conversion: the explicitly
+            # entered positive purchase quantity is authoritative.
+            if order_uom == purchase_uom and total_quantity != Decimal(str(item.ordered_qty)):
                 item_reasons.append(
                     AllocationIncompleteReason(
                         item.id,
                         "FINAL_QTY_MISMATCH",
-                        f"final allocation quantity {total_quantity} must equal ordered quantity {expected_quantity}",
+                        f"final allocation quantity {total_quantity} must equal ordered quantity {item.ordered_qty}",
                     )
                 )
 

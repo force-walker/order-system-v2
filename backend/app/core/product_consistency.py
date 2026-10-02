@@ -39,9 +39,9 @@ def validate_product_master_consistency(
 ) -> tuple[ProductConsistencyIssue, ...]:
     """Return hard errors and review warnings for one final Product state.
 
-    A uom_kg Order Item already makes PurchaseResult.actual_weight_kg required
-    in both the UI and backend.  Therefore no additional H4 flag combination
-    currently makes weight capture impossible.
+    ``uom_kg`` means that customer billing uses measured KG weight.  Cross-unit
+    purchasing is valid and is handled by an explicitly entered purchase
+    quantity; it is not a Product master inconsistency.
     """
     normalized = {
         "order_uom": normalize_product_uom(order_uom),
@@ -63,47 +63,34 @@ def validate_product_master_consistency(
                 ),
             ))
 
-    order_value = normalized["order_uom"]
     purchase_value = normalized["purchase_uom"]
     invoice_value = normalized["invoice_uom"]
-    if (
-        order_value in SUPPORTED_PRODUCT_UOMS
-        and purchase_value in SUPPORTED_PRODUCT_UOMS
-        and order_value != purchase_value
-    ):
-        issues.append(ProductConsistencyIssue(
-            severity="ERROR",
-            field="purchase_uom",
-            rule="ORDER_PURCHASE_UOM_MISMATCH",
-            message="Order UOM and Purchase UOM must match until a conversion workflow is configured.",
-        ))
-
-    if is_catch_weight and invoice_value in SUPPORTED_PRODUCT_UOMS and invoice_value != "kg":
-        issues.append(ProductConsistencyIssue(
-            severity="ERROR",
-            field="invoice_uom",
-            rule="CATCH_WEIGHT_INVOICE_UOM_REQUIRED",
-            message="Catch-weight products must use KG as Invoice UOM.",
-        ))
 
     pricing_basis = (
         pricing_basis_default.value
         if isinstance(pricing_basis_default, PricingBasis)
         else str(pricing_basis_default)
     )
-    if pricing_basis == PricingBasis.uom_kg.value and invoice_value != "kg":
+    if pricing_basis == PricingBasis.uom_kg.value and not is_catch_weight:
         issues.append(ProductConsistencyIssue(
-            severity="WARNING",
-            field="invoice_uom",
-            rule="UOM_KG_INVOICE_UOM_REVIEW",
-            message="uom_kg pricing normally uses KG as Invoice UOM; review this product.",
+            severity="ERROR",
+            field="is_catch_weight",
+            rule="UOM_KG_REQUIRES_CATCH_WEIGHT",
+            message="uom_kg pricing requires Catch Weight to be enabled.",
         ))
     if pricing_basis == PricingBasis.uom_kg.value and not weight_capture_required:
         issues.append(ProductConsistencyIssue(
-            severity="WARNING",
+            severity="ERROR",
             field="weight_capture_required",
-            rule="UOM_KG_WEIGHT_CAPTURE_RECOMMENDED",
-            message="uom_kg pricing captures actual weight through the Order Item rule, but the Product flag is disabled.",
+            rule="UOM_KG_REQUIRES_WEIGHT_CAPTURE",
+            message="uom_kg pricing requires Weight Capture Required to be enabled.",
+        ))
+    if pricing_basis == PricingBasis.uom_kg.value and invoice_value != "kg":
+        issues.append(ProductConsistencyIssue(
+            severity="ERROR",
+            field="invoice_uom",
+            rule="UOM_KG_REQUIRES_KG_INVOICE_UOM",
+            message="uom_kg pricing requires KG as Invoice UOM.",
         ))
     if is_catch_weight and pricing_basis != PricingBasis.uom_kg.value:
         issues.append(ProductConsistencyIssue(

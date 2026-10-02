@@ -16,6 +16,8 @@ class OrderItemAllocationWorkItem(BaseModel):
     product_name: str
     pricing_basis: PricingBasis
     ordered_qty: float
+    order_uom: str
+    purchase_uom: str
     delivery_date: date
     shipped_date: date | None = None
     allocation_status: str

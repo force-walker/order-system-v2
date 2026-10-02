@@ -111,6 +111,8 @@ def list_order_item_allocation_work_items(
                 product_name=product.name,
                 pricing_basis=item.pricing_basis,
                 ordered_qty=float(item.ordered_qty),
+                order_uom=product.order_uom,
+                purchase_uom=product.purchase_uom,
                 delivery_date=order.delivery_date,
                 shipped_date=item.shipped_date,
                 allocation_status=("allocated" if has_alloc else "unallocated"),
@@ -134,6 +136,7 @@ def suggest_allocations(payload: AllocationSuggestRequest, db: Session = Depends
         item = _get_order_item_by_identifier(db, order_item_id)
         if item is None:
             raise HTTPException(status_code=404, detail={"code": "ORDER_ITEM_NOT_FOUND", "message": f"order_item not found: {order_item_id}"})
+        product = db.query(Product).filter(Product.id == item.product_id).one()
 
         mapping = (
             db.query(SupplierProduct)
@@ -146,7 +149,11 @@ def suggest_allocations(payload: AllocationSuggestRequest, db: Session = Depends
             AllocationSuggestion(
                 order_item_id=item.id,
                 suggested_supplier_id=(mapping.supplier_id if mapping is not None else None),
-                suggested_qty=float(item.ordered_qty),
+                suggested_qty=(
+                    float(item.ordered_qty)
+                    if product.order_uom.strip().casefold() == product.purchase_uom.strip().casefold()
+                    else None
+                ),
                 reason=(
                     f"derived from supplier_product mapping(id={mapping.id}, preferred={mapping.is_preferred}, priority={mapping.priority})"
                     if mapping is not None
@@ -241,7 +248,8 @@ def bulk_save_allocations(
             errors.append(BulkAllocationSaveError(order_item_id=row.order_item_id, code="ALLOCATED_QTY_REQUIRED", message="allocated_qty is required when supplier_id is set"))
             continue
 
-        if row.allocated_qty > float(item.ordered_qty):
+        same_quantity_axis = product.order_uom.strip().casefold() == product.purchase_uom.strip().casefold()
+        if same_quantity_axis and row.allocated_qty > float(item.ordered_qty):
             errors.append(
                 BulkAllocationSaveError(
                     order_item_id=row.order_item_id,

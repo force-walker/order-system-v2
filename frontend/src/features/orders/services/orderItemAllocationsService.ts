@@ -15,6 +15,8 @@ export type OrderItemAllocationWorkItem = {
   productName: string;
   pricingBasis: 'uom_count' | 'uom_kg';
   orderedQty: number;
+  orderUom: string;
+  purchaseUom: string;
   deliveryDate: string;
   shippedDate: string | null;
   allocationStatus: 'allocated' | 'unallocated' | string;
@@ -66,6 +68,8 @@ type ApiWorkItem = {
   product_name: string;
   pricing_basis: 'uom_count' | 'uom_kg';
   ordered_qty: number;
+  order_uom: string;
+  purchase_uom: string;
   delivery_date: string;
   shipped_date: string | null;
   allocation_status: string;
@@ -126,6 +130,8 @@ export const listOrderItemAllocationWorkItems = async (params: {
     productName: row.product_name,
     pricingBasis: row.pricing_basis,
     orderedQty: row.ordered_qty,
+    orderUom: row.order_uom,
+    purchaseUom: row.purchase_uom,
     deliveryDate: row.delivery_date,
     shippedDate: row.shipped_date,
     allocationStatus: row.allocation_status,

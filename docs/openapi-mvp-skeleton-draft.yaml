@@ -7644,6 +7644,12 @@ components:
         ordered_qty:
           type: number
           title: Ordered Qty
+        order_uom:
+          type: string
+          title: Order Uom
+        purchase_uom:
+          type: string
+          title: Purchase Uom
         delivery_date:
           type: string
           format: date
@@ -7678,6 +7684,8 @@ components:
       - product_name
       - pricing_basis
       - ordered_qty
+      - order_uom
+      - purchase_uom
       - delivery_date
       - allocation_status
       title: OrderItemAllocationWorkItem

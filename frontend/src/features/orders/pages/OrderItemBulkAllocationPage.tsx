@@ -39,6 +39,9 @@ const ORDER_STATUS_OPTIONS: Array<{ value: OrderStatus; label: string }> = [
   { value: 'cancelled', label: '取消' },
 ];
 
+const hasSameQuantityAxis = (row: OrderItemAllocationWorkItem) =>
+  row.orderUom.trim().toLocaleLowerCase() === row.purchaseUom.trim().toLocaleLowerCase();
+
 export const OrderItemBulkAllocationPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -127,7 +130,7 @@ export const OrderItemBulkAllocationPage = () => {
 
       const manualQtyNum = Number(edit?.manualQty ?? row.manualQty ?? 0);
       const allocatedQty = Number.isFinite(manualQtyNum) ? manualQtyNum : 0;
-      const diff = Number((row.orderedQty - allocatedQty).toFixed(3));
+      const diff = hasSameQuantityAxis(row) ? Number((row.orderedQty - allocatedQty).toFixed(3)) : 0;
       if (filterNonZeroDiffOnly && Math.abs(diff) < 1e-9) return false;
 
       return true;
@@ -138,7 +141,9 @@ export const OrderItemBulkAllocationPage = () => {
     const rows = [...filteredItems];
     const getShortage = (row: OrderItemAllocationWorkItem) => {
       const manualQty = Number(editById[row.orderItemId]?.manualQty ?? row.manualQty ?? 0);
-      const shortage = Math.max(row.orderedQty - (Number.isFinite(manualQty) ? manualQty : 0), 0);
+      const shortage = hasSameQuantityAxis(row)
+        ? Math.max(row.orderedQty - (Number.isFinite(manualQty) ? manualQty : 0), 0)
+        : 0;
       return Number(shortage.toFixed(3));
     };
 
@@ -228,7 +233,7 @@ export const OrderItemBulkAllocationPage = () => {
         if (currentQty !== '') continue;
         next[row.orderItemId] = {
           ...next[row.orderItemId],
-          manualQty: String(row.orderedQty),
+          manualQty: hasSameQuantityAxis(row) ? String(row.orderedQty) : '',
           rowError: undefined,
         };
       }
@@ -259,7 +264,7 @@ export const OrderItemBulkAllocationPage = () => {
         next[row.orderItemId] = {
           ...current,
           manualSupplierId: selectedSupplierId,
-          manualQty: selectedSupplierId == null ? '' : String(row.orderedQty),
+          manualQty: selectedSupplierId == null || !hasSameQuantityAxis(row) ? '' : String(row.orderedQty),
           rowError: undefined,
         };
       }
@@ -293,6 +298,20 @@ export const OrderItemBulkAllocationPage = () => {
         Object.entries(prev).map(([id, row]) => [id, missingSet.has(id) ? { ...row, rowError: '仕入先を選択してください' } : row]),
       ));
       setToast({ type: 'error', message: '仕入先が未選択の行があります。該当行の仕入先を選択してください。' });
+      return;
+    }
+    const missingQtyIds = selectedRows
+      .filter((row) => {
+        const value = String(editById[row.orderItemId]?.manualQty ?? '').trim();
+        return value === '' || !Number.isFinite(Number(value)) || Number(value) <= 0;
+      })
+      .map((row) => row.orderItemId);
+    if (missingQtyIds.length > 0) {
+      const missingSet = new Set(missingQtyIds);
+      setEditById((prev) => Object.fromEntries(
+        Object.entries(prev).map(([id, row]) => [id, missingSet.has(id) ? { ...row, rowError: '仕入数量を入力してください' } : row]),
+      ));
+      setToast({ type: 'error', message: '仕入数量が未入力の行があります。仕入単位で正の数量を入力してください。' });
       return;
     }
     const payload = selectedRows.map((row) => {
@@ -570,8 +589,9 @@ export const OrderItemBulkAllocationPage = () => {
                   const edit = editById[row.orderItemId];
                   const manualQtyNum = Number(edit?.manualQty ?? row.manualQty ?? 0);
                   const allocatedQty = Number.isFinite(manualQtyNum) ? manualQtyNum : 0;
-                  const diffQty = Number((row.orderedQty - allocatedQty).toFixed(3));
-                  const shortageQty = Number(Math.max(diffQty, 0).toFixed(3));
+                  const sameQuantityAxis = hasSameQuantityAxis(row);
+                  const diffQty = sameQuantityAxis ? Number((row.orderedQty - allocatedQty).toFixed(3)) : 0;
+                  const shortageQty = sameQuantityAxis ? Number(Math.max(diffQty, 0).toFixed(3)) : 0;
 
                   const hasManualSupplier = (edit?.manualSupplierId ?? row.manualSupplierId) != null;
                   const isNonDefaultDeliveryDate = row.deliveryDate !== defaultDeliveryDate;
@@ -628,7 +648,7 @@ export const OrderItemBulkAllocationPage = () => {
                           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                         </select>
                       </td>
-                      <td className="col-ordered-qty">{row.orderedQty}</td>
+                      <td className="col-ordered-qty">{row.orderedQty} {row.orderUom}</td>
                       <td className="col-allocated-qty">
                         <input
                           type="number"
@@ -643,10 +663,15 @@ export const OrderItemBulkAllocationPage = () => {
                             }))
                           }
                         />
+                        <span className="subtle"> {row.purchaseUom}</span>
                       </td>
                       <td className="col-shortage-qty">
-                        {shortageQty > 0 ? <span className="field-error">不足: {shortageQty}</span> : <span className="subtle">不足: -</span>}
-                        <div className={Math.abs(diffQty) > 1e-9 ? 'field-error' : 'subtle'}>差分: {diffQty > 0 ? `+${diffQty}` : diffQty}</div>
+                        {sameQuantityAxis ? (
+                          <>
+                            {shortageQty > 0 ? <span className="field-error">不足: {shortageQty}</span> : <span className="subtle">不足: -</span>}
+                            <div className={Math.abs(diffQty) > 1e-9 ? 'field-error' : 'subtle'}>差分: {diffQty > 0 ? `+${diffQty}` : diffQty}</div>
+                          </>
+                        ) : <span className="subtle">異単位（手入力）</span>}
                         {edit?.rowError ? <div className="field-error">{edit.rowError}</div> : null}
                       </td>
                     </tr>
