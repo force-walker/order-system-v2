@@ -8338,6 +8338,10 @@ components:
           - type: boolean
           - type: 'null'
           title: Weight Capture Required
+        pricing_basis_default:
+          anyOf:
+          - $ref: '#/components/schemas/PricingBasis'
+          - type: 'null'
         active:
           anyOf:
           - type: boolean
@@ -8627,6 +8631,16 @@ components:
         index:
           type: integer
           title: Index
+        row:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Row
+        sku:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sku
         import_key:
           anyOf:
           - type: string
@@ -8641,6 +8655,16 @@ components:
         message:
           type: string
           title: Message
+        field:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Field
+        rule:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rule
         product_id:
           anyOf:
           - type: integer
@@ -9196,6 +9220,10 @@ components:
           - type: boolean
           - type: 'null'
           title: Weight Capture Required
+        pricing_basis_default:
+          anyOf:
+          - $ref: '#/components/schemas/PricingBasis'
+          - type: 'null'
         active:
           anyOf:
           - type: boolean

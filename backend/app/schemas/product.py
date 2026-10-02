@@ -90,6 +90,7 @@ class ProductUpdateRequest(BaseModel):
     invoice_uom: str | None = Field(default=None, min_length=1, max_length=32)
     is_catch_weight: bool | None = None
     weight_capture_required: bool | None = None
+    pricing_basis_default: PricingBasis | None = None
     active: bool | None = None
 
 
@@ -172,6 +173,7 @@ class ProductBulkUpdateItem(BaseModel):
     freight_weight: Decimal | None = Field(default=None, ge=Decimal("0"))
     is_catch_weight: bool | None = None
     weight_capture_required: bool | None = None
+    pricing_basis_default: PricingBasis | None = None
     active: bool | None = None
 
 
@@ -257,10 +259,14 @@ class ProductImportRequest(BaseModel):
 
 class ProductImportError(BaseModel):
     index: int
+    row: int | None = None
+    sku: str | None = None
     import_key: str | None = None
     action: str
     code: str
     message: str
+    field: str | None = None
+    rule: str | None = None
     product_id: int | None = None
 
 

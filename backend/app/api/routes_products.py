@@ -8,6 +8,7 @@ from app.core.exception_mapping import map_integrity_error
 from app.core.audit import AuditAction, write_audit_log
 from app.core.codegen import generate_next_code
 from app.core.import_formats import PRODUCT_IMPORT_FORMAT
+from app.core.product_consistency import ProductConsistencyIssue, product_master_errors
 from app.db.session import get_db
 from app.models.entities import OrderItem, PricingBasis, Product, SupplierProduct
 from app.schemas.common import ApiErrorResponse, ImportFormatResponse
@@ -33,6 +34,52 @@ router = APIRouter(prefix="/api/v1/products", tags=["products"])
 PRODUCT_COMMON_ERROR_RESPONSES = {
     422: {"model": ApiErrorResponse, "description": "Validation Error"},
 }
+
+PRODUCT_CONSISTENCY_FIELDS = (
+    "order_uom",
+    "purchase_uom",
+    "invoice_uom",
+    "pricing_basis_default",
+    "is_catch_weight",
+    "weight_capture_required",
+)
+
+
+def _product_consistency_values(source, updates: dict | None = None) -> dict:
+    values = {field: getattr(source, field) for field in PRODUCT_CONSISTENCY_FIELDS}
+    if updates:
+        values.update({field: value for field, value in updates.items() if field in PRODUCT_CONSISTENCY_FIELDS})
+    return values
+
+
+def _raise_product_consistency(
+    rows: list[tuple[int | None, str | None, ProductConsistencyIssue]],
+) -> None:
+    if not rows:
+        return
+    details = []
+    for index, sku, issue in rows:
+        detail: dict[str, object] = issue.as_detail()
+        if index is not None:
+            detail.update({"index": index, "row": index + 1})
+        if sku is not None:
+            detail["sku"] = sku
+        details.append(detail)
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "code": "PRODUCT_MASTER_INCONSISTENT",
+            "message": "product master UOM/pricing configuration is inconsistent",
+            "details": details,
+        },
+    )
+
+
+def _validate_product_state(source, *, updates: dict | None = None, index: int | None = None, sku: str | None = None) -> list[tuple[int | None, str | None, ProductConsistencyIssue]]:
+    return [
+        (index, sku, issue)
+        for issue in product_master_errors(**_product_consistency_values(source, updates))
+    ]
 
 
 @router.get("", response_model=list[ProductResponse])
@@ -75,6 +122,7 @@ def update_product(product_id: int, payload: ProductUpdateRequest, db: Session =
         raise HTTPException(status_code=404, detail={"code": "PRODUCT_NOT_FOUND", "message": "product not found"})
 
     data = payload.model_dump(exclude_unset=True)
+    _raise_product_consistency(_validate_product_state(row, updates=data, sku=row.sku))
     for k, v in data.items():
         setattr(row, k, v)
 
@@ -95,6 +143,7 @@ def update_product(product_id: int, payload: ProductUpdateRequest, db: Session =
     },
 )
 def create_product(payload: ProductCreateRequest, db: Session = Depends(get_db)) -> ProductResponse:
+    _raise_product_consistency(_validate_product_state(payload))
     sku = generate_next_code(db, Product, "sku", prefix="SKU-")
 
     exists = db.query(Product).filter(Product.sku == sku).first()
@@ -226,6 +275,13 @@ def bulk_create_products(payload: ProductBulkCreateRequest, db: Session = Depend
     errors: list[BulkOperationError] = []
     success = 0
 
+    consistency_errors = [
+        error
+        for idx, item in enumerate(payload.items)
+        for error in _validate_product_state(item, index=idx, sku=item.sku)
+    ]
+    _raise_product_consistency(consistency_errors)
+
     for idx, item in enumerate(payload.items):
         exists = db.query(Product).filter(Product.sku == item.sku).first()
         if exists is not None:
@@ -259,9 +315,22 @@ def bulk_create_products(payload: ProductBulkCreateRequest, db: Session = Depend
 def bulk_update_products(payload: ProductBulkUpdateRequest, db: Session = Depends(get_db)) -> ProductBulkOperationResponse:
     errors: list[BulkOperationError] = []
     success = 0
+    rows_by_id = {
+        row.id: row
+        for row in db.query(Product).filter(Product.id.in_([item.id for item in payload.items])).all()
+    }
+    consistency_errors: list[tuple[int | None, str | None, ProductConsistencyIssue]] = []
+    for idx, item in enumerate(payload.items):
+        row = rows_by_id.get(item.id)
+        if row is None:
+            continue
+        data = item.model_dump(exclude_unset=True)
+        data.pop("id", None)
+        consistency_errors.extend(_validate_product_state(row, updates=data, index=idx, sku=row.sku))
+    _raise_product_consistency(consistency_errors)
 
     for idx, item in enumerate(payload.items):
-        row = db.query(Product).filter(Product.id == item.id).first()
+        row = rows_by_id.get(item.id)
         if row is None:
             errors.append(BulkOperationError(index=idx, itemRef=str(item.id), code="PRODUCT_NOT_FOUND", message="product not found"))
             continue
@@ -282,6 +351,13 @@ def bulk_update_products(payload: ProductBulkUpdateRequest, db: Session = Depend
 def bulk_upsert_products(payload: ProductBulkUpsertRequest, db: Session = Depends(get_db)) -> ProductBulkOperationResponse:
     errors: list[BulkOperationError] = []
     success = 0
+
+    consistency_errors = [
+        error
+        for idx, item in enumerate(payload.items)
+        for error in _validate_product_state(item, index=idx, sku=item.sku)
+    ]
+    _raise_product_consistency(consistency_errors)
 
     for idx, item in enumerate(payload.items):
         row = db.query(Product).filter(Product.sku == item.sku).first()
@@ -326,12 +402,9 @@ def bulk_upsert_products(payload: ProductBulkUpsertRequest, db: Session = Depend
 
 @router.post("/import-upsert", response_model=ProductImportResult)
 def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(get_db)) -> ProductImportResult:
-    created = 0
-    updated = 0
-    skipped = 0
     errors: list[ProductImportError] = []
-
     seen_import_keys: set[str] = set()
+    plans: list[tuple[int, dict, ProductImportItem, Product | None, str]] = []
 
     def _append_row_error(
         *,
@@ -341,14 +414,21 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
         code: str,
         message: str,
         product_id: int | None = None,
+        sku: str | None = None,
+        field: str | None = None,
+        rule: str | None = None,
     ) -> None:
         errors.append(
             ProductImportError(
                 index=idx,
+                row=idx + 1,
+                sku=sku,
                 import_key=import_key,
                 action=action,
                 code=code,
                 message=message,
+                field=field,
+                rule=rule,
                 product_id=product_id,
             )
         )
@@ -470,97 +550,148 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
                 )
                 continue
 
-        try:
-            with db.begin_nested():
-                if action == "create":
-                    sku = generate_next_code(db, Product, "sku", prefix="SKU-")
-                    row = Product(
-                        sku=sku,
-                        import_key=item.import_key,
-                        legacy_code=item.legacy_code,
-                        category_code=item.category_code,
-                        product_type_code=item.product_type_code,
-                        name=item.name,
-                        name_kana=item.name_kana,
-                        name_kana_key=item.name_kana_key,
-                        legacy_unit_code=item.legacy_unit_code,
-                        pack_size=item.pack_size,
-                        tax_category_code=item.tax_category_code,
-                        inventory_category_code=item.inventory_category_code,
-                        owner_code=item.owner_code,
-                        origin_code=item.origin_code,
-                        jan_code=item.jan_code,
-                        sales_price=item.sales_price,
-                        sales_price_1=item.sales_price_1,
-                        sales_price_2=item.sales_price_2,
-                        sales_price_3=item.sales_price_3,
-                        sales_price_4=item.sales_price_4,
-                        sales_price_5=item.sales_price_5,
-                        sales_price_6=item.sales_price_6,
-                        purchase_price=item.purchase_price,
-                        inventory_price=item.inventory_price,
-                        list_price=item.list_price,
-                        tax_rate_code=item.tax_rate_code,
-                        handling_category_code=item.handling_category_code,
-                        name_en=item.name_en,
-                        name_zh_hk=item.name_zh_hk,
-                        customs_reference_price=item.customs_reference_price,
-                        freight_weight=item.freight_weight,
-                        customs_origin_text=item.customs_origin_text,
-                        remarks=item.remarks,
-                        chayafuda_flag=item.chayafuda_flag,
-                        application_category_code=item.application_category_code,
-                        order_uom=item.order_uom,
-                        purchase_uom=item.purchase_uom,
-                        invoice_uom=item.invoice_uom,
-                        is_catch_weight=item.is_catch_weight if item.is_catch_weight is not None else False,
-                        weight_capture_required=item.weight_capture_required if item.weight_capture_required is not None else False,
-                        pricing_basis_default=item.pricing_basis_default or PricingBasis.uom_count,
-                        active=True if item.active is None else item.active,
-                    )
-                    db.add(row)
-                    db.flush()
-                    write_audit_log(db, entity_type="product", entity_id=row.id, action=AuditAction.CREATE)
-                    created += 1
-                    continue
+        if action == "create":
+            consistency_values = {
+                "order_uom": item.order_uom,
+                "purchase_uom": item.purchase_uom,
+                "invoice_uom": item.invoice_uom,
+                "pricing_basis_default": item.pricing_basis_default or PricingBasis.uom_count,
+                "is_catch_weight": item.is_catch_weight if item.is_catch_weight is not None else False,
+                "weight_capture_required": item.weight_capture_required if item.weight_capture_required is not None else False,
+            }
+        else:
+            updates = {
+                field: getattr(item, field)
+                for field in PRODUCT_CONSISTENCY_FIELDS
+                if normalized.get(field) is not None
+            }
+            consistency_values = _product_consistency_values(target, updates)
 
-                changed = False
-                for field, value in normalized.items():
-                    if field not in updatable_fields or field == "sku":
-                        continue
-                    if value is None:
-                        continue
-                    if getattr(target, field) != value:
-                        setattr(target, field, value)
-                        changed = True
-
-                if not changed:
-                    skipped += 1
-                    continue
-
-                db.flush()
-                write_audit_log(db, entity_type="product", entity_id=target.id, action=AuditAction.UPDATE)
-                updated += 1
-        except IntegrityError as exc:
-            _, code, message = map_integrity_error(exc)
-            product_id = target.id if target is not None else None
-            _append_row_error(idx=idx, import_key=item.import_key, action=action, code=code, message=message, product_id=product_id)
-            continue
-        except SQLAlchemyError:
-            product_id = target.id if target is not None else None
+        consistency_errors = product_master_errors(**consistency_values)
+        for issue in consistency_errors:
             _append_row_error(
                 idx=idx,
                 import_key=item.import_key,
                 action=action,
-                code="DB_ERROR",
-                message="database operation failed",
-                product_id=product_id,
+                code="PRODUCT_MASTER_INCONSISTENT",
+                message=issue.message,
+                product_id=target.id if target is not None else None,
+                sku=target.sku if target is not None else None,
+                field=issue.field,
+                rule=issue.rule,
             )
+        if consistency_errors:
             continue
+        plans.append((idx, normalized, item, target, action))
 
-    db.commit()
-    failed = len(errors)
-    return ProductImportResult(total=len(payload.items), created=created, updated=updated, skipped=skipped, failed=failed, errors=errors)
+    if errors:
+        return ProductImportResult(
+            total=len(payload.items),
+            created=0,
+            updated=0,
+            skipped=0,
+            failed=len({error.index for error in errors}),
+            errors=errors,
+        )
+
+    created = 0
+    updated = 0
+    skipped = 0
+    current_plan: tuple[int, dict, ProductImportItem, Product | None, str] | None = None
+    try:
+        for current_plan in plans:
+            idx, normalized, item, target, action = current_plan
+            if action == "create":
+                row = Product(
+                    sku=generate_next_code(db, Product, "sku", prefix="SKU-"),
+                    import_key=item.import_key,
+                    legacy_code=item.legacy_code,
+                    category_code=item.category_code,
+                    product_type_code=item.product_type_code,
+                    name=item.name,
+                    name_kana=item.name_kana,
+                    name_kana_key=item.name_kana_key,
+                    legacy_unit_code=item.legacy_unit_code,
+                    pack_size=item.pack_size,
+                    tax_category_code=item.tax_category_code,
+                    inventory_category_code=item.inventory_category_code,
+                    owner_code=item.owner_code,
+                    origin_code=item.origin_code,
+                    jan_code=item.jan_code,
+                    sales_price=item.sales_price,
+                    sales_price_1=item.sales_price_1,
+                    sales_price_2=item.sales_price_2,
+                    sales_price_3=item.sales_price_3,
+                    sales_price_4=item.sales_price_4,
+                    sales_price_5=item.sales_price_5,
+                    sales_price_6=item.sales_price_6,
+                    purchase_price=item.purchase_price,
+                    inventory_price=item.inventory_price,
+                    list_price=item.list_price,
+                    tax_rate_code=item.tax_rate_code,
+                    handling_category_code=item.handling_category_code,
+                    name_en=item.name_en,
+                    name_zh_hk=item.name_zh_hk,
+                    customs_reference_price=item.customs_reference_price,
+                    freight_weight=item.freight_weight,
+                    customs_origin_text=item.customs_origin_text,
+                    remarks=item.remarks,
+                    chayafuda_flag=item.chayafuda_flag,
+                    application_category_code=item.application_category_code,
+                    order_uom=item.order_uom,
+                    purchase_uom=item.purchase_uom,
+                    invoice_uom=item.invoice_uom,
+                    is_catch_weight=item.is_catch_weight if item.is_catch_weight is not None else False,
+                    weight_capture_required=item.weight_capture_required if item.weight_capture_required is not None else False,
+                    pricing_basis_default=item.pricing_basis_default or PricingBasis.uom_count,
+                    active=True if item.active is None else item.active,
+                )
+                db.add(row)
+                db.flush()
+                write_audit_log(db, entity_type="product", entity_id=row.id, action=AuditAction.CREATE)
+                created += 1
+                continue
+
+            changed = False
+            for field, value in normalized.items():
+                if field not in updatable_fields or field == "sku" or value is None:
+                    continue
+                if getattr(target, field) != value:
+                    setattr(target, field, value)
+                    changed = True
+            if not changed:
+                skipped += 1
+                continue
+            db.flush()
+            write_audit_log(db, entity_type="product", entity_id=target.id, action=AuditAction.UPDATE)
+            updated += 1
+
+        db.commit()
+    except (IntegrityError, SQLAlchemyError) as exc:
+        db.rollback()
+        idx, _, item, target, action = current_plan or (0, {}, ProductImportItem(), None, "create")
+        if isinstance(exc, IntegrityError):
+            _, code, message = map_integrity_error(exc)
+        else:
+            code, message = "DB_ERROR", "database operation failed"
+        _append_row_error(
+            idx=idx,
+            import_key=item.import_key,
+            action=action,
+            code=code,
+            message=message,
+            product_id=target.id if target is not None else None,
+            sku=target.sku if target is not None else None,
+        )
+        return ProductImportResult(
+            total=len(payload.items), created=0, updated=0, skipped=0,
+            failed=len({error.index for error in errors}), errors=errors,
+        )
+
+    return ProductImportResult(
+        total=len(payload.items), created=created, updated=updated,
+        skipped=skipped, failed=0, errors=[],
+    )
 
 
 @router.delete("/bulk/delete", response_model=ProductBulkOperationResponse)

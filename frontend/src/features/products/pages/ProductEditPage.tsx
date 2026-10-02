@@ -37,6 +37,7 @@ export const ProductEditPage = () => {
       purchaseUom: payload.purchaseUom,
       invoiceUom: payload.invoiceUom,
       freightWeight: payload.freightWeight,
+      pricingBasisDefault: payload.pricingBasisDefault,
       isCatchWeight: payload.isCatchWeight,
       weightCaptureRequired: payload.weightCaptureRequired,
     });

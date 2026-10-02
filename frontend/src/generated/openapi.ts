@@ -3487,6 +3487,7 @@ export interface components {
             is_catch_weight?: boolean | null;
             /** Weight Capture Required */
             weight_capture_required?: boolean | null;
+            pricing_basis_default?: components["schemas"]["PricingBasis"] | null;
             /** Active */
             active?: boolean | null;
         };
@@ -3591,6 +3592,10 @@ export interface components {
         ProductImportError: {
             /** Index */
             index: number;
+            /** Row */
+            row?: number | null;
+            /** Sku */
+            sku?: string | null;
             /** Import Key */
             import_key?: string | null;
             /** Action */
@@ -3599,6 +3604,10 @@ export interface components {
             code: string;
             /** Message */
             message: string;
+            /** Field */
+            field?: string | null;
+            /** Rule */
+            rule?: string | null;
             /** Product Id */
             product_id?: number | null;
         };
@@ -3798,6 +3807,7 @@ export interface components {
             is_catch_weight?: boolean | null;
             /** Weight Capture Required */
             weight_capture_required?: boolean | null;
+            pricing_basis_default?: components["schemas"]["PricingBasis"] | null;
             /** Active */
             active?: boolean | null;
         };

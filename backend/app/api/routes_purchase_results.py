@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import AuditAction, write_audit_log
 from app.core.auth import AuthContext, get_auth_context
 from app.core.purchase_completion import synchronize_order_purchase_status
+from app.core.product_consistency import normalize_product_uom
 from app.db.session import get_db
 from app.models.entities import Customer, Order, OrderItem, PricingBasis, Product, PurchaseResult, Supplier, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
@@ -46,7 +47,7 @@ def _comparable(field: str, value):
     if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
         return Decimal(str(value))
     if field == "purchased_uom" and isinstance(value, str):
-        return value.strip().casefold()
+        return normalize_product_uom(value)
     return value
 
 
@@ -74,10 +75,6 @@ def _default_supplier_id(payload_supplier_id: int | None, alloc: SupplierAllocat
     return alloc.suggested_supplier_id
 
 
-def _normalize_uom(value: str) -> str:
-    return value.strip().casefold()
-
-
 def _get_product_for_allocation(db: Session, alloc: SupplierAllocation) -> Product:
     product = (
         db.query(Product)
@@ -101,9 +98,9 @@ def _lock_and_sync_purchase_order(db: Session, alloc: SupplierAllocation, *, act
 
 def _validate_purchase_uom(db: Session, *, alloc: SupplierAllocation, purchased_uom: str) -> Product:
     product = _get_product_for_allocation(db, alloc)
-    actual = _normalize_uom(purchased_uom)
-    expected = _normalize_uom(product.purchase_uom)
-    allocation_uom = _normalize_uom(alloc.final_uom) if alloc.final_uom else None
+    actual = normalize_product_uom(purchased_uom)
+    expected = normalize_product_uom(product.purchase_uom)
+    allocation_uom = normalize_product_uom(alloc.final_uom)
     if actual != expected or allocation_uom != expected:
         raise HTTPException(
             status_code=422,

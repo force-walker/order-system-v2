@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.order_lookup import get_order_or_404 as _get_order_or_404
 from app.core.audit import AuditAction, write_audit_log
+from app.core.product_consistency import normalize_product_uom
 from app.core.deliveries import ensure_delivery_document
 from app.core.invoice_pdf import InvoicePdfDocument, InvoicePdfLine, build_invoice_pdf
 from app.core.invoice_pricing import compute_draft_margin, compute_hkd_purchase_unit_cost, get_system_settings_or_404
@@ -126,17 +127,17 @@ def _purchase_result_line_values(
 ) -> dict[str, object]:
     """Calculate one draft line without conflating weight capture with catch-weight master validation."""
     _, _, item, product = grouped[0]
-    purchase_uom = product.purchase_uom.strip().casefold()
-    invoice_uom = product.invoice_uom.strip().casefold()
+    purchase_uom = normalize_product_uom(product.purchase_uom)
+    invoice_uom = normalize_product_uom(product.invoice_uom)
     true_catch_weight = product.is_catch_weight or product.weight_capture_required
     requires_actual_weight = true_catch_weight or item.pricing_basis == PricingBasis.uom_kg
 
     invalid_uom_ids = [
         pr.id
         for pr, allocation, _, _ in grouped
-        if pr.purchased_uom.strip().casefold() != purchase_uom
+        if normalize_product_uom(pr.purchased_uom) != purchase_uom
         or not allocation.final_uom
-        or allocation.final_uom.strip().casefold() != purchase_uom
+        or normalize_product_uom(allocation.final_uom) != purchase_uom
     ]
     if invalid_uom_ids:
         raise HTTPException(
@@ -227,7 +228,7 @@ def _legacy_invoice_quantity(db: Session, item: OrderItem) -> tuple[Decimal, Dec
                 "message": f"catch-weight order_item={item.id} must be invoiced from selected purchase results",
             },
         )
-    if product.order_uom.strip().casefold() != product.invoice_uom.strip().casefold():
+    if normalize_product_uom(product.order_uom) != normalize_product_uom(product.invoice_uom):
         raise HTTPException(
             status_code=422,
             detail={
@@ -711,8 +712,8 @@ def _unclaimed_complete_result_ids(db: Session, item: OrderItem) -> list[int] | 
         )
         if not results or any(not result.invoiceable_flag or result.invoice_qty is not None for result in results):
             return None
-        expected_uom = (allocation.final_uom or "").strip().casefold()
-        if not expected_uom or any(result.purchased_uom.strip().casefold() != expected_uom for result in results):
+        expected_uom = normalize_product_uom(allocation.final_uom)
+        if not expected_uom or any(normalize_product_uom(result.purchased_uom) != expected_uom for result in results):
             return None
         if sum((Decimal(str(result.purchased_qty)) for result in results), Decimal("0")) != Decimal(str(allocation.final_qty)):
             return None

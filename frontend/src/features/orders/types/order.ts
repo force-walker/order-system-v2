@@ -140,6 +140,7 @@ export type ProductUpdateRequest = {
   purchaseUom?: string;
   invoiceUom?: string;
   freightWeight?: number;
+  pricingBasisDefault?: 'uom_count' | 'uom_kg';
   isCatchWeight?: boolean;
   weightCaptureRequired?: boolean;
   active?: boolean;

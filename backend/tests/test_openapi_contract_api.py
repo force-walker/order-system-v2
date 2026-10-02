@@ -184,7 +184,9 @@ def test_openapi_error_contracts_for_core_apis():
     assert {"name", "label", "required", "required_scope", "description", "example"}.issubset(import_format_field_props)
 
     import_error_props = spec["components"]["schemas"]["ProductImportError"]["properties"]
-    assert {"index", "import_key", "action", "code", "message", "product_id"}.issubset(import_error_props)
+    assert {
+        "index", "row", "sku", "import_key", "action", "code", "message", "field", "rule", "product_id",
+    }.issubset(import_error_props)
 
     customer_import_error_props = spec["components"]["schemas"]["CustomerImportError"]["properties"]
     assert {"index", "import_key", "action", "code", "message", "customer_id"}.issubset(customer_import_error_props)

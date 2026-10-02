@@ -416,8 +416,10 @@ def test_import_upsert_products_invalid_numeric_is_row_error_and_empty_string_is
     assert res.status_code == 200
     body = res.json()
     assert body["failed"] == 1
-    assert body["created"] == 1
+    assert body["created"] == 0
     assert body["errors"][0]["code"] == "ITEM_VALIDATION_ERROR"
+    listed = client.get("/api/v1/products?include_inactive=true").json()
+    assert all(row.get("import_key") != "IMP-NUM-002" for row in listed)
 
 
 def test_freight_weight_negative_validation_is_422():

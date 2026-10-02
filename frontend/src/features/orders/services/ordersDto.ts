@@ -39,9 +39,9 @@ export const toApiProductCreate = (payload: ProductCreateRequest): ApiProductCre
   purchase_uom: payload.purchaseUom,
   invoice_uom: payload.invoiceUom,
   freight_weight: payload.freightWeight,
+  pricing_basis_default: payload.pricingBasisDefault,
   is_catch_weight: payload.isCatchWeight,
   weight_capture_required: payload.weightCaptureRequired,
-  pricing_basis_default: payload.pricingBasisDefault,
 } as unknown as ApiProductCreateRequest);
 
 export const toApiProductUpdate = (payload: ProductUpdateRequest): ApiProductUpdateRequest => ({
@@ -50,6 +50,7 @@ export const toApiProductUpdate = (payload: ProductUpdateRequest): ApiProductUpd
   purchase_uom: payload.purchaseUom,
   invoice_uom: payload.invoiceUom,
   freight_weight: payload.freightWeight,
+  pricing_basis_default: payload.pricingBasisDefault,
   is_catch_weight: payload.isCatchWeight,
   weight_capture_required: payload.weightCaptureRequired,
   active: payload.active,

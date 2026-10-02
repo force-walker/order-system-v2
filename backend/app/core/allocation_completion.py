@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, write_audit_log
+from app.core.product_consistency import normalize_product_uom
 from app.models.entities import LineStatus, Order, OrderItem, OrderStatus, Product, SupplierAllocation
 
 
@@ -19,13 +20,6 @@ class AllocationCompletionResult:
     complete: bool
     complete_item_ids: frozenset[str]
     reasons: tuple[AllocationIncompleteReason, ...]
-
-
-def _normalized_uom(value: str | None) -> str | None:
-    if value is None:
-        return None
-    normalized = value.strip().lower()
-    return normalized or None
 
 
 def _positive_quantity(value) -> Decimal | None:
@@ -67,8 +61,8 @@ def evaluate_order_allocation_completion(db: Session, order_id: str) -> Allocati
 
     for item, product in active_rows:
         item_reasons: list[AllocationIncompleteReason] = []
-        order_uom = _normalized_uom(product.order_uom)
-        purchase_uom = _normalized_uom(product.purchase_uom)
+        order_uom = normalize_product_uom(product.order_uom)
+        purchase_uom = normalize_product_uom(product.purchase_uom)
         if order_uom != purchase_uom:
             item_reasons.append(
                 AllocationIncompleteReason(
@@ -112,7 +106,7 @@ def evaluate_order_allocation_completion(db: Session, order_id: str) -> Allocati
                     item_reasons.append(AllocationIncompleteReason(item.id, "FINAL_QTY_INVALID", "final quantity must be greater than zero"))
                 else:
                     total_quantity += quantity
-                actual_uom = _normalized_uom(allocation.final_uom)
+                actual_uom = normalize_product_uom(allocation.final_uom)
                 if actual_uom is None:
                     item_reasons.append(AllocationIncompleteReason(item.id, "FINAL_UOM_MISSING", "final UOM is missing"))
                 elif actual_uom != expected_uom:
