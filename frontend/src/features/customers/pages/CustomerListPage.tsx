@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
+import { buildDetailHref, compareText, SelectionHeaderCheckbox, SortableHeader, type SortDirection, useVisibleRowSelection } from 'components/common/MasterTableControls';
 import { archiveCustomer, deleteCustomer, listCustomers, unarchiveCustomer } from 'features/customers/services/customersService';
 import type { CustomerOption } from 'features/customers/types/customer';
 import { toActionableMessage } from 'shared/error';
@@ -12,14 +13,17 @@ type ToastPayload = {
 };
 
 const toTs = (iso?: string) => (iso ? Date.parse(iso) : 0);
+type SortColumn = 'id' | 'customerCode' | 'label' | 'createdAt' | 'updatedAt';
 
 export const CustomerListPage = () => {
   const [customers, setCustomers] = useState<CustomerOption[] | null>(null);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<ToastPayload | null>(null);
-  const [keyword, setKeyword] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
-  const [sortMode, setSortMode] = useState<'idAsc' | 'idDesc' | 'createdAsc' | 'createdDesc' | 'updatedAsc' | 'updatedDesc'>('idAsc');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const keyword = searchParams.get('q') ?? '';
+  const showArchived = searchParams.get('archived') === '1';
+  const sortColumn = (searchParams.get('sort') as SortColumn | null) ?? 'id';
+  const sortDirection = (searchParams.get('dir') as SortDirection | null) ?? 'asc';
   const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
   const load = async () => {
@@ -63,21 +67,40 @@ export const CustomerListPage = () => {
     }
   };
 
+  const setParam = (key: string, value: string, defaultValue = '') => {
+    const next = new URLSearchParams(searchParams);
+    if (value === defaultValue) next.delete(key); else next.set(key, value);
+    setSearchParams(next, { replace: true });
+  };
+  const onSort = (column: SortColumn) => {
+    const next = new URLSearchParams(searchParams);
+    const direction: SortDirection = sortColumn === column && sortDirection === 'asc' ? 'desc' : 'asc';
+    if (column === 'id') next.delete('sort'); else next.set('sort', column);
+    if (direction === 'asc') next.delete('dir'); else next.set('dir', direction);
+    setSearchParams(next, { replace: true });
+  };
+
   const filteredCustomers = useMemo(() => {
     if (!customers) return [];
     const q = keyword.trim().toLowerCase();
-    const byKeyword = q.length === 0 ? customers : customers.filter((c) => c.label.toLowerCase().includes(q));
+    const byKeyword = q.length === 0 ? customers : customers.filter((c) => `${c.customerCode ?? ''} ${c.label}`.toLowerCase().includes(q));
     const sorted = [...byKeyword];
 
-    if (sortMode === 'idDesc') sorted.sort((a, b) => b.id - a.id);
-    else if (sortMode === 'createdAsc') sorted.sort((a, b) => toTs(a.createdAt) - toTs(b.createdAt));
-    else if (sortMode === 'createdDesc') sorted.sort((a, b) => toTs(b.createdAt) - toTs(a.createdAt));
-    else if (sortMode === 'updatedAsc') sorted.sort((a, b) => toTs(a.updatedAt) - toTs(b.updatedAt));
-    else if (sortMode === 'updatedDesc') sorted.sort((a, b) => toTs(b.updatedAt) - toTs(a.updatedAt));
-    else sorted.sort((a, b) => a.id - b.id);
+    sorted.sort((a, b) => {
+      let result = 0;
+      if (sortColumn === 'id') result = a.id - b.id;
+      else if (sortColumn === 'customerCode') result = compareText(a.customerCode, b.customerCode);
+      else if (sortColumn === 'label') result = compareText(a.label, b.label);
+      else if (sortColumn === 'createdAt') result = toTs(a.createdAt) - toTs(b.createdAt);
+      else result = toTs(a.updatedAt) - toTs(b.updatedAt);
+      if (result === 0) result = a.id - b.id;
+      return sortDirection === 'asc' ? result : -result;
+    });
 
     return sorted;
-  }, [customers, keyword, sortMode]);
+  }, [customers, keyword, sortColumn, sortDirection]);
+  const visibleIds = filteredCustomers.map((row) => row.id);
+  const selection = useVisibleRowSelection(visibleIds);
 
   if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;
   if (!customers) return <LoadingState title="顧客一覧を読み込み中" />;
@@ -94,21 +117,10 @@ export const CustomerListPage = () => {
           <div className="list-controls">
             <label className="filter-label">
               検索
-              <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="顧客名 / コード" />
+              <input value={keyword} onChange={(e) => setParam('q', e.target.value)} placeholder="顧客名 / コード" />
             </label>
             <label className="filter-label">
-              並び順
-              <select value={sortMode} onChange={(e) => setSortMode(e.target.value as any)}>
-                <option value="idAsc">ID 昇順</option>
-                <option value="idDesc">ID 降順</option>
-                <option value="createdAsc">作成日時 昇順</option>
-                <option value="createdDesc">作成日時 降順</option>
-                <option value="updatedAsc">更新日時 昇順</option>
-                <option value="updatedDesc">更新日時 降順</option>
-              </select>
-            </label>
-            <label className="filter-label">
-              <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> アーカイブを表示
+              <input type="checkbox" checked={showArchived} onChange={(e) => setParam('archived', e.target.checked ? '1' : '', '')} /> アーカイブを表示
             </label>
             <Link to="/customers/import" className="order-link">Import</Link>
             <Link to="/customers/new" className="order-link">+ 顧客を作成</Link>
@@ -119,28 +131,30 @@ export const CustomerListPage = () => {
           <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>コード</th>
-                <th>表示名</th>
-                <th>作成日時</th>
-                <th>更新日時</th>
+                <th><SelectionHeaderCheckbox checked={selection.allSelected} indeterminate={selection.partiallySelected} onChange={selection.toggleAll} label="表示中の顧客をすべて選択" /></th>
+                <SortableHeader column="id" label="ID" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
+                <SortableHeader column="customerCode" label="コード" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
+                <SortableHeader column="label" label="表示名" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
+                <SortableHeader column="createdAt" label="作成日時" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
+                <SortableHeader column="updatedAt" label="更新日時" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="subtle">条件に合うデータがありません。検索条件を見直してください。</td>
+                  <td colSpan={7} className="subtle">条件に合うデータがありません。検索条件を見直してください。</td>
                 </tr>
               ) : filteredCustomers.map((c) => (
                   <tr key={c.id}>
+                    <td><input type="checkbox" checked={selection.selectedIds.has(c.id)} onChange={() => selection.toggle(c.id)} aria-label={`${c.label}を選択`} /></td>
                     <td>{c.id}</td>
                     <td>{c.customerCode ?? '-'}</td>
                     <td>{c.label}</td>
                     <td>{c.createdAt ?? '-'}</td>
                     <td>{c.updatedAt ?? '-'}</td>
                     <td>
-                      <Link to={`/customers/${c.id}`} className="order-link">詳細</Link>
+                      <Link to={buildDetailHref('/customers', c.id, visibleIds, searchParams.toString())} className="order-link">詳細</Link>
                       {' / '}
                       <Link to={`/customers/${c.id}/edit`} className="order-link">編集</Link>
                       {' / '}

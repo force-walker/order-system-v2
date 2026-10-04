@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
+import { buildDetailHref, compareText, SelectionHeaderCheckbox, SortableHeader, type SortDirection, useVisibleRowSelection } from 'components/common/MasterTableControls';
 import { archiveSupplier, deleteSupplier, listSuppliers, unarchiveSupplier } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
 import { toActionableMessage } from 'shared/error';
@@ -12,16 +13,20 @@ type ToastPayload = {
   type: 'success' | 'error';
   message: string;
 };
+type SortColumn = 'id' | 'supplierCode' | 'name' | 'active' | 'updatedAt';
 
 export const SupplierListPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [items, setItems] = useState<Supplier[]>([]);
   const [toast, setToast] = useState<ToastPayload | null>(null);
-  const [q, setQ] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
-  const [limit, setLimit] = useState(20);
-  const [offset, setOffset] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const q = searchParams.get('q') ?? '';
+  const showArchived = searchParams.get('archived') === '1';
+  const limit = Number(searchParams.get('limit')) || 20;
+  const offset = Number(searchParams.get('offset')) || 0;
+  const sortColumn = (searchParams.get('sort') as SortColumn | null) ?? 'id';
+  const sortDirection = (searchParams.get('dir') as SortDirection | null) ?? 'asc';
   const [hasNext, setHasNext] = useState(false);
   const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
@@ -63,15 +68,37 @@ export const SupplierListPage = () => {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  const setParams = (updates: Record<string, string>, defaults: Record<string, string> = {}) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === (defaults[key] ?? '')) next.delete(key); else next.set(key, value);
+    });
+    setSearchParams(next, { replace: true });
+  };
+  const onSort = (column: SortColumn) => {
+    const direction: SortDirection = sortColumn === column && sortDirection === 'asc' ? 'desc' : 'asc';
+    setParams({ sort: column === 'id' ? '' : column, dir: direction === 'asc' ? '' : direction });
+  };
+
   const filteredItems = useMemo(() => {
     const keyword = q.trim().toLowerCase();
-    if (!keyword) return items;
-
-    return items.filter((row) => {
+    const filtered = !keyword ? items : items.filter((row) => {
       const target = `${row.supplierCode} ${row.name}`.toLowerCase();
       return target.includes(keyword);
     });
-  }, [items, q]);
+    return [...filtered].sort((a, b) => {
+      let result = 0;
+      if (sortColumn === 'id') result = a.id - b.id;
+      else if (sortColumn === 'supplierCode') result = compareText(a.supplierCode, b.supplierCode);
+      else if (sortColumn === 'name') result = compareText(a.name, b.name);
+      else if (sortColumn === 'active') result = Number(a.active) - Number(b.active);
+      else result = Date.parse(a.updatedAt) - Date.parse(b.updatedAt);
+      if (result === 0) result = a.id - b.id;
+      return sortDirection === 'asc' ? result : -result;
+    });
+  }, [items, q, sortColumn, sortDirection]);
+  const visibleIds = filteredItems.map((row) => row.id);
+  const selection = useVisibleRowSelection(visibleIds);
 
   const runAction = async (fn: () => Promise<unknown>, successMessage: string) => {
     try {
@@ -83,8 +110,8 @@ export const SupplierListPage = () => {
     }
   };
 
-  const onPrev = () => setOffset((prev) => Math.max(0, prev - limit));
-  const onNext = () => setOffset((prev) => prev + limit);
+  const onPrev = () => setParams({ offset: String(Math.max(0, offset - limit)) }, { offset: '0' });
+  const onNext = () => setParams({ offset: String(offset + limit) }, { offset: '0' });
 
   if (error) return <ErrorState title="仕入先一覧の取得に失敗しました" description={error} actionLabel="再試行" onAction={load} />;
   if (loading) return <LoadingState title="仕入先一覧を読み込み中" description="しばらくお待ちください" />;
@@ -107,7 +134,7 @@ export const SupplierListPage = () => {
         <div className="list-controls" style={{ marginBottom: 12 }}>
           <label className="filter-label">
             検索(q)
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="supplier_code / name" />
+            <input value={q} onChange={(e) => setParams({ q: e.target.value })} placeholder="supplier_code / name" />
           </label>
 
           <label className="filter-label">
@@ -115,8 +142,7 @@ export const SupplierListPage = () => {
               type="checkbox"
               checked={showArchived}
               onChange={(e) => {
-                setShowArchived(e.target.checked);
-                setOffset(0);
+                setParams({ archived: e.target.checked ? '1' : '', offset: '' });
               }}
             />
             アーカイブを表示
@@ -127,8 +153,7 @@ export const SupplierListPage = () => {
             <select
               value={limit}
               onChange={(e) => {
-                setLimit(Number(e.target.value));
-                setOffset(0);
+                setParams({ limit: e.target.value, offset: '' }, { limit: '20' });
               }}
             >
               {PAGE_SIZE_OPTIONS.map((n) => (
@@ -142,28 +167,30 @@ export const SupplierListPage = () => {
           <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>supplier_code</th>
-                <th>name</th>
-                <th>active</th>
-                <th>updated_at</th>
+                <th><SelectionHeaderCheckbox checked={selection.allSelected} indeterminate={selection.partiallySelected} onChange={selection.toggleAll} label="表示中の仕入先をすべて選択" /></th>
+                <SortableHeader column="id" label="ID" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
+                <SortableHeader column="supplierCode" label="supplier_code" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
+                <SortableHeader column="name" label="name" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
+                <SortableHeader column="active" label="active" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
+                <SortableHeader column="updatedAt" label="updated_at" activeColumn={sortColumn} direction={sortDirection} onSort={onSort} />
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="subtle">条件に合う仕入先がありません。検索条件を見直してください。</td>
+                  <td colSpan={7} className="subtle">条件に合う仕入先がありません。検索条件を見直してください。</td>
                 </tr>
               ) : filteredItems.map((row) => (
                   <tr key={row.id}>
+                    <td><input type="checkbox" checked={selection.selectedIds.has(row.id)} onChange={() => selection.toggle(row.id)} aria-label={`${row.name}を選択`} /></td>
                     <td>{row.id}</td>
                     <td>{row.supplierCode}</td>
                     <td>{row.name}</td>
                     <td>{row.active ? 'true' : 'false'}</td>
                     <td>{new Date(row.updatedAt).toLocaleString('ja-JP')}</td>
                     <td>
-                      <Link to={`/suppliers/${row.id}`} className="order-link">詳細</Link>
+                      <Link to={buildDetailHref('/suppliers', row.id, visibleIds, searchParams.toString())} className="order-link">詳細</Link>
                       {' / '}
                       <Link to={`/suppliers/${row.id}/edit`} className="order-link">編集</Link>
                       {' / '}

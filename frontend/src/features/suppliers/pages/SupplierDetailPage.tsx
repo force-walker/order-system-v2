@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { archiveSupplier, deleteSupplier, getSupplier, unarchiveSupplier } from 'features/suppliers/services/suppliersService';
+import { compareText, MasterDetailNavigation, useMasterDetailNavigation } from 'components/common/MasterTableControls';
+import { archiveSupplier, deleteSupplier, getSupplier, listSuppliers, unarchiveSupplier } from 'features/suppliers/services/suppliersService';
 import type { Supplier } from 'features/suppliers/types/supplier';
 import { SupplierProductMappingPanel } from 'features/suppliers/components/SupplierProductMappingPanel';
 import { toActionableMessage } from 'shared/error';
@@ -11,6 +12,20 @@ export const SupplierDetailPage = () => {
   const navigate = useNavigate();
   const [supplier, setSupplier] = useState<Supplier | null | undefined>(undefined);
   const [error, setError] = useState('');
+  const id = Number(supplierId);
+  const fallbackIds = useCallback(async () => {
+    const rows: Supplier[] = [];
+    let offset = 0;
+    let hasNext = true;
+    while (hasNext) {
+      const result = await listSuppliers({ active: 'all', includeInactive: true, limit: 200, offset });
+      rows.push(...result.items);
+      hasNext = result.hasNext;
+      offset += 200;
+    }
+    return rows.sort((a, b) => compareText(a.supplierCode, b.supplierCode) || a.id - b.id).map((row) => row.id);
+  }, []);
+  const recordNavigation = useMasterDetailNavigation({ currentId: id, basePath: '/suppliers', fallbackIds });
 
   const load = async () => {
     const id = Number(supplierId);
@@ -35,7 +50,7 @@ export const SupplierDetailPage = () => {
     try {
       await fn();
       sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: success }));
-      navigate('/suppliers');
+      navigate(recordNavigation.listHref);
     } catch (e) {
       setError(toActionableMessage(e, '操作に失敗しました'));
     }
@@ -50,6 +65,7 @@ export const SupplierDetailPage = () => {
       <section className="card detail-layout">
         <div className="detail-header">
           <h2>仕入先詳細</h2>
+          <MasterDetailNavigation navigation={recordNavigation} />
         </div>
         <dl className="kv-list">
           <div><dt>ID</dt><dd>{supplier.id}</dd></div>
@@ -58,7 +74,7 @@ export const SupplierDetailPage = () => {
           <div><dt>状態</dt><dd>{supplier.active ? '有効' : '無効'}</dd></div>
         </dl>
         <div className="detail-actions">
-          <Link to="/suppliers" className="order-link">仕入先一覧へ戻る</Link>
+          <Link to={recordNavigation.listHref} className="order-link">仕入先一覧へ戻る</Link>
           <Link to={`/suppliers/${supplier.id}/edit`} className="order-link">仕入先を編集</Link>
           <button
             type="button"

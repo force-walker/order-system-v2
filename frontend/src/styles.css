@@ -449,6 +449,23 @@ button:disabled { opacity: 0.6; }
   margin-bottom: 10px;
 }
 
+.sortable-header {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.detail-record-navigation {
+  display: flex;
+  gap: 8px;
+}
+
 .detail-grid {
   display: grid;
   gap: 14px;

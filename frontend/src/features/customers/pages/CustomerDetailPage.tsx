@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { archiveCustomer, deleteCustomer, getCustomerDetail, unarchiveCustomer } from 'features/customers/services/customersService';
+import { compareText, MasterDetailNavigation, useMasterDetailNavigation } from 'components/common/MasterTableControls';
+import { archiveCustomer, deleteCustomer, getCustomerDetail, listCustomers, unarchiveCustomer } from 'features/customers/services/customersService';
 import type { CustomerDetail } from 'features/customers/types/customer';
 import { toActionableMessage } from 'shared/error';
 
@@ -10,6 +11,12 @@ export const CustomerDetailPage = () => {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<CustomerDetail | null | undefined>(undefined);
   const [error, setError] = useState('');
+  const id = Number(customerId);
+  const fallbackIds = useCallback(async () => {
+    const rows = await listCustomers(true);
+    return [...rows].sort((a, b) => compareText(a.customerCode, b.customerCode) || a.id - b.id).map((row) => row.id);
+  }, []);
+  const recordNavigation = useMasterDetailNavigation({ currentId: id, basePath: '/customers', fallbackIds });
 
   const load = async () => {
     const id = Number(customerId);
@@ -34,7 +41,7 @@ export const CustomerDetailPage = () => {
     try {
       await fn();
       sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: success }));
-      navigate('/customers');
+      navigate(recordNavigation.listHref);
     } catch (e) {
       setError(toActionableMessage(e, '操作に失敗しました'));
     }
@@ -48,6 +55,7 @@ export const CustomerDetailPage = () => {
     <section className="card detail-layout">
       <div className="detail-header">
         <h2>顧客詳細</h2>
+        <MasterDetailNavigation navigation={recordNavigation} />
       </div>
       <dl className="kv-list">
         <div><dt>ID</dt><dd>{customer.id}</dd></div>
@@ -57,7 +65,7 @@ export const CustomerDetailPage = () => {
         <div><dt>状態</dt><dd>{customer.active ? '有効' : '無効'}</dd></div>
       </dl>
       <div className="detail-actions">
-        <Link to="/customers" className="order-link">顧客一覧へ戻る</Link>
+        <Link to={recordNavigation.listHref} className="order-link">顧客一覧へ戻る</Link>
         <Link to={`/customers/${customer.id}/edit`} className="order-link">顧客を編集</Link>
         <button
           type="button"

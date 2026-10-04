@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { archiveProduct, deleteProduct, getProductDetail, unarchiveProduct } from 'features/products/services/productsService';
+import { compareText, MasterDetailNavigation, useMasterDetailNavigation } from 'components/common/MasterTableControls';
+import { archiveProduct, deleteProduct, getProductDetail, listProducts, unarchiveProduct } from 'features/products/services/productsService';
 import { ProductSupplierMappingPanel } from 'features/products/components/ProductSupplierMappingPanel';
 import type { ProductDetail } from 'features/products/types/product';
 import { toActionableMessage } from 'shared/error';
@@ -11,6 +12,12 @@ export const ProductDetailPage = () => {
   const navigate = useNavigate();
   const [product, setProduct] = useState<ProductDetail | null | undefined>(undefined);
   const [error, setError] = useState('');
+  const id = Number(productId);
+  const fallbackIds = useCallback(async () => {
+    const rows = await listProducts(true);
+    return [...rows].sort((a, b) => compareText(a.sku, b.sku) || a.id - b.id).map((row) => row.id);
+  }, []);
+  const recordNavigation = useMasterDetailNavigation({ currentId: id, basePath: '/products', fallbackIds });
 
   const load = async () => {
     const id = Number(productId);
@@ -35,7 +42,7 @@ export const ProductDetailPage = () => {
     try {
       await fn();
       sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: success }));
-      navigate('/products');
+      navigate(recordNavigation.listHref);
     } catch (e) {
       setError(toActionableMessage(e, '操作に失敗しました'));
     }
@@ -50,6 +57,7 @@ export const ProductDetailPage = () => {
       <section className="card detail-layout">
         <div className="detail-header">
           <h2>商品詳細</h2>
+          <MasterDetailNavigation navigation={recordNavigation} />
         </div>
         <dl className="kv-list">
           <div><dt>ID</dt><dd>{product.id}</dd></div>
@@ -63,7 +71,7 @@ export const ProductDetailPage = () => {
           <div><dt>有効</dt><dd>{product.active ? '有効' : '無効'}</dd></div>
         </dl>
         <div className="detail-actions">
-          <Link to="/products" className="order-link">商品一覧へ戻る</Link>
+          <Link to={recordNavigation.listHref} className="order-link">商品一覧へ戻る</Link>
           <Link to={`/products/${product.id}/edit`} className="order-link">商品を編集</Link>
           <button
             type="button"
