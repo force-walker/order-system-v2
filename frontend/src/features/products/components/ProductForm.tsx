@@ -10,15 +10,16 @@ type Props = {
 };
 
 type FormState = ProductCreateRequest & { active: boolean };
+const UOM_OPTIONS = ['piece', 'kg', 'case'] as const;
 
 const toInitial = (initial?: ProductDetail): FormState => {
   const pricingBasisDefault = initial?.pricingBasisDefault ?? 'uom_count';
   const usesKgPricing = pricingBasisDefault === 'uom_kg';
   return {
     name: initial?.name ?? '',
-    orderUom: initial?.orderUom ?? 'kg',
-    purchaseUom: initial?.purchaseUom ?? 'kg',
-    invoiceUom: usesKgPricing ? 'KG' : (initial?.invoiceUom ?? 'kg'),
+    orderUom: initial?.orderUom ?? 'piece',
+    purchaseUom: usesKgPricing ? 'kg' : (initial?.purchaseUom ?? 'piece'),
+    invoiceUom: usesKgPricing ? 'kg' : (initial?.invoiceUom ?? 'piece'),
     freightWeight: initial?.freightWeight ?? 0,
     pricingBasisDefault,
     isCatchWeight: usesKgPricing || (initial?.isCatchWeight ?? false),
@@ -79,15 +80,25 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
       </label>
       <label>
         注文単位
-        <input value={form.orderUom} onChange={(e) => setForm((p) => ({ ...p, orderUom: e.target.value }))} />
+        <select value={form.orderUom} onChange={(e) => setForm((p) => ({ ...p, orderUom: e.target.value }))}>
+          {UOM_OPTIONS.map((uom) => <option key={uom} value={uom} disabled={uom === 'kg' && !usesKgPricing}>{uom}</option>)}
+        </select>
       </label>
       <label>
         仕入単位
-        <input value={form.purchaseUom} onChange={(e) => setForm((p) => ({ ...p, purchaseUom: e.target.value }))} />
+        <select
+          value={form.purchaseUom}
+          disabled={usesKgPricing}
+          onChange={(e) => setForm((p) => ({ ...p, purchaseUom: e.target.value, invoiceUom: e.target.value }))}
+        >
+          {UOM_OPTIONS.map((uom) => <option key={uom} value={uom}>{uom}</option>)}
+        </select>
       </label>
       <label>
         請求単位
-        <input value={form.invoiceUom} disabled={usesKgPricing} onChange={(e) => setForm((p) => ({ ...p, invoiceUom: e.target.value }))} />
+        <select value={form.invoiceUom} disabled>
+          {UOM_OPTIONS.map((uom) => <option key={uom} value={uom}>{uom}</option>)}
+        </select>
       </label>
       <label>
         運賃重量
@@ -105,8 +116,8 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
         <select value={form.pricingBasisDefault} onChange={(e) => setForm((p) => {
           const pricingBasisDefault = e.target.value as 'uom_count' | 'uom_kg';
           return pricingBasisDefault === 'uom_kg'
-            ? { ...p, pricingBasisDefault, invoiceUom: 'KG', isCatchWeight: true, weightCaptureRequired: true }
-            : { ...p, pricingBasisDefault };
+            ? { ...p, pricingBasisDefault, purchaseUom: 'kg', invoiceUom: 'kg', isCatchWeight: true, weightCaptureRequired: true }
+            : { ...p, pricingBasisDefault, orderUom: p.orderUom === 'kg' ? 'piece' : p.orderUom };
         })}>
           <option value="uom_count">uom_count</option>
           <option value="uom_kg">uom_kg</option>

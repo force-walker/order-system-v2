@@ -515,6 +515,12 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
             )
             continue
 
+        # Persist the same canonical UOM values that were validated. Other
+        # import strings retain their original spelling.
+        for field in ("order_uom", "purchase_uom", "invoice_uom"):
+            if normalized.get(field) is not None:
+                normalized[field] = getattr(item, field)
+
         if item.import_key:
             if item.import_key in seen_import_keys:
                 _append_row_error(

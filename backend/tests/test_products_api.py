@@ -40,9 +40,9 @@ def _seed_product(sku: str = "SKU-001") -> int:
     p = Product(
         sku=sku,
         name="Test Product",
-        order_uom="count",
-        purchase_uom="count",
-        invoice_uom="count",
+        order_uom="piece",
+        purchase_uom="piece",
+        invoice_uom="piece",
         freight_weight=Decimal("0.500"),
         is_catch_weight=False,
         weight_capture_required=False,
@@ -91,9 +91,9 @@ def test_create_product_auto_code_and_manual_code_rejected():
         "name": "Created Product",
         "legacy_code": "L-001",
         "legacy_unit_code": "U-01",
-        "order_uom": "count",
-        "purchase_uom": "count",
-        "invoice_uom": "count",
+        "order_uom": "piece",
+        "purchase_uom": "piece",
+        "invoice_uom": "piece",
         "freight_weight": "0.625",
         "is_catch_weight": False,
         "weight_capture_required": False,
@@ -119,9 +119,9 @@ def test_create_product_validation_errors_are_422():
         "/api/v1/products",
         json={
             "name": "X",
-            "order_uom": "count",
-            "purchase_uom": "count",
-            "invoice_uom": "count",
+            "order_uom": "piece",
+            "purchase_uom": "piece",
+            "invoice_uom": "piece",
             "pricing_basis_default": "unknown_basis",
         },
     )
@@ -152,9 +152,9 @@ def test_create_product_auto_code_generation_is_sequential():
     client = _client()
     common = {
         "name": "Auto Product",
-        "order_uom": "count",
-        "purchase_uom": "count",
-        "invoice_uom": "count",
+        "order_uom": "piece",
+        "purchase_uom": "piece",
+        "invoice_uom": "piece",
         "pricing_basis_default": "uom_count",
     }
 
@@ -258,9 +258,9 @@ def test_import_upsert_products_create_success():
                 {
                     "import_key": "IMP-001",
                     "name": "Imported Product",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
+                    "order_uom": "piece",
+                    "purchase_uom": "piece",
+                    "invoice_uom": "piece",
                     "freight_weight": "0.375",
                 }
             ]
@@ -288,9 +288,9 @@ def test_import_upsert_products_import_key_update_success():
                 {
                     "import_key": "IMP-UPD-001",
                     "name": "Before Update",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
+                    "order_uom": "piece",
+                    "purchase_uom": "piece",
+                    "invoice_uom": "piece",
                 }
             ]
         },
@@ -334,9 +334,9 @@ def test_import_upsert_products_partial_update_keeps_unspecified_and_null_fields
                     "name": "Partial Base",
                     "legacy_code": "LEG-BASE",
                     "freight_weight": "0.250",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
+                    "order_uom": "piece",
+                    "purchase_uom": "piece",
+                    "invoice_uom": "piece",
                 }
             ]
         },
@@ -368,16 +368,16 @@ def test_import_upsert_products_duplicate_import_key_conflict_in_payload():
                 {
                     "import_key": "IMP-DUP-001",
                     "name": "A",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
+                    "order_uom": "piece",
+                    "purchase_uom": "piece",
+                    "invoice_uom": "piece",
                 },
                 {
                     "import_key": "IMP-DUP-001",
                     "name": "B",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
+                    "order_uom": "piece",
+                    "purchase_uom": "piece",
+                    "invoice_uom": "piece",
                 },
             ]
         },
@@ -397,17 +397,17 @@ def test_import_upsert_products_invalid_numeric_is_row_error_and_empty_string_is
                 {
                     "import_key": "IMP-NUM-001",
                     "name": "Num Test",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
+                    "order_uom": "piece",
+                    "purchase_uom": "piece",
+                    "invoice_uom": "piece",
                     "sales_price": "not-number",
                 },
                 {
                     "import_key": "IMP-NUM-002",
                     "name": "Num Test2",
-                    "order_uom": "count",
-                    "purchase_uom": "count",
-                    "invoice_uom": "count",
+                    "order_uom": "piece",
+                    "purchase_uom": "piece",
+                    "invoice_uom": "piece",
                     "sales_price": "",
                 },
             ]
@@ -428,9 +428,9 @@ def test_freight_weight_negative_validation_is_422():
         "/api/v1/products",
         json={
             "name": "Invalid Freight Weight",
-            "order_uom": "count",
-            "purchase_uom": "count",
-            "invoice_uom": "count",
+            "order_uom": "piece",
+            "purchase_uom": "piece",
+            "invoice_uom": "piece",
             "freight_weight": "-0.001",
         },
     )

@@ -2,6 +2,7 @@ import json
 import re
 from datetime import UTC, date, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -616,20 +617,21 @@ def test_manual_confirmed_to_allocated_accepts_explicit_cross_unit_purchase_quan
     assert response.status_code == 200
 
 
-def test_cross_unit_bulk_save_requires_explicit_qty_and_uses_purchase_uom():
+@pytest.mark.parametrize(("purchase_uom", "purchase_qty"), [("case", 2), ("kg", 18.5)])
+def test_cross_unit_bulk_save_requires_explicit_qty_and_uses_purchase_uom(purchase_uom, purchase_qty):
     order_id, item_ids, supplier_id = _seed_order_with_items(
         item_count=1,
         ordered_qty=3,
         order_uom="piece",
-        purchase_uom="kg",
-        invoice_uom="kg",
+        purchase_uom=purchase_uom,
+        invoice_uom=purchase_uom,
     )
     client = _client()
 
     listed = client.get(f"/api/v1/order-item-allocations?order_status=confirmed")
     row = next(row for row in listed.json() if row["order_item_id"] == item_ids[0])
     assert row["order_uom"] == "piece"
-    assert row["purchase_uom"] == "kg"
+    assert row["purchase_uom"] == purchase_uom
     assert row["allocated_qty"] is None
 
     suggested = client.post(
@@ -648,15 +650,15 @@ def test_cross_unit_bulk_save_requires_explicit_qty_and_uses_purchase_uom():
 
     saved = client.post(
         "/api/v1/order-item-allocations/bulk-save",
-        json={"items": [{"order_item_id": item_ids[0], "supplier_id": supplier_id, "allocated_qty": 18.5}]},
+        json={"items": [{"order_item_id": item_ids[0], "supplier_id": supplier_id, "allocated_qty": purchase_qty}]},
     )
     assert saved.status_code == 200
     assert saved.json()["succeeded"] == 1
 
     db = TestingSessionLocal()
     allocation = db.query(SupplierAllocation).filter(SupplierAllocation.order_item_id == item_ids[0]).one()
-    assert float(allocation.final_qty) == 18.5
-    assert allocation.final_uom == "kg"
+    assert float(allocation.final_qty) == purchase_qty
+    assert allocation.final_uom == purchase_uom
     assert db.get(Order, order_id).status == OrderStatus.allocated
     db.close()
 

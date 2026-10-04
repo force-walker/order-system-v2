@@ -108,9 +108,9 @@ def test_422_for_input_validation_errors():
         json={
             "sku": "SKU-Y",
             "name": "P",
-            "order_uom": "count",
-            "purchase_uom": "count",
-            "invoice_uom": "count",
+            "order_uom": "piece",
+            "purchase_uom": "piece",
+            "invoice_uom": "piece",
             "pricing_basis_default": "bad_enum",
         },
     )

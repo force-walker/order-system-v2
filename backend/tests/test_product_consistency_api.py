@@ -18,9 +18,9 @@ def client() -> TestClient:
 def _payload(**overrides):
     payload = {
         "name": "Consistent Product",
-        "order_uom": "PC",
-        "purchase_uom": "PC",
-        "invoice_uom": "PC",
+        "order_uom": "piece",
+        "purchase_uom": "piece",
+        "invoice_uom": "piece",
         "pricing_basis_default": "uom_count",
         "is_catch_weight": False,
         "weight_capture_required": False,
@@ -41,6 +41,7 @@ def test_create_allows_fixed_unit_and_catch_weight_products(client):
         "/api/v1/products",
         json=_payload(
             name="Catch",
+            purchase_uom="KG",
             invoice_uom="KG",
             pricing_basis_default="uom_kg",
             is_catch_weight=True,
@@ -95,10 +96,21 @@ def test_create_rejects_blank_or_unsupported_uom_and_normalizes_case(client):
 
     normalized = client.post(
         "/api/v1/products",
-        json=_payload(order_uom=" pc ", purchase_uom="PC", invoice_uom=" pc "),
+        json=_payload(order_uom=" PIECE ", purchase_uom="Case", invoice_uom=" CASE "),
     )
     assert normalized.status_code == 201
+    assert normalized.json()["order_uom"] == "piece"
+    assert normalized.json()["purchase_uom"] == "case"
+    assert normalized.json()["invoice_uom"] == "case"
     assert normalize_product_uom(" KG ") == "kg"
+
+    for unsupported_uom in ("PC", "count"):
+        rejected = client.post(
+            "/api/v1/products",
+            json=_payload(order_uom=unsupported_uom, purchase_uom=unsupported_uom, invoice_uom=unsupported_uom),
+        )
+        assert rejected.status_code == 422
+        assert "PRODUCT_UOM_INVALID" in _rules(rejected)
 
 
 def test_patch_validates_merged_final_state_and_updates_pricing_basis(client):
@@ -107,17 +119,19 @@ def test_patch_validates_merged_final_state_and_updates_pricing_basis(client):
 
     updated_cross_unit = client.patch(
         f"/api/v1/products/{product_id}",
-        json={"purchase_uom": "KG", "name": "Cross Unit"},
+        json={"purchase_uom": "CASE", "invoice_uom": "case", "name": "Cross Unit"},
     )
     assert updated_cross_unit.status_code == 200
     current = client.get(f"/api/v1/products/{product_id}").json()
     assert current["name"] == "Cross Unit"
-    assert current["purchase_uom"] == "KG"
+    assert current["purchase_uom"] == "case"
+    assert current["invoice_uom"] == "case"
 
     updated = client.patch(
         f"/api/v1/products/{product_id}",
         json={
             "pricing_basis_default": "uom_kg",
+            "purchase_uom": "KG",
             "invoice_uom": "KG",
             "is_catch_weight": True,
             "weight_capture_required": True,
@@ -143,15 +157,46 @@ def test_uom_count_exceptions_remain_warnings_not_errors():
     }
 
 
-def test_sku_000013_target_configuration_is_consistent():
+def test_canonical_cross_unit_kg_configuration_is_consistent():
     assert product_master_errors(
-        order_uom="PC",
-        purchase_uom="PC",
-        invoice_uom="KG",
+        order_uom="piece",
+        purchase_uom="kg",
+        invoice_uom="kg",
         pricing_basis_default=PricingBasis.uom_kg,
         is_catch_weight=True,
         weight_capture_required=True,
     ) == ()
+
+
+@pytest.mark.parametrize(
+    ("order_uom", "purchase_uom", "invoice_uom", "basis", "catch", "weight", "expected_rule"),
+    [
+        ("piece", "piece", "piece", PricingBasis.uom_count, False, False, None),
+        ("case", "case", "case", PricingBasis.uom_count, False, False, None),
+        ("kg", "kg", "kg", PricingBasis.uom_count, False, False, "UOM_COUNT_ORDER_UOM_MUST_BE_COUNTABLE"),
+        ("piece", "case", "case", PricingBasis.uom_count, False, False, None),
+        ("piece", "case", "piece", PricingBasis.uom_count, False, False, "PURCHASE_INVOICE_UOM_MUST_MATCH"),
+        ("piece", "kg", "kg", PricingBasis.uom_kg, True, True, None),
+        ("case", "kg", "kg", PricingBasis.uom_kg, True, True, None),
+        ("kg", "kg", "kg", PricingBasis.uom_kg, True, True, None),
+        ("piece", "case", "kg", PricingBasis.uom_kg, True, True, "PURCHASE_INVOICE_UOM_MUST_MATCH"),
+        ("piece", "kg", "case", PricingBasis.uom_kg, True, True, "UOM_KG_REQUIRES_KG_INVOICE_UOM"),
+    ],
+)
+def test_canonical_uom_rule_matrix(order_uom, purchase_uom, invoice_uom, basis, catch, weight, expected_rule):
+    errors = product_master_errors(
+        order_uom=order_uom,
+        purchase_uom=purchase_uom,
+        invoice_uom=invoice_uom,
+        pricing_basis_default=basis,
+        is_catch_weight=catch,
+        weight_capture_required=weight,
+    )
+    rules = {issue.rule for issue in errors}
+    if expected_rule is None:
+        assert rules == set()
+    else:
+        assert expected_rule in rules
 
 
 def test_bulk_create_update_and_upsert_reject_inconsistent_rows_atomically(client):

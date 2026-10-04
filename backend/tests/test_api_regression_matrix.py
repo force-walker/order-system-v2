@@ -94,9 +94,9 @@ def test_products_regression_status_matrix():
 
     payload = {
         "name": "P",
-        "order_uom": "count",
-        "purchase_uom": "count",
-        "invoice_uom": "count",
+        "order_uom": "piece",
+        "purchase_uom": "piece",
+        "invoice_uom": "piece",
         "pricing_basis_default": "uom_count",
     }
 

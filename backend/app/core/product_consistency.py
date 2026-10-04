@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from app.models.entities import PricingBasis
 
 
-# These are distinct supported UOM codes, not semantic aliases.  In particular,
-# PC and piece (and CASE and CTN) remain different values for equality checks.
-SUPPORTED_PRODUCT_UOMS = frozenset({"box", "case", "count", "ctn", "kg", "pc", "piece"})
+# These are the only canonical Product UOM codes. Legacy values such as PC,
+# count, and CTN are deliberately not treated as aliases.
+SUPPORTED_PRODUCT_UOMS = frozenset({"case", "kg", "piece"})
 
 
 @dataclass(frozen=True)
@@ -71,6 +71,24 @@ def validate_product_master_consistency(
         if isinstance(pricing_basis_default, PricingBasis)
         else str(pricing_basis_default)
     )
+    if pricing_basis == PricingBasis.uom_count.value and normalized["order_uom"] == "kg":
+        issues.append(ProductConsistencyIssue(
+            severity="ERROR",
+            field="order_uom",
+            rule="UOM_COUNT_ORDER_UOM_MUST_BE_COUNTABLE",
+            message="uom_count pricing requires piece or case as Order UOM.",
+        ))
+    if (
+        purchase_value in SUPPORTED_PRODUCT_UOMS
+        and invoice_value in SUPPORTED_PRODUCT_UOMS
+        and purchase_value != invoice_value
+    ):
+        issues.append(ProductConsistencyIssue(
+            severity="ERROR",
+            field="invoice_uom",
+            rule="PURCHASE_INVOICE_UOM_MUST_MATCH",
+            message="Purchase UOM and Invoice UOM must match.",
+        ))
     if pricing_basis == PricingBasis.uom_kg.value and not is_catch_weight:
         issues.append(ProductConsistencyIssue(
             severity="ERROR",
@@ -106,19 +124,6 @@ def validate_product_master_consistency(
             rule="CATCH_WEIGHT_CAPTURE_FLAG_REVIEW",
             message="Catch-weight product has weight_capture_required disabled.",
         ))
-    if (
-        pricing_basis == PricingBasis.uom_count.value
-        and purchase_value in SUPPORTED_PRODUCT_UOMS
-        and invoice_value in SUPPORTED_PRODUCT_UOMS
-        and purchase_value != invoice_value
-    ):
-        issues.append(ProductConsistencyIssue(
-            severity="WARNING",
-            field="invoice_uom",
-            rule="FIXED_UNIT_INVOICE_UOM_REVIEW",
-            message="uom_count product has different Purchase and Invoice UOM values.",
-        ))
-
     return tuple(issues)
 
 

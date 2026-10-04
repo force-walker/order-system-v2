@@ -91,9 +91,9 @@ def test_product_enum_all_values_acceptance(basis: str):
     client = _client()
     payload = {
         "name": "Enum Product",
-        "order_uom": "count",
-        "purchase_uom": "count",
-        "invoice_uom": "KG" if basis == "uom_kg" else "count",
+        "order_uom": "piece",
+        "purchase_uom": "KG" if basis == "uom_kg" else "piece",
+        "invoice_uom": "KG" if basis == "uom_kg" else "piece",
         "pricing_basis_default": basis,
         "is_catch_weight": basis == "uom_kg",
         "weight_capture_required": basis == "uom_kg",
@@ -109,9 +109,9 @@ def test_product_unknown_enum_and_empty_string_and_length():
         "/api/v1/products",
         json={
             "name": "P",
-            "order_uom": "count",
-            "purchase_uom": "count",
-            "invoice_uom": "count",
+            "order_uom": "piece",
+            "purchase_uom": "piece",
+            "invoice_uom": "piece",
             "pricing_basis_default": "unknown",
         },
     )
@@ -121,9 +121,9 @@ def test_product_unknown_enum_and_empty_string_and_length():
         "/api/v1/products",
         json={
             "name": "",
-            "order_uom": "count",
-            "purchase_uom": "count",
-            "invoice_uom": "count",
+            "order_uom": "piece",
+            "purchase_uom": "piece",
+            "invoice_uom": "piece",
             "pricing_basis_default": "uom_count",
         },
     )
@@ -134,9 +134,9 @@ def test_product_unknown_enum_and_empty_string_and_length():
         json={
             "sku": "S" * 65,
             "name": "P",
-            "order_uom": "count",
-            "purchase_uom": "count",
-            "invoice_uom": "count",
+            "order_uom": "piece",
+            "purchase_uom": "piece",
+            "invoice_uom": "piece",
             "pricing_basis_default": "uom_count",
         },
     )

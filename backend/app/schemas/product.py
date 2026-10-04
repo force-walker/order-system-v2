@@ -2,12 +2,21 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.entities import PricingBasis
 
 
-class ProductCreateRequest(BaseModel):
+class ProductUomInput(BaseModel):
+    @field_validator("order_uom", "purchase_uom", "invoice_uom", mode="before", check_fields=False)
+    @classmethod
+    def normalize_uom(cls, value):
+        if isinstance(value, str):
+            return value.strip().casefold()
+        return value
+
+
+class ProductCreateRequest(ProductUomInput):
     name: str = Field(min_length=1, max_length=255)
     legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
     category_code: str | None = Field(default=None, min_length=1, max_length=16)
@@ -51,7 +60,7 @@ class ProductCreateRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class ProductUpdateRequest(BaseModel):
+class ProductUpdateRequest(ProductUomInput):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
     category_code: str | None = Field(default=None, min_length=1, max_length=16)
@@ -144,7 +153,7 @@ class ProductResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ProductBulkCreateItem(BaseModel):
+class ProductBulkCreateItem(ProductUomInput):
     sku: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
@@ -162,7 +171,7 @@ class ProductBulkCreateRequest(BaseModel):
     items: list[ProductBulkCreateItem] = Field(min_length=1, max_length=500)
 
 
-class ProductBulkUpdateItem(BaseModel):
+class ProductBulkUpdateItem(ProductUomInput):
     id: int = Field(gt=0)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
@@ -207,7 +216,7 @@ class ProductBulkOperationResponse(BaseModel):
     errors: list[BulkOperationError] = Field(default_factory=list)
 
 
-class ProductImportItem(BaseModel):
+class ProductImportItem(ProductUomInput):
     import_key: str | None = Field(default=None, min_length=1, max_length=128)
     legacy_code: str | None = Field(default=None, min_length=1, max_length=128)
     category_code: str | None = Field(default=None, min_length=1, max_length=16)

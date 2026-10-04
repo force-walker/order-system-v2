@@ -115,9 +115,9 @@ def test_audit_logs_are_written_for_mutating_operations():
         "/api/v1/products",
         json={
             "name": "Audit Product",
-            "order_uom": "count",
-            "purchase_uom": "count",
-            "invoice_uom": "count",
+            "order_uom": "piece",
+            "purchase_uom": "piece",
+            "invoice_uom": "piece",
             "pricing_basis_default": "uom_count",
         },
     ).json()
