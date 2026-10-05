@@ -141,12 +141,12 @@ export const SystemSettingsPage = () => {
 
         <form className="form-grid settings-form" onSubmit={handleSubmit}>
           <label>
-            為替レート（JPY→HKD）
+            為替レート（1 HKDあたりJPY）
             <input
               type="number"
               inputMode="decimal"
               step="0.0001"
-              min="0"
+              min="0.0001"
               value={form.exchangeRate}
               onChange={(e) => setField('exchangeRate', e.target.value)}
               disabled={saving}
@@ -160,6 +160,7 @@ export const SystemSettingsPage = () => {
               inputMode="decimal"
               step="0.001"
               min="0"
+              max="99.999"
               value={form.jpGrossMarginPct}
               onChange={(e) => setField('jpGrossMarginPct', e.target.value)}
               disabled={saving}
@@ -173,6 +174,7 @@ export const SystemSettingsPage = () => {
               inputMode="decimal"
               step="0.001"
               min="0"
+              max="99.999"
               value={form.hkGrossMarginPct}
               onChange={(e) => setField('hkGrossMarginPct', e.target.value)}
               disabled={saving}

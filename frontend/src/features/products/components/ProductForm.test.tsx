@@ -49,9 +49,10 @@ it('keeps purchase and invoice UOM equal for uom_count', async () => {
   render(<ProductForm submitLabel="保存" onSubmit={onSubmit} />);
 
   await actor.type(screen.getByLabelText('商品名 *'), 'Case purchase product');
-  await actor.type(screen.getByLabelText('Freight Weight (KG)'), '0.25');
+  await actor.type(screen.getByLabelText('運賃重量（KG / piece）'), '0.25');
   await actor.selectOptions(screen.getByLabelText('仕入単位'), 'case');
   expect((screen.getByLabelText('請求単位') as HTMLSelectElement).value).toBe('case');
+  expect(screen.getByLabelText('運賃重量（KG / case）')).toBeTruthy();
   await actor.click(screen.getByRole('button', { name: '保存' }));
   expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
     orderUom: 'piece',
@@ -69,7 +70,7 @@ it('requires a positive freight weight for uom_count', async () => {
   await actor.click(screen.getByRole('button', { name: '保存' }));
   expect(await screen.findByText(/Freight Weight.*必須/)).toBeTruthy();
   expect(onSubmit).not.toHaveBeenCalled();
-  await actor.type(screen.getByLabelText('Freight Weight (KG)'), '0.25');
+  await actor.type(screen.getByLabelText('運賃重量（KG / piece）'), '0.25');
   await actor.click(screen.getByRole('button', { name: '保存' }));
   expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ freightWeight: 0.25 }));
 });
@@ -77,8 +78,9 @@ it('requires a positive freight weight for uom_count', async () => {
 it('sets and locks freight weight at one for uom_kg and clears it when returning to count pricing', async () => {
   const actor = userEvent.setup();
   render(<ProductForm submitLabel="保存" onSubmit={vi.fn()} />);
-  const freight = screen.getByLabelText('Freight Weight (KG)') as HTMLInputElement;
+  const freight = screen.getByLabelText('運賃重量（KG / piece）') as HTMLInputElement;
   await actor.selectOptions(screen.getByLabelText('課金基準'), 'uom_kg');
+  expect(freight.closest('label')?.textContent).toContain('運賃重量（KG / kg）');
   expect(freight.value).toBe('1');
   expect(freight.disabled).toBe(true);
   await actor.selectOptions(screen.getByLabelText('課金基準'), 'uom_count');

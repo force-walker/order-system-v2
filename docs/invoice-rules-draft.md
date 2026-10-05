@@ -10,7 +10,14 @@ Support invoices that can contain both fixed-unit items and catch-weight items i
 ## Rule A: Piece-based pricing
 When `pricing_basis = uom_count`
 
-`line_subtotal = ordered_qty × unit_price_uom_count`
+```text
+billable_qty = PurchaseResult.purchased_qty
+billable_uom = Product.invoice_uom
+line_subtotal = billable_qty × sales_unit_price
+```
+
+`OrderItem.ordered_qty` remains the customer order quantity; it is not the
+source of truth for the current Invoice billable quantity.
 
 Then:
 - `line_after_discount = line_subtotal - discount_amount`
@@ -25,7 +32,11 @@ Note:
 ## Rule B: Catch-weight pricing
 When `pricing_basis = uom_kg`
 
-`line_subtotal = actual_weight_kg × unit_price_uom_kg`
+```text
+billable_qty = PurchaseResult.actual_weight_kg
+billable_uom = kg
+line_subtotal = billable_qty × sales_unit_price
+```
 
 Then same discount/tax flow as above.
 
@@ -50,12 +61,19 @@ Gross margin formula:
 `gross_margin_rate = (sales_unit_price - unit_cost_basis) / sales_unit_price`
 
 If one invoice line is sourced from multiple purchase results (split procurement),
-`unit_cost_basis` must be weighted average cost:
+the Purchase Result costs are combined into `purchase_unit_cost` first:
 
-`unit_cost_basis = Σ(purchased_qty_i × final_unit_cost_i) / Σ(purchased_qty_i)`
+```text
+effective_unit_cost_i = final_unit_cost_i when present, otherwise unit_cost_i
+purchase_unit_cost = Σ(purchased_qty_i × effective_unit_cost_i) / Σ(purchased_qty_i)
+```
+
+`unit_cost_basis` is not the weighted Purchase Result cost itself. It is the
+final HKD cost derived from `purchase_unit_cost` after FX conversion, Japan
+margin adjustment, and unit freight as defined below.
 
 Notes:
-- Weighted average is calculated in purchase UOM-consistent basis.
+- `purchase_unit_cost` is calculated in a purchase UOM-consistent basis.
 - `gross_margin_rate` is internal-only and excluded from customer invoice PDF.
 
 ### Freight and margin cost basis
@@ -64,8 +82,8 @@ Notes:
 entered as a positive decimal; for `uom_kg` it is fixed at `1`.
 
 ```text
-purchase_unit_cost = Σ(purchased_qty_i × effective_unit_cost_i) / Σ(purchased_qty_i)
 effective_unit_cost_i = final_unit_cost_i when present, otherwise unit_cost_i
+purchase_unit_cost = Σ(purchased_qty_i × effective_unit_cost_i) / Σ(purchased_qty_i)
 base_cost_hkd = purchase_unit_cost / exchange_rate
 japan_adjusted_cost = base_cost_hkd / ((100 - jp_gross_margin_pct) / 100)
 unit_freight_cost = freight_weight × freight_unit_price
@@ -75,10 +93,13 @@ gross_profit = (sales_unit_price - unit_cost_basis) × billable_qty
 gross_margin_pct = gross_profit / (sales_unit_price × billable_qty) × 100
 ```
 
-Intermediate values are not rounded. HKD monetary snapshots are rounded once
-to two decimals using half-up rounding when persisted on the Invoice Item.
-`unit_cost_basis` is a creation-time snapshot; later settings changes do not
-silently alter an existing Draft or Finalized Invoice.
+The internal steps used to derive `unit_cost_basis` are not rounded early.
+The resulting cost basis is rounded once to two decimals using the half-up money
+policy and becomes the authoritative Invoice Item `unit_cost_basis`. Subsequent
+gross-profit and gross-margin calculations use this confirmed, rounded
+`unit_cost_basis`; they do not return to the unrounded internal cost. The field
+is a creation-time snapshot, so later settings changes do not silently alter an
+existing Draft or Finalized Invoice.
 
 ---
 
@@ -89,7 +110,7 @@ Cannot finalize invoice if any of the following is true:
 2. Selected lines include `invoiceable_flag=false`
 3. Selected lines include `result_status=not_filled`
 4. Catch-weight line missing `actual_weight_kg`
-5. Required price missing (`unit_price_uom_kg` or `unit_price_uom_count`)
+5. Required Invoice Item `sales_unit_price` missing
 6. Invalid billable qty (`billable_qty <= 0` or exceeds uninvoiced remainder)
 7. Tax mismatch (`tax_amount != floor(total_amount_pretax × tax_rate)`)
 8. Total mismatch (`total_amount != total_amount_pretax + tax_amount`)
@@ -108,26 +129,40 @@ Non-selected lines remain `invoice_line_status=uninvoiced` for later invoicing o
 
 ## Piece-based lines
 Show:
-- quantity in ordered UOM
-- unit price per ordered UOM
-- amount
+- quantity: `billable_qty` sourced from `PurchaseResult.purchased_qty`
+- UOM: `Product.invoice_uom`
+- unit price: `sales_unit_price` per `Product.invoice_uom`
+- amount: `billable_qty × sales_unit_price`
+
+`OrderItem.ordered_qty` and the order UOM may be shown separately as a reference,
+but they are not the source of truth for Invoice billing quantity. For example,
+an Order for `10 piece` may be billed as `2 case × sales_unit_price per case`.
 
 ## Catch-weight lines
 Show:
 - ordered quantity/UOM (optional reference)
-- actual weight (kg)
-- unit price per kg
-- amount based on actual weight
+- `billable_qty = PurchaseResult.actual_weight_kg`
+- `billable_uom = kg`
+- `sales_unit_price` per kg
+- amount: `billable_qty × sales_unit_price`
 
 Recommended line description example:
-- `Fish A (Order: 1 piece, Actual: 2.43 kg × ¥3,200/kg)`
+- `Fish A (Order: 1 piece, Actual: 2.43 kg × HK$320.00/kg)`
+
+The amount in this description is documentation-only; the actual customer price
+is the Invoice Item `sales_unit_price`.
 
 ---
 
 ## Currency Rules
 - Purchase currency: `JPY`
 - Sales/Invoice currency: `HKD`
-- FX conversion rule (rate source + timing + rounding) must be fixed before production.
+- `exchange_rate` is JPY per `1 HKD`.
+- `base_cost_hkd = purchase_unit_cost / exchange_rate`.
+- Example: `exchange_rate = 20` means `1 HKD = 20 JPY`, so
+  `JPY 1,000 / 20 = HKD 50`.
+- The rounding policy used when confirming `unit_cost_basis` is defined in
+  **Freight and margin cost basis** above.
 
 ## Rounding Rules
 Define globally and keep fixed:

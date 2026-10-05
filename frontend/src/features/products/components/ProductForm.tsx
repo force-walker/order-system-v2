@@ -102,7 +102,7 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
         </select>
       </label>
       <label>
-        Freight Weight (KG)
+        {`運賃重量（KG / ${form.invoiceUom}）`}
         <input
           type="number"
           inputMode="decimal"

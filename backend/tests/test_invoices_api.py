@@ -1781,7 +1781,8 @@ def test_draft_generation_rounds_hkd_cost_and_margin_half_up():
 
     items = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items")
     row = items.json()[0]
-    # 1000 / 2 / (1 - 25%) + (10 * 0.333) => 670.00 after final half-up rounding.
+    # Cost-basis internals are unrounded, then unit_cost_basis is fixed at 670.00
+    # by half-up money rounding. Profit and margin use that confirmed snapshot.
     assert float(row["unit_cost_basis"]) == 670.0
     assert float(row["sales_unit_price"]) == 893.33
     assert float(row["gross_margin_pct"]) == 25.0
