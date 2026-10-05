@@ -188,6 +188,13 @@ class InvoiceDraftCandidateItem(BaseModel):
     billable_qty: float | None = None
     billable_uom: str
     sales_unit_price: float
+    purchase_unit_cost: float | None = None
+    exchange_rate: float
+    jp_gross_margin_pct: float
+    hk_gross_margin_pct: float
+    freight_weight: float
+    freight_rate: float
+    unit_freight_cost: float
     unit_cost_basis: float | None = None
     auto_price_error: str | None = None
     line_amount: float | None = None

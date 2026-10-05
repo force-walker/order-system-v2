@@ -20,7 +20,7 @@ const toInitial = (initial?: ProductDetail): FormState => {
     orderUom: initial?.orderUom ?? 'piece',
     purchaseUom: usesKgPricing ? 'kg' : (initial?.purchaseUom ?? 'piece'),
     invoiceUom: usesKgPricing ? 'kg' : (initial?.invoiceUom ?? 'piece'),
-    freightWeight: initial?.freightWeight ?? 0,
+    freightWeight: usesKgPricing ? 1 : initial?.freightWeight,
     pricingBasisDefault,
     isCatchWeight: usesKgPricing || (initial?.isCatchWeight ?? false),
     weightCaptureRequired: usesKgPricing || (initial?.weightCaptureRequired ?? false),
@@ -43,6 +43,7 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return setError('商品名は必須です');
+    if (form.freightWeight == null || form.freightWeight <= 0) return setError('Freight Weight (KG) は0より大きい数値が必須です');
 
     setError('');
     setSubmitting(true);
@@ -101,23 +102,25 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
         </select>
       </label>
       <label>
-        運賃重量
+        Freight Weight (KG)
         <input
           type="number"
           inputMode="decimal"
-          min="0"
+          min="0.001"
           step="0.001"
-          value={form.freightWeight}
-          onChange={(e) => setForm((p) => ({ ...p, freightWeight: Number(e.target.value) }))}
+          value={form.freightWeight ?? ''}
+          disabled={usesKgPricing}
+          onChange={(e) => setForm((p) => ({ ...p, freightWeight: e.target.value === '' ? undefined : Number(e.target.value) }))}
         />
+        {usesKgPricing ? <small className="subtle">KG請求では1 KG固定です</small> : null}
       </label>
       <label>
         課金基準
         <select value={form.pricingBasisDefault} onChange={(e) => setForm((p) => {
           const pricingBasisDefault = e.target.value as 'uom_count' | 'uom_kg';
           return pricingBasisDefault === 'uom_kg'
-            ? { ...p, pricingBasisDefault, purchaseUom: 'kg', invoiceUom: 'kg', isCatchWeight: true, weightCaptureRequired: true }
-            : { ...p, pricingBasisDefault, orderUom: p.orderUom === 'kg' ? 'piece' : p.orderUom };
+            ? { ...p, pricingBasisDefault, purchaseUom: 'kg', invoiceUom: 'kg', freightWeight: 1, isCatchWeight: true, weightCaptureRequired: true }
+            : { ...p, pricingBasisDefault, orderUom: p.orderUom === 'kg' ? 'piece' : p.orderUom, freightWeight: undefined };
         })}>
           <option value="uom_count">uom_count</option>
           <option value="uom_kg">uom_kg</option>

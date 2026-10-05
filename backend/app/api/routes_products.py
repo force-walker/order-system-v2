@@ -42,6 +42,7 @@ PRODUCT_CONSISTENCY_FIELDS = (
     "pricing_basis_default",
     "is_catch_weight",
     "weight_capture_required",
+    "freight_weight",
 )
 
 
@@ -564,6 +565,7 @@ def import_upsert_products(payload: ProductImportRequest, db: Session = Depends(
                 "pricing_basis_default": item.pricing_basis_default or PricingBasis.uom_count,
                 "is_catch_weight": item.is_catch_weight if item.is_catch_weight is not None else False,
                 "weight_capture_required": item.weight_capture_required if item.weight_capture_required is not None else False,
+                "freight_weight": item.freight_weight,
             }
         else:
             updates = {

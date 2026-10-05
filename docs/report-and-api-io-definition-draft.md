@@ -303,7 +303,7 @@ Columns:
 ---
 
 ## 粗利計算ルール（内部）
-- `gross_margin_rate = (sales_unit_price - unit_cost_basis) / unit_cost_basis`
+- `gross_margin_rate = (sales_unit_price - unit_cost_basis) / sales_unit_price`
 - split仕入れ時の `unit_cost_basis` は加重平均:
   - `Σ(purchased_qty_i × final_unit_cost_i) / Σ(purchased_qty_i)`
 - 請求行は `billable_qty` / `billable_uom` を基準に算出する

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -45,6 +46,7 @@ def _seed_product(sku: str) -> int:
         is_catch_weight=False,
         weight_capture_required=False,
         pricing_basis_default=PricingBasis.uom_count,
+        freight_weight=Decimal("1"),
         active=True,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
@@ -72,6 +74,7 @@ def test_products_bulk_create_with_partial_failure():
                     "purchase_uom": "piece",
                     "invoice_uom": "piece",
                     "pricing_basis_default": "uom_count",
+                    "freight_weight": 1,
                 },
                 {
                     "sku": "SKU-BULK-NEW",
@@ -80,6 +83,7 @@ def test_products_bulk_create_with_partial_failure():
                     "purchase_uom": "piece",
                     "invoice_uom": "piece",
                     "pricing_basis_default": "uom_count",
+                    "freight_weight": 1,
                 },
             ]
         },
@@ -117,6 +121,7 @@ def test_products_bulk_update_upsert_delete():
                     "purchase_uom": "piece",
                     "invoice_uom": "piece",
                     "pricing_basis_default": "uom_count",
+                    "freight_weight": 1,
                 },
                 {
                     "sku": "SKU-BULK-NEW2",
@@ -125,6 +130,7 @@ def test_products_bulk_update_upsert_delete():
                     "purchase_uom": "piece",
                     "invoice_uom": "piece",
                     "pricing_basis_default": "uom_count",
+                    "freight_weight": 1,
                 },
             ]
         },

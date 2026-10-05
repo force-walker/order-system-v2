@@ -33,7 +33,7 @@ PRODUCT_IMPORT_FORMAT = ImportFormatResponse(
         ImportFormatField(name="name_en", label="Name EN", required=False, required_scope=ImportRequiredScope.never, description="English product name.", example="Imported Product"),
         ImportFormatField(name="name_zh_hk", label="Name ZH HK", required=False, required_scope=ImportRequiredScope.never, description="Traditional Chinese product name.", example="匯入商品"),
         ImportFormatField(name="customs_reference_price", label="Customs Reference Price", required=False, required_scope=ImportRequiredScope.never, description="Reference price for customs.", example=680),
-        ImportFormatField(name="freight_weight", label="Freight Weight", required=False, required_scope=ImportRequiredScope.never, description="Freight weighting factor for HKD draft cost calculation.", example=0.5),
+        ImportFormatField(name="freight_weight", label="Freight Weight (KG)", required=True, required_scope=ImportRequiredScope.create, description="KG weight per invoice unit used for freight; must be 1 for uom_kg and greater than 0 for uom_count.", example=0.5),
         ImportFormatField(name="customs_origin_text", label="Customs Origin Text", required=False, required_scope=ImportRequiredScope.never, description="Origin text for customs documents.", example="Japan"),
         ImportFormatField(name="remarks", label="Remarks", required=False, required_scope=ImportRequiredScope.never, description="Free text remarks.", example="Seasonal item"),
         ImportFormatField(name="chayafuda_flag", label="Chayafuda Flag", required=False, required_scope=ImportRequiredScope.never, description="Chayafuda handling flag.", example=False),

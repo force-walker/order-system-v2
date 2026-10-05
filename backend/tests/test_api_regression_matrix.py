@@ -98,6 +98,7 @@ def test_products_regression_status_matrix():
         "purchase_uom": "piece",
         "invoice_uom": "piece",
         "pricing_basis_default": "uom_count",
+        "freight_weight": 1,
     }
 
     ok = client.post("/api/v1/products", json=payload)

@@ -49,6 +49,7 @@ it('keeps purchase and invoice UOM equal for uom_count', async () => {
   render(<ProductForm submitLabel="保存" onSubmit={onSubmit} />);
 
   await actor.type(screen.getByLabelText('商品名 *'), 'Case purchase product');
+  await actor.type(screen.getByLabelText('Freight Weight (KG)'), '0.25');
   await actor.selectOptions(screen.getByLabelText('仕入単位'), 'case');
   expect((screen.getByLabelText('請求単位') as HTMLSelectElement).value).toBe('case');
   await actor.click(screen.getByRole('button', { name: '保存' }));
@@ -58,4 +59,29 @@ it('keeps purchase and invoice UOM equal for uom_count', async () => {
     invoiceUom: 'case',
     pricingBasisDefault: 'uom_count',
   }));
+});
+
+it('requires a positive freight weight for uom_count', async () => {
+  const actor = userEvent.setup();
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  render(<ProductForm submitLabel="保存" onSubmit={onSubmit} />);
+  await actor.type(screen.getByLabelText('商品名 *'), 'Freight product');
+  await actor.click(screen.getByRole('button', { name: '保存' }));
+  expect(await screen.findByText(/Freight Weight.*必須/)).toBeTruthy();
+  expect(onSubmit).not.toHaveBeenCalled();
+  await actor.type(screen.getByLabelText('Freight Weight (KG)'), '0.25');
+  await actor.click(screen.getByRole('button', { name: '保存' }));
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ freightWeight: 0.25 }));
+});
+
+it('sets and locks freight weight at one for uom_kg and clears it when returning to count pricing', async () => {
+  const actor = userEvent.setup();
+  render(<ProductForm submitLabel="保存" onSubmit={vi.fn()} />);
+  const freight = screen.getByLabelText('Freight Weight (KG)') as HTMLInputElement;
+  await actor.selectOptions(screen.getByLabelText('課金基準'), 'uom_kg');
+  expect(freight.value).toBe('1');
+  expect(freight.disabled).toBe(true);
+  await actor.selectOptions(screen.getByLabelText('課金基準'), 'uom_count');
+  expect(freight.value).toBe('');
+  expect(freight.disabled).toBe(false);
 });

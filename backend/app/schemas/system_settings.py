@@ -6,9 +6,9 @@ from pydantic import BaseModel, Field, computed_field, model_validator
 
 class SystemSettingsUpdateRequest(BaseModel):
     exchange_rate: Decimal = Field(gt=Decimal("0"))
-    jp_gross_margin_pct: Decimal | None = Field(default=None, ge=Decimal("0"))
-    jp_gross_margin_rate: Decimal | None = Field(default=None, ge=Decimal("0"))
-    hk_gross_margin_pct: Decimal = Field(ge=Decimal("0"))
+    jp_gross_margin_pct: Decimal | None = Field(default=None, ge=Decimal("0"), lt=Decimal("100"))
+    jp_gross_margin_rate: Decimal | None = Field(default=None, ge=Decimal("0"), lt=Decimal("100"))
+    hk_gross_margin_pct: Decimal = Field(ge=Decimal("0"), lt=Decimal("100"))
     freight_unit_price: Decimal = Field(ge=Decimal("0"))
 
     model_config = {"extra": "forbid"}

@@ -73,6 +73,13 @@ type ApiInvoiceDraftCandidate = {
     billable_qty: number | null;
     billable_uom: string;
     sales_unit_price: number;
+    purchase_unit_cost: number | null;
+    exchange_rate: number;
+    jp_gross_margin_pct: number;
+    hk_gross_margin_pct: number;
+    freight_weight: number;
+    freight_rate: number;
+    unit_freight_cost: number;
     unit_cost_basis: number | null;
     auto_price_error: string | null;
     line_amount: number | null;
@@ -288,6 +295,13 @@ export const listInvoiceDraftCandidates = async (): Promise<InvoiceDraftCandidat
       billableQty: item.billable_qty ?? undefined,
       billableUom: item.billable_uom,
       salesUnitPrice: item.sales_unit_price,
+      purchaseUnitCost: item.purchase_unit_cost ?? undefined,
+      exchangeRate: item.exchange_rate,
+      jpGrossMarginPct: item.jp_gross_margin_pct,
+      hkGrossMarginPct: item.hk_gross_margin_pct,
+      freightWeight: item.freight_weight,
+      freightRate: item.freight_rate,
+      unitFreightCost: item.unit_freight_cost,
       unitCostBasis: item.unit_cost_basis ?? undefined,
       autoPriceError: item.auto_price_error ?? undefined,
       lineAmount: item.line_amount ?? undefined,

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import Decimal
 
 from app.models.entities import PricingBasis
 
@@ -36,6 +37,7 @@ def validate_product_master_consistency(
     pricing_basis_default: PricingBasis | str,
     is_catch_weight: bool,
     weight_capture_required: bool,
+    freight_weight: Decimal | float | None,
 ) -> tuple[ProductConsistencyIssue, ...]:
     """Return hard errors and review warnings for one final Product state.
 
@@ -71,6 +73,23 @@ def validate_product_master_consistency(
         if isinstance(pricing_basis_default, PricingBasis)
         else str(pricing_basis_default)
     )
+    freight_weight_value = Decimal(str(freight_weight)) if freight_weight is not None else None
+    if pricing_basis == PricingBasis.uom_count.value and (
+        freight_weight_value is None or freight_weight_value <= 0
+    ):
+        issues.append(ProductConsistencyIssue(
+            severity="ERROR",
+            field="freight_weight",
+            rule="UOM_COUNT_REQUIRES_FREIGHT_WEIGHT",
+            message="uom_count pricing requires freight_weight greater than 0 KG per invoice unit.",
+        ))
+    if pricing_basis == PricingBasis.uom_kg.value and freight_weight_value != Decimal("1"):
+        issues.append(ProductConsistencyIssue(
+            severity="ERROR",
+            field="freight_weight",
+            rule="UOM_KG_FREIGHT_WEIGHT_MUST_BE_ONE",
+            message="uom_kg pricing requires freight_weight to be exactly 1 KG.",
+        ))
     if pricing_basis == PricingBasis.uom_count.value and normalized["order_uom"] == "kg":
         issues.append(ProductConsistencyIssue(
             severity="ERROR",

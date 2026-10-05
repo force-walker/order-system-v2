@@ -2543,6 +2543,20 @@ export interface components {
             billable_uom: string;
             /** Sales Unit Price */
             sales_unit_price: number;
+            /** Purchase Unit Cost */
+            purchase_unit_cost?: number | null;
+            /** Exchange Rate */
+            exchange_rate: number;
+            /** Jp Gross Margin Pct */
+            jp_gross_margin_pct: number;
+            /** Hk Gross Margin Pct */
+            hk_gross_margin_pct: number;
+            /** Freight Weight */
+            freight_weight: number;
+            /** Freight Rate */
+            freight_rate: number;
+            /** Unit Freight Cost */
+            unit_freight_cost: number;
             /** Unit Cost Basis */
             unit_cost_basis?: number | null;
             /** Auto Price Error */

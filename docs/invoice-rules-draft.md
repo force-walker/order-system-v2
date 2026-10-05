@@ -47,7 +47,7 @@ At invoice calculation stage, system stores:
 - `gross_margin_rate` (internal metric, not printed)
 
 Gross margin formula:
-`gross_margin_rate = (sales_unit_price - unit_cost_basis) / unit_cost_basis`
+`gross_margin_rate = (sales_unit_price - unit_cost_basis) / sales_unit_price`
 
 If one invoice line is sourced from multiple purchase results (split procurement),
 `unit_cost_basis` must be weighted average cost:
@@ -57,6 +57,28 @@ If one invoice line is sourced from multiple purchase results (split procurement
 Notes:
 - Weighted average is calculated in purchase UOM-consistent basis.
 - `gross_margin_rate` is internal-only and excluded from customer invoice PDF.
+
+### Freight and margin cost basis
+
+`Product.freight_weight` is KG per invoice unit. For `uom_count` it must be
+entered as a positive decimal; for `uom_kg` it is fixed at `1`.
+
+```text
+purchase_unit_cost = Σ(purchased_qty_i × effective_unit_cost_i) / Σ(purchased_qty_i)
+effective_unit_cost_i = final_unit_cost_i when present, otherwise unit_cost_i
+base_cost_hkd = purchase_unit_cost / exchange_rate
+japan_adjusted_cost = base_cost_hkd / ((100 - jp_gross_margin_pct) / 100)
+unit_freight_cost = freight_weight × freight_unit_price
+unit_cost_basis = japan_adjusted_cost + unit_freight_cost
+sales_unit_price_default = unit_cost_basis / ((100 - hk_gross_margin_pct) / 100)
+gross_profit = (sales_unit_price - unit_cost_basis) × billable_qty
+gross_margin_pct = gross_profit / (sales_unit_price × billable_qty) × 100
+```
+
+Intermediate values are not rounded. HKD monetary snapshots are rounded once
+to two decimals using half-up rounding when persisted on the Invoice Item.
+`unit_cost_basis` is a creation-time snapshot; later settings changes do not
+silently alter an existing Draft or Finalized Invoice.
 
 ---
 

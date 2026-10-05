@@ -81,6 +81,7 @@ def _seed_purchased_order(
         is_catch_weight=is_catch_weight,
         weight_capture_required=is_catch_weight,
         pricing_basis_default=(PricingBasis.uom_kg if is_catch_weight else PricingBasis.uom_count),
+        freight_weight=Decimal("1"),
         active=True,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),

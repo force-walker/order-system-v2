@@ -15,7 +15,7 @@ import type { CustomerOption, InvoiceDraftCandidate, InvoiceDraftListRow, Invoic
 import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import { toActionableMessage } from 'shared/error';
 
-const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
+const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'HKD', maximumFractionDigits: 2 });
 const numberFormatter = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 });
 const percentFormatter = new Intl.NumberFormat('ja-JP', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
@@ -505,7 +505,21 @@ export const InvoiceDraftPage = () => {
                       <td>-</td>
                       <td>{candidate.deliveryDate}</td>
                       <td>未作成</td>
-                      <td style={{ textAlign: 'right' }}>{formatNumber(item.unitCostBasis)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {formatNumber(item.unitCostBasis)}
+                        <details className="pricing-breakdown">
+                          <summary>原価内訳</summary>
+                          <dl>
+                            <div><dt>納品確認の仕入単価</dt><dd>{formatNumber(item.purchaseUnitCost)}</dd></div>
+                            <div><dt>為替レート</dt><dd>{formatNumber(item.exchangeRate)}</dd></div>
+                            <div><dt>日本粗利率</dt><dd>{percentFormatter.format(item.jpGrossMarginPct)}%</dd></div>
+                            <div><dt>運賃重量</dt><dd>{formatNumber(item.freightWeight)} KG</dd></div>
+                            <div><dt>運賃単価</dt><dd>{formatNumber(item.freightRate)} / KG</dd></div>
+                            <div><dt>単位あたり運賃</dt><dd>{formatNumber(item.unitFreightCost)}</dd></div>
+                            <div><dt>香港基準粗利率</dt><dd>{percentFormatter.format(item.hkGrossMarginPct)}%</dd></div>
+                          </dl>
+                        </details>
+                      </td>
                       <td style={{ textAlign: 'right', minWidth: 140 }}>
                         <input
                           type="number"

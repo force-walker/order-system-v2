@@ -285,6 +285,13 @@ export type InvoiceDraftCandidateItem = {
   billableQty?: number;
   billableUom: string;
   salesUnitPrice: number;
+  purchaseUnitCost?: number;
+  exchangeRate: number;
+  jpGrossMarginPct: number;
+  hkGrossMarginPct: number;
+  freightWeight: number;
+  freightRate: number;
+  unitFreightCost: number;
   unitCostBasis?: number;
   autoPriceError?: string;
   lineAmount?: number;

@@ -156,6 +156,7 @@ def test_create_product_auto_code_generation_is_sequential():
         "purchase_uom": "piece",
         "invoice_uom": "piece",
         "pricing_basis_default": "uom_count",
+        "freight_weight": "0.25",
     }
 
     first = client.post("/api/v1/products", json=common)
@@ -247,6 +248,9 @@ def test_get_product_import_format():
     import_key_field = next(field for field in body["fields"] if field["name"] == "import_key")
     assert import_key_field["required"] is False
     assert import_key_field["required_scope"] == "never"
+    freight_field = next(field for field in body["fields"] if field["name"] == "freight_weight")
+    assert freight_field["required"] is True
+    assert freight_field["required_scope"] == "create"
 
 
 def test_import_upsert_products_create_success():
@@ -291,6 +295,7 @@ def test_import_upsert_products_import_key_update_success():
                     "order_uom": "piece",
                     "purchase_uom": "piece",
                     "invoice_uom": "piece",
+                    "freight_weight": "0.25",
                 }
             ]
         },
@@ -371,6 +376,7 @@ def test_import_upsert_products_duplicate_import_key_conflict_in_payload():
                     "order_uom": "piece",
                     "purchase_uom": "piece",
                     "invoice_uom": "piece",
+                    "freight_weight": "0.25",
                 },
                 {
                     "import_key": "IMP-DUP-001",
@@ -378,6 +384,7 @@ def test_import_upsert_products_duplicate_import_key_conflict_in_payload():
                     "order_uom": "piece",
                     "purchase_uom": "piece",
                     "invoice_uom": "piece",
+                    "freight_weight": "0.25",
                 },
             ]
         },
@@ -400,6 +407,7 @@ def test_import_upsert_products_invalid_numeric_is_row_error_and_empty_string_is
                     "order_uom": "piece",
                     "purchase_uom": "piece",
                     "invoice_uom": "piece",
+                    "freight_weight": "0.25",
                     "sales_price": "not-number",
                 },
                 {
@@ -408,6 +416,7 @@ def test_import_upsert_products_invalid_numeric_is_row_error_and_empty_string_is
                     "order_uom": "piece",
                     "purchase_uom": "piece",
                     "invoice_uom": "piece",
+                    "freight_weight": "0.25",
                     "sales_price": "",
                 },
             ]
@@ -435,3 +444,34 @@ def test_freight_weight_negative_validation_is_422():
         },
     )
     assert res.status_code == 422
+
+
+def test_import_invalid_freight_weight_rolls_back_the_entire_batch():
+    client = _client()
+    res = client.post(
+        "/api/v1/products/import-upsert",
+        json={"items": [
+            {
+                "import_key": "IMP-FREIGHT-VALID",
+                "name": "Valid freight",
+                "order_uom": "piece",
+                "purchase_uom": "piece",
+                "invoice_uom": "piece",
+                "freight_weight": "0.25",
+            },
+            {
+                "import_key": "IMP-FREIGHT-INVALID",
+                "name": "Invalid freight",
+                "order_uom": "piece",
+                "purchase_uom": "piece",
+                "invoice_uom": "piece",
+                "freight_weight": "0",
+            },
+        ]},
+    )
+    assert res.status_code == 200
+    assert res.json()["created"] == 0
+    assert res.json()["failed"] == 1
+    assert res.json()["errors"][0]["rule"] == "UOM_COUNT_REQUIRES_FREIGHT_WEIGHT"
+    rows = client.get("/api/v1/products?include_inactive=true").json()
+    assert all(row.get("import_key") != "IMP-FREIGHT-VALID" for row in rows)

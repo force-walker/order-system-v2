@@ -72,6 +72,13 @@ const candidate = (orderId: string, itemIds = ['item-1']): InvoiceDraftCandidate
     billableQty: 2,
     billableUom: 'CTN',
     salesUnitPrice: 100,
+    purchaseUnitCost: 1000,
+    exchangeRate: 20,
+    jpGrossMarginPct: 10,
+    hkGrossMarginPct: 25,
+    freightWeight: 0.25,
+    freightRate: 40,
+    unitFreightCost: 10,
     unitCostBasis: 60,
     lineAmount: 200,
     grossProfitAmount: 80,
@@ -156,8 +163,12 @@ it('toggles candidate checkboxes, supports multi-select/select-all and shows pri
   expect((first as HTMLInputElement).checked).toBe(false);
   expect((second as HTMLInputElement).checked).toBe(false);
   expect(screen.getAllByDisplayValue('100')).toHaveLength(2);
-  expect(screen.getAllByText('￥80')).toHaveLength(2);
+  expect(screen.getAllByText('HK$80.00')).toHaveLength(2);
   expect(screen.getAllByText('40.0%')).toHaveLength(2);
+  await actor.click(screen.getAllByText('原価内訳')[0]);
+  expect(screen.getAllByText('1,000')[0]).toBeTruthy();
+  expect(screen.getAllByText('0.25 KG')[0]).toBeTruthy();
+  expect(screen.getAllByText('10')[0]).toBeTruthy();
 });
 
 afterEach(cleanup);

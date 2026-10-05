@@ -119,6 +119,7 @@ def test_audit_logs_are_written_for_mutating_operations():
             "purchase_uom": "piece",
             "invoice_uom": "piece",
             "pricing_basis_default": "uom_count",
+            "freight_weight": 1,
         },
     ).json()
 

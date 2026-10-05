@@ -134,6 +134,7 @@ def _seed_order(with_items: bool = False, include_kg_without_weight: bool = Fals
             order_uom="kg",
             purchase_uom="kg",
             invoice_uom="kg",
+            freight_weight=Decimal("1.000"),
             is_catch_weight=include_kg_without_weight,
             weight_capture_required=include_kg_without_weight,
             pricing_basis_default=PricingBasis.uom_kg,
@@ -566,6 +567,18 @@ def test_invoice_candidates_include_purchased_without_delivery_and_legacy_shippe
     assert by_order[purchased_order_id]["items"][0]["purchase_result_ids"] == [purchased_result_id]
     assert by_order[purchased_order_id]["items"][0]["product_sku"]
     assert by_order[purchased_order_id]["items"][0]["sales_unit_price"] >= 0
+    assert {
+        "purchase_unit_cost",
+        "exchange_rate",
+        "jp_gross_margin_pct",
+        "hk_gross_margin_pct",
+        "freight_weight",
+        "freight_rate",
+        "unit_freight_cost",
+        "unit_cost_basis",
+        "gross_profit_amount",
+        "gross_margin_pct",
+    }.issubset(by_order[purchased_order_id]["items"][0])
     assert by_order[purchased_order_id]["order_status"] == "purchased"
     assert by_order[shipped_order_id]["purchase_result_ids"] == [shipped_result_id]
     assert by_order[shipped_order_id]["order_status"] == "shipped"
@@ -628,6 +641,7 @@ def test_cross_unit_purchase_invoices_actual_weight_in_kg():
     product.purchase_uom = "kg"
     product.invoice_uom = "KG"
     product.pricing_basis_default = PricingBasis.uom_kg
+    product.freight_weight = Decimal("1.000")
     product.is_catch_weight = True
     product.weight_capture_required = True
     item.ordered_qty = 3
@@ -1032,10 +1046,10 @@ def test_generate_draft_from_purchase_results_and_finalize_separation():
     items = client.get(f"/api/v1/invoices/{invoice_id}/items")
     assert items.status_code == 200
     assert len(items.json()) >= 1
-    # (1000/20 + 50) / 0.75 = 133.333... => 133.33
-    assert float(items.json()[0]["sales_unit_price"]) == 133.33
-    assert float(items.json()[0]["unit_cost_basis"]) == 40.0
-    assert float(items.json()[0]["gross_margin_pct"]) == 70.0
+    # Cost: 1000 / 1 / (1 - 25%) = 1333.33; sales default grosses that up by HK 25%.
+    assert float(items.json()[0]["sales_unit_price"]) == 1777.78
+    assert float(items.json()[0]["unit_cost_basis"]) == 1333.33
+    assert float(items.json()[0]["gross_margin_pct"]) == 25.0
     assert items.json()[0]["gross_margin_unavailable"] is False
     assert float(items.json()[0]["tax_amount"]) == 0.0
 
@@ -1601,11 +1615,10 @@ def test_invoice_draft_list_margin_formula_and_edge_cases():
     assert listed.status_code == 200
     row = next(r for r in listed.json() if r["invoice_id"] == invoice_id)
 
-    # HKD cost = 1000 / 25 / 1 + 0 = 40.00
-    # margin = (133.33 - 40.00) / 133.33 * 100 => 70.00%
-    assert float(row["unit_cost_basis"]) == 40.0
+    # HKD cost = 1000 / 1 / (1 - 25%) = 1333.33; HK margin default is 25%.
+    assert float(row["unit_cost_basis"]) == 1333.33
     assert row["gross_margin_pct"] is not None
-    assert float(row["gross_margin_pct"]) == 70.0
+    assert float(row["gross_margin_pct"]) == 25.0
     assert row["gross_margin_unavailable"] is False
 
     # 請求単価=0 は計算不可
@@ -1675,9 +1688,29 @@ def test_invoice_draft_list_rows_include_required_columns():
 
 def test_draft_generation_uses_system_settings_and_freight_weight():
     order_id = _seed_order(with_items=True)
-    _seed_system_settings(exchange_rate="2.0000", jp_gross_margin_pct="25.000", freight_unit_price="12.00")
+    _seed_system_settings(
+        exchange_rate="20.0000",
+        jp_gross_margin_pct="10.000",
+        hk_gross_margin_pct="25.000",
+        freight_unit_price="40.00",
+    )
+    db = TestingSessionLocal()
+    product = db.query(Product).filter(Product.name == "Count product").order_by(Product.id.desc()).first()
+    assert product is not None
+    product.freight_weight = Decimal("0.250")
+    db.commit()
+    db.close()
     purchase_result_id = _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000)
     client = _client()
+
+    candidate = next(row for row in client.get("/api/v1/invoices/draft-candidates").json() if row["order_id"] == order_id)
+    candidate_item = candidate["items"][0]
+    assert float(candidate_item["purchase_unit_cost"]) == 1000.0
+    assert float(candidate_item["exchange_rate"]) == 20.0
+    assert float(candidate_item["jp_gross_margin_pct"]) == 10.0
+    assert float(candidate_item["freight_weight"]) == 0.25
+    assert float(candidate_item["freight_rate"]) == 40.0
+    assert float(candidate_item["unit_freight_cost"]) == 10.0
 
     draft = client.post(
         "/api/v1/invoices/generate-draft-from-purchase-results",
@@ -1692,12 +1725,13 @@ def test_draft_generation_uses_system_settings_and_freight_weight():
 
     items = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items")
     row = items.json()[0]
-    # 1000 / 25 / 2 = 20.00, freight = 12 * 0.5 * 0.5 = 3.00, total = 23.00
-    assert float(row["unit_cost_basis"]) == 23.0
-    assert float(row["gross_margin_pct"]) == 82.75
+    # 1000 / 20 / (1 - 10%) + (40 * 0.25) = 65.555..., then HK 25% => 87.41.
+    assert float(row["unit_cost_basis"]) == 65.56
+    assert float(row["sales_unit_price"]) == 87.41
+    assert float(row["gross_margin_pct"]) == 25.0
 
 
-def test_draft_generation_without_freight_weight_uses_zero_freight_component():
+def test_draft_generation_without_freight_weight_is_rejected():
     order_id = _seed_order(with_items=True)
     _seed_system_settings(exchange_rate="2.0000", jp_gross_margin_pct="25.000", freight_unit_price="12.00")
     db = TestingSessionLocal()
@@ -1718,10 +1752,8 @@ def test_draft_generation_without_freight_weight_uses_zero_freight_component():
             "purchase_result_ids": [purchase_result_id],
         },
     )
-    assert draft.status_code == 201
-
-    items = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items")
-    assert float(items.json()[0]["unit_cost_basis"]) == 20.0
+    assert draft.status_code == 422
+    assert draft.json()["detail"]["code"] == "FREIGHT_WEIGHT_REQUIRED"
 
 
 def test_draft_generation_rounds_hkd_cost_and_margin_half_up():
@@ -1749,9 +1781,10 @@ def test_draft_generation_rounds_hkd_cost_and_margin_half_up():
 
     items = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items")
     row = items.json()[0]
-    # 20 + (10 * 0.333 * 0.333 = 1.10889) => 21.11 after half-up rounding
-    assert float(row["unit_cost_basis"]) == 21.11
-    assert float(row["gross_margin_pct"]) == 84.17
+    # 1000 / 2 / (1 - 25%) + (10 * 0.333) => 670.00 after final half-up rounding.
+    assert float(row["unit_cost_basis"]) == 670.0
+    assert float(row["sales_unit_price"]) == 893.33
+    assert float(row["gross_margin_pct"]) == 25.0
 
 
 def test_recalculate_draft_costs_reuses_current_settings_and_product_weight():
@@ -1780,15 +1813,18 @@ def test_recalculate_draft_costs_reuses_current_settings_and_product_weight():
     db.commit()
     db.close()
 
+    # Settings and Product changes do not mutate the stored snapshot without an explicit recalculation request.
+    before_recalc = client.get(f"/api/v1/invoices/{invoice_id}/items")
+    assert float(before_recalc.json()[0]["unit_cost_basis"]) == 672.67
+
     recalc = client.post(f"/api/v1/invoices/{invoice_id}/recalculate-draft-costs")
     assert recalc.status_code == 200
     assert recalc.json()["recalculated_count"] == 1
 
     items = client.get(f"/api/v1/invoices/{invoice_id}/items")
     row = items.json()[0]
-    # 1000 / 20 / 4 = 12.50, freight = 8 * 1 * 1 = 8.00 => 20.50
-    assert float(row["unit_cost_basis"]) == 20.5
-    assert float(row["gross_margin_pct"]) == 84.62
+    # 1000 / 4 / (1 - 20%) = 312.50, freight = 8 * 1 = 8.00 => 320.50
+    assert float(row["unit_cost_basis"]) == 320.5
 
 
 def test_recalculate_draft_costs_rejects_non_draft_invoice():
@@ -1809,6 +1845,10 @@ def test_recalculate_draft_costs_rejects_non_draft_invoice():
     invoice_id = draft.json()["invoice_id"]
     fin = client.post(f"/api/v1/invoices/{invoice_id}/finalize")
     assert fin.status_code == 200
+
+    snapshot = float(client.get(f"/api/v1/invoices/{invoice_id}/items").json()[0]["unit_cost_basis"])
+    _seed_system_settings(exchange_rate="99.0000", jp_gross_margin_pct="5.000", freight_unit_price="99.00")
+    assert float(client.get(f"/api/v1/invoices/{invoice_id}/items").json()[0]["unit_cost_basis"]) == snapshot
 
     recalc = client.post(f"/api/v1/invoices/{invoice_id}/recalculate-draft-costs")
     assert recalc.status_code == 409

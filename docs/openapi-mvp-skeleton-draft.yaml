@@ -6403,6 +6403,29 @@ components:
         sales_unit_price:
           type: number
           title: Sales Unit Price
+        purchase_unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Purchase Unit Cost
+        exchange_rate:
+          type: number
+          title: Exchange Rate
+        jp_gross_margin_pct:
+          type: number
+          title: Jp Gross Margin Pct
+        hk_gross_margin_pct:
+          type: number
+          title: Hk Gross Margin Pct
+        freight_weight:
+          type: number
+          title: Freight Weight
+        freight_rate:
+          type: number
+          title: Freight Rate
+        unit_freight_cost:
+          type: number
+          title: Unit Freight Cost
         unit_cost_basis:
           anyOf:
           - type: number
@@ -6450,6 +6473,12 @@ components:
       - purchase_result_ids
       - billable_uom
       - sales_unit_price
+      - exchange_rate
+      - jp_gross_margin_pct
+      - hk_gross_margin_pct
+      - freight_weight
+      - freight_rate
+      - unit_freight_cost
       title: InvoiceDraftCandidateItem
     InvoiceDraftFromPurchaseResultsRequest:
       properties:
@@ -10089,6 +10118,7 @@ components:
         jp_gross_margin_pct:
           anyOf:
           - type: number
+            exclusiveMaximum: 100.0
             minimum: 0.0
           - type: string
           - type: 'null'
@@ -10096,6 +10126,7 @@ components:
         jp_gross_margin_rate:
           anyOf:
           - type: number
+            exclusiveMaximum: 100.0
             minimum: 0.0
           - type: string
           - type: 'null'
@@ -10103,6 +10134,7 @@ components:
         hk_gross_margin_pct:
           anyOf:
           - type: number
+            exclusiveMaximum: 100.0
             minimum: 0.0
           - type: string
           title: Hk Gross Margin Pct

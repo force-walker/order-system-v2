@@ -180,7 +180,7 @@ export const SystemSettingsPage = () => {
           </label>
 
           <label>
-            運賃単価
+            Freight Rate（HKD / KG）
             <input
               type="number"
               inputMode="decimal"
@@ -193,7 +193,7 @@ export const SystemSettingsPage = () => {
           </label>
 
           <div className="settings-notes">
-            <p className="subtle">確認事項: 粗利・運賃単価の参照画面と自動計算反映範囲は業務ルール確定後に別途連携してください。</p>
+            <p className="subtle">Invoice Draft作成時に、為替・日本粗利・運賃・香港基準粗利を使用して原価と請求単価初期値を計算します。</p>
           </div>
 
           <div className="form-actions">

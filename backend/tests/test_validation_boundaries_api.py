@@ -97,6 +97,7 @@ def test_product_enum_all_values_acceptance(basis: str):
         "pricing_basis_default": basis,
         "is_catch_weight": basis == "uom_kg",
         "weight_capture_required": basis == "uom_kg",
+        "freight_weight": 1,
     }
     res = client.post("/api/v1/products", json=payload)
     assert res.status_code == 201

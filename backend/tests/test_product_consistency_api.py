@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -24,8 +26,11 @@ def _payload(**overrides):
         "pricing_basis_default": "uom_count",
         "is_catch_weight": False,
         "weight_capture_required": False,
+        "freight_weight": "0.25",
     }
     payload.update(overrides)
+    if payload["pricing_basis_default"] == "uom_kg" and "freight_weight" not in overrides:
+        payload["freight_weight"] = "1"
     return payload
 
 
@@ -135,10 +140,53 @@ def test_patch_validates_merged_final_state_and_updates_pricing_basis(client):
             "invoice_uom": "KG",
             "is_catch_weight": True,
             "weight_capture_required": True,
+            "freight_weight": "1",
         },
     )
     assert updated.status_code == 200
     assert updated.json()["pricing_basis_default"] == "uom_kg"
+
+
+def test_freight_weight_rules_apply_to_create_and_patch(client):
+    missing = client.post("/api/v1/products", json=_payload(name="Missing freight", freight_weight=None))
+    assert missing.status_code == 422
+    assert "UOM_COUNT_REQUIRES_FREIGHT_WEIGHT" in _rules(missing)
+
+    zero = client.post("/api/v1/products", json=_payload(name="Zero freight", freight_weight="0"))
+    assert zero.status_code == 422
+    assert "UOM_COUNT_REQUIRES_FREIGHT_WEIGHT" in _rules(zero)
+
+    count_ok = client.post("/api/v1/products", json=_payload(name="Count freight", freight_weight="0.25"))
+    assert count_ok.status_code == 201
+
+    kg_wrong = client.post(
+        "/api/v1/products",
+        json=_payload(
+            name="KG wrong freight",
+            pricing_basis_default="uom_kg",
+            purchase_uom="kg",
+            invoice_uom="kg",
+            is_catch_weight=True,
+            weight_capture_required=True,
+            freight_weight="0.5",
+        ),
+    )
+    assert kg_wrong.status_code == 422
+    assert "UOM_KG_FREIGHT_WEIGHT_MUST_BE_ONE" in _rules(kg_wrong)
+
+    kg_ok = client.post(
+        "/api/v1/products",
+        json=_payload(
+            name="KG correct freight",
+            pricing_basis_default="uom_kg",
+            purchase_uom="kg",
+            invoice_uom="kg",
+            is_catch_weight=True,
+            weight_capture_required=True,
+            freight_weight="1",
+        ),
+    )
+    assert kg_ok.status_code == 201
 
 
 def test_uom_count_exceptions_remain_warnings_not_errors():
@@ -149,6 +197,7 @@ def test_uom_count_exceptions_remain_warnings_not_errors():
         pricing_basis_default=PricingBasis.uom_count,
         is_catch_weight=True,
         weight_capture_required=False,
+        freight_weight=Decimal("0.25"),
     )
     assert not [issue for issue in issues if issue.severity == "ERROR"]
     assert {issue.rule for issue in issues if issue.severity == "WARNING"} == {
@@ -165,6 +214,7 @@ def test_canonical_cross_unit_kg_configuration_is_consistent():
         pricing_basis_default=PricingBasis.uom_kg,
         is_catch_weight=True,
         weight_capture_required=True,
+        freight_weight=Decimal("1"),
     ) == ()
 
 
@@ -191,6 +241,7 @@ def test_canonical_uom_rule_matrix(order_uom, purchase_uom, invoice_uom, basis, 
         pricing_basis_default=basis,
         is_catch_weight=catch,
         weight_capture_required=weight,
+        freight_weight=Decimal("1") if basis == PricingBasis.uom_kg else Decimal("0.25"),
     )
     rules = {issue.rule for issue in errors}
     if expected_rule is None:
@@ -247,7 +298,7 @@ def test_import_prevalidates_all_rows_and_reports_row_sku_and_rule(client):
     assert body["created"] == 0
     assert body["updated"] == 0
     assert body["failed"] == 1
-    error = body["errors"][0]
+    error = next(row for row in body["errors"] if row["rule"] == "UOM_KG_REQUIRES_CATCH_WEIGHT")
     assert error["row"] == 2
     assert error["sku"] == seeded_row["sku"]
     assert error["field"] == "is_catch_weight"

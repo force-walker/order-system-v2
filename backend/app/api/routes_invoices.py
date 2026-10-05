@@ -10,7 +10,15 @@ from app.core.audit import AuditAction, write_audit_log
 from app.core.product_consistency import normalize_product_uom
 from app.core.deliveries import ensure_delivery_document
 from app.core.invoice_pdf import InvoicePdfDocument, InvoicePdfLine, build_invoice_pdf
-from app.core.invoice_pricing import compute_draft_margin, compute_hkd_purchase_unit_cost, get_system_settings_or_404
+from app.core.invoice_pricing import (
+    compute_default_sales_unit_price,
+    compute_draft_margin,
+    compute_hkd_purchase_unit_cost,
+    compute_invoice_cost_basis,
+    compute_unit_freight_cost,
+    compute_weighted_purchase_unit_cost,
+    get_system_settings_or_404,
+)
 from app.core.numbering import (
     ensure_invoice_header_numbers,
     ensure_invoice_item_number,
@@ -111,14 +119,6 @@ def _amount(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def _compute_auto_sales_unit_price(purchase_unit_cost: Decimal | None) -> tuple[Decimal, str | None]:
-    if purchase_unit_cost is None:
-        return Decimal("0.00"), "仕入単価が未設定のため自動計算できません"
-    # sales_unit_price = (purchase_unit_cost / 20 + 50) / 0.75
-    price = ((purchase_unit_cost / Decimal("20")) + Decimal("50")) / Decimal("0.75")
-    return _amount(price), None
-
-
 def _purchase_result_line_values(
     grouped: list[tuple[PurchaseResult, SupplierAllocation, OrderItem, Product]],
     *,
@@ -183,23 +183,36 @@ def _purchase_result_line_values(
             )
         billable_qty = sum((Decimal(str(pr.purchased_qty)) for pr, _, _, _ in grouped), Decimal("0"))
 
-    cost_rows = [
-        (Decimal(str(pr.purchased_qty)), Decimal(str(pr.final_unit_cost if pr.final_unit_cost is not None else pr.unit_cost)))
+    purchase_unit_cost = compute_weighted_purchase_unit_cost(
+        (
+            Decimal(str(pr.purchased_qty)),
+            Decimal(str(pr.final_unit_cost if pr.final_unit_cost is not None else pr.unit_cost))
+            if pr.final_unit_cost is not None or pr.unit_cost is not None
+            else None,
+        )
         for pr, _, _, _ in grouped
-        if pr.final_unit_cost is not None or pr.unit_cost is not None
-    ]
-    purchased_total = sum((qty for qty, _ in cost_rows), Decimal("0"))
-    purchase_unit_cost = (
-        sum((qty * cost for qty, cost in cost_rows), Decimal("0")) / purchased_total
-        if len(cost_rows) == len(grouped) and purchased_total > 0
-        else None
     )
-    auto_sales_unit_price, auto_price_error = _compute_auto_sales_unit_price(purchase_unit_cost)
-    sales_unit_price = _amount(Decimal(str(sales_unit_price_override))) if sales_unit_price_override is not None else auto_sales_unit_price
-    hkd_purchase_unit_cost = compute_hkd_purchase_unit_cost(
+    freight_weight = Decimal(str(product.freight_weight)) if product.freight_weight is not None else None
+    if product.pricing_basis_default == PricingBasis.uom_kg and freight_weight != Decimal("1"):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "UOM_KG_FREIGHT_WEIGHT_MUST_BE_ONE",
+                "message": f"{product.sku}: uom_kg pricing requires freight_weight to be exactly 1 KG",
+            },
+        )
+    raw_invoice_cost_basis = compute_invoice_cost_basis(
         jpy_purchase_unit_cost=purchase_unit_cost,
-        freight_weight=(Decimal(str(product.freight_weight)) if product.freight_weight is not None else None),
+        freight_weight=freight_weight,
         settings=settings,
+    )
+    hkd_purchase_unit_cost = _amount(raw_invoice_cost_basis) if raw_invoice_cost_basis is not None else None
+    auto_sales_unit_price = compute_default_sales_unit_price(unit_cost_basis=raw_invoice_cost_basis, settings=settings)
+    auto_price_error = None if auto_sales_unit_price is not None else "仕入単価が未設定のため自動計算できません"
+    sales_unit_price = (
+        _amount(Decimal(str(sales_unit_price_override)))
+        if sales_unit_price_override is not None
+        else (auto_sales_unit_price or Decimal("0.00"))
     )
     line_amount = _amount(billable_qty * sales_unit_price)
     gross_profit_amount = _amount(line_amount - (billable_qty * hkd_purchase_unit_cost)) if hkd_purchase_unit_cost is not None else None
@@ -208,6 +221,16 @@ def _purchase_result_line_values(
         "billable_qty": billable_qty,
         "sales_unit_price": sales_unit_price,
         "source_purchase_unit_cost_jpy": purchase_unit_cost,
+        "exchange_rate": Decimal(str(settings.exchange_rate)),
+        "jp_gross_margin_pct": Decimal(str(settings.jp_gross_margin_pct)),
+        "hk_gross_margin_pct": Decimal(str(settings.hk_gross_margin_pct)),
+        "freight_weight": freight_weight,
+        "freight_rate": Decimal(str(settings.freight_unit_price)),
+        "unit_freight_cost": (
+            compute_unit_freight_cost(freight_weight=freight_weight, settings=settings)
+            if freight_weight is not None
+            else None
+        ),
         "unit_cost_basis": hkd_purchase_unit_cost,
         "auto_price_error": auto_price_error,
         "line_amount": line_amount,
@@ -778,6 +801,12 @@ def list_invoice_draft_candidates(
                     "billable_qty": None,
                     "sales_unit_price": Decimal("0"),
                     "source_purchase_unit_cost_jpy": None,
+                    "exchange_rate": Decimal(str(settings.exchange_rate)),
+                    "jp_gross_margin_pct": Decimal(str(settings.jp_gross_margin_pct)),
+                    "hk_gross_margin_pct": Decimal(str(settings.hk_gross_margin_pct)),
+                    "freight_weight": Decimal(str(product.freight_weight or 0)),
+                    "freight_rate": Decimal(str(settings.freight_unit_price)),
+                    "unit_freight_cost": None,
                     "unit_cost_basis": None,
                     "auto_price_error": validation_message,
                     "line_amount": None,
@@ -796,6 +825,13 @@ def list_invoice_draft_candidates(
                     billable_qty=(float(values["billable_qty"]) if values["billable_qty"] is not None else None),
                     billable_uom=product.invoice_uom,
                     sales_unit_price=float(values["sales_unit_price"]),
+                    purchase_unit_cost=(float(values["source_purchase_unit_cost_jpy"]) if values["source_purchase_unit_cost_jpy"] is not None else None),
+                    exchange_rate=float(values["exchange_rate"]),
+                    jp_gross_margin_pct=float(values["jp_gross_margin_pct"]),
+                    hk_gross_margin_pct=float(values["hk_gross_margin_pct"]),
+                    freight_weight=float(values["freight_weight"]),
+                    freight_rate=float(values["freight_rate"]),
+                    unit_freight_cost=(float(values["unit_freight_cost"]) if values["unit_freight_cost"] is not None else 0),
                     unit_cost_basis=(float(values["unit_cost_basis"]) if values["unit_cost_basis"] is not None else None),
                     auto_price_error=(str(values["auto_price_error"]) if values["auto_price_error"] else None),
                     line_amount=(float(values["line_amount"]) if values["line_amount"] is not None else None),
