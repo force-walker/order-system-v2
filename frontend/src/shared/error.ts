@@ -2,20 +2,31 @@ export class ServiceError extends Error {
   code?: string;
   status?: number;
   detailMessage?: string;
+  details?: ApiErrorDetail[];
 
-  constructor(message: string, options?: { code?: string; status?: number; detailMessage?: string }) {
+  constructor(message: string, options?: { code?: string; status?: number; detailMessage?: string; details?: ApiErrorDetail[] }) {
     super(message);
     this.name = 'ServiceError';
     this.code = options?.code;
     this.status = options?.status;
     this.detailMessage = options?.detailMessage;
+    this.details = options?.details;
   }
 }
+
+export type ApiErrorDetail = {
+  field?: string;
+  rule?: string;
+  message?: string;
+  sku?: string;
+  row?: number;
+};
 
 type ApiErrorPayload = {
   detail?: {
     code?: string;
     message?: string;
+    details?: ApiErrorDetail[];
   };
 };
 
@@ -81,7 +92,7 @@ export const parseApiErrorPayload = async (res: Response): Promise<ServiceError>
 
   const message = codeMessage || detailMessage || statusMessage || enrichUnknownMessage(status, code, detailMessage);
 
-  return new ServiceError(message, { code, status, detailMessage });
+  return new ServiceError(message, { code, status, detailMessage, details: payload?.detail?.details });
 };
 
 export const isInlineFormError = (error: unknown): boolean => {

@@ -42,4 +42,17 @@ describe('toUserMessage', () => {
     expect(allocationError.message).toContain('仕入結果登録済み');
     expect(purchaseError.message).toContain('請求ドラフトで使用済み');
   });
+
+  it('retains structured validation details for form-specific display', async () => {
+    const error = await parseApiErrorPayload(new Response(JSON.stringify({
+      detail: {
+        code: 'PRODUCT_MASTER_INCONSISTENT',
+        message: 'product master UOM/pricing configuration is inconsistent',
+        details: [{ field: 'invoice_uom', rule: 'PRODUCT_UOM_INVALID', message: 'invalid UOM' }],
+      },
+    }), { status: 422 }));
+    expect(error.details).toEqual([
+      { field: 'invoice_uom', rule: 'PRODUCT_UOM_INVALID', message: 'invalid UOM' },
+    ]);
+  });
 });

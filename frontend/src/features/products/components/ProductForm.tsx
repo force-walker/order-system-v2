@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { ProductCreateRequest, ProductDetail } from 'features/products/types/product';
-import { toActionableMessage } from 'shared/error';
+import { ServiceError, toActionableMessage } from 'shared/error';
 import { useFocusNavigation } from 'shared/useFocusNavigation';
 
 type Props = {
@@ -11,6 +11,20 @@ type Props = {
 
 type FormState = ProductCreateRequest & { active: boolean };
 const UOM_OPTIONS = ['piece', 'kg', 'case'] as const;
+const isCanonicalUom = (value: string) => UOM_OPTIONS.includes(value as (typeof UOM_OPTIONS)[number]);
+const optionsIncludingLegacy = (value: string) => (
+  isCanonicalUom(value) ? [...UOM_OPTIONS] : [value, ...UOM_OPTIONS]
+);
+const uomOptionLabel = (value: string) => isCanonicalUom(value) ? value : `${value}（旧値・要変更）`;
+const PRODUCT_FIELD_LABELS: Record<string, string> = {
+  order_uom: '注文単位',
+  purchase_uom: '仕入単位',
+  invoice_uom: '請求単位',
+  freight_weight: '運賃重量',
+  pricing_basis_default: '課金基準',
+  is_catch_weight: 'キャッチウェイト',
+  weight_capture_required: '重量入力必須',
+};
 
 const toInitial = (initial?: ProductDetail): FormState => {
   const pricingBasisDefault = initial?.pricingBasisDefault ?? 'uom_count';
@@ -34,6 +48,12 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
   const [submitting, setSubmitting] = useState(false);
   const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
   const usesKgPricing = form.pricingBasisDefault === 'uom_kg';
+  const fieldValue = (field?: string) => {
+    if (field === 'order_uom') return form.orderUom;
+    if (field === 'purchase_uom') return form.purchaseUom;
+    if (field === 'invoice_uom') return form.invoiceUom;
+    return undefined;
+  };
 
   useEffect(() => {
     setForm(toInitial(initialValue));
@@ -59,7 +79,20 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
         weightCaptureRequired: form.weightCaptureRequired,
       });
     } catch (e) {
-      setError(toActionableMessage(e, '商品の保存に失敗しました'));
+      const base = toActionableMessage(e, '商品の保存に失敗しました');
+      if (e instanceof ServiceError && e.code === 'PRODUCT_MASTER_INCONSISTENT' && e.details?.length) {
+        const specifics = e.details.map((detail) => {
+          const label = PRODUCT_FIELD_LABELS[detail.field ?? ''] ?? detail.field ?? '入力項目';
+          const value = fieldValue(detail.field);
+          if (detail.rule === 'PRODUCT_UOM_INVALID' && value) {
+            return `${label} "${value}" は使用できません。piece / kg / caseから選択してください。`;
+          }
+          return `${label}: ${detail.message ?? detail.rule ?? '入力内容を確認してください。'}`;
+        });
+        setError(`${base}\n${specifics.join('\n')}`);
+      } else {
+        setError(base);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -82,7 +115,7 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
       <label>
         注文単位
         <select value={form.orderUom} onChange={(e) => setForm((p) => ({ ...p, orderUom: e.target.value }))}>
-          {UOM_OPTIONS.map((uom) => <option key={uom} value={uom} disabled={uom === 'kg' && !usesKgPricing}>{uom}</option>)}
+          {optionsIncludingLegacy(form.orderUom).map((uom) => <option key={uom} value={uom} disabled={uom === 'kg' && !usesKgPricing}>{uomOptionLabel(uom)}</option>)}
         </select>
       </label>
       <label>
@@ -92,17 +125,17 @@ export const ProductForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
           disabled={usesKgPricing}
           onChange={(e) => setForm((p) => ({ ...p, purchaseUom: e.target.value, invoiceUom: e.target.value }))}
         >
-          {UOM_OPTIONS.map((uom) => <option key={uom} value={uom}>{uom}</option>)}
+          {optionsIncludingLegacy(form.purchaseUom).map((uom) => <option key={uom} value={uom}>{uomOptionLabel(uom)}</option>)}
         </select>
       </label>
       <label>
         請求単位
         <select value={form.invoiceUom} disabled>
-          {UOM_OPTIONS.map((uom) => <option key={uom} value={uom}>{uom}</option>)}
+          {optionsIncludingLegacy(form.invoiceUom).map((uom) => <option key={uom} value={uom}>{uomOptionLabel(uom)}</option>)}
         </select>
       </label>
       <label>
-        {`運賃重量（KG / ${form.invoiceUom}）`}
+        {`運賃重量（KG / ${form.invoiceUom}${isCanonicalUom(form.invoiceUom) ? '' : '・旧値'}）`}
         <input
           type="number"
           inputMode="decimal"
