@@ -11,9 +11,17 @@ import {
   type OrderItemAllocationWorkItem,
   type SupplierFilterOption,
 } from 'features/orders/services/orderItemAllocationsService';
-import { toActionableMessage } from 'shared/error';
+import { ServiceError, toActionableMessage } from 'shared/error';
 import type { OrderStatus } from 'features/orders/types/order';
 import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
+import {
+  createSupplierProductMappingGlobal,
+  listProductSupplierMappings,
+} from 'features/suppliers/services/suppliersService';
+import {
+  buildSupplierMappingCandidates,
+  type SupplierMappingCandidate,
+} from './supplierMappingCandidates';
 
 type RowEdit = {
   selected: boolean;
@@ -66,6 +74,12 @@ export const OrderItemBulkAllocationPage = () => {
   const [filterUnassignedSupplierOnly, setFilterUnassignedSupplierOnly] = useState(false);
   const [filterNonZeroDiffOnly, setFilterNonZeroDiffOnly] = useState(false);
   const [labelGenerating, setLabelGenerating] = useState(false);
+  const [mappingCountByProduct, setMappingCountByProduct] = useState<Record<number, number>>({});
+  const [pendingMappingSave, setPendingMappingSave] = useState<{
+    payload: Array<{ orderItemId: EntityId; supplierId: number; allocatedQty: number | null }>;
+    candidates: SupplierMappingCandidate[];
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -80,8 +94,15 @@ export const OrderItemBulkAllocationPage = () => {
         }),
         listSupplierFilterOptions(),
       ]);
+      const mappingEntries = await Promise.all(
+        [...new Set(rows.map((row) => row.productId))].map(async (productId) => [
+          productId,
+          (await listProductSupplierMappings(productId)).length,
+        ] as const),
+      );
       setItems(rows);
       setSuppliers(supplierOptions);
+      setMappingCountByProduct(Object.fromEntries(mappingEntries));
       setEditById((prev) =>
         Object.fromEntries(
           rows.map((row) => {
@@ -287,6 +308,80 @@ export const OrderItemBulkAllocationPage = () => {
     setOrderStatuses((current) => current.includes(status) ? current.filter((value) => value !== status) : [...current, status]);
   };
 
+  const performBulkSave = async (
+    payload: Array<{ orderItemId: EntityId; supplierId: number; allocatedQty: number | null }>,
+    mappingCandidates: SupplierMappingCandidate[],
+  ) => {
+    setSaving(true);
+    try {
+      const result = await bulkSaveOrderItemAllocations(payload);
+      const failedItemIds = new Set(result.errors.map((item) => String(item.orderItemId)));
+      const mappingFailures: string[] = [];
+
+      for (const candidate of mappingCandidates) {
+        if (!candidate.orderItemIds.some((orderItemId) => !failedItemIds.has(String(orderItemId)))) continue;
+        try {
+          await createSupplierProductMappingGlobal({
+            productId: candidate.productId,
+            supplierId: candidate.supplierId,
+            priority: 100,
+            isPreferred: false,
+            defaultUnitCost: null,
+            leadTimeDays: null,
+            note: null,
+          });
+        } catch (mappingError) {
+          const duplicate = mappingError instanceof ServiceError
+            && mappingError.status === 409
+            && mappingError.code === 'SUPPLIER_PRODUCT_ALREADY_EXISTS';
+          if (duplicate) {
+            try {
+              const current = await listProductSupplierMappings(candidate.productId);
+              if (current.some((mapping) => mapping.supplierId === candidate.supplierId)) continue;
+            } catch {
+              // Verification failure is reported as a mapping failure below.
+            }
+          }
+          const supplierName = suppliers.find((supplier) => supplier.id === candidate.supplierId)?.label ?? `仕入先#${candidate.supplierId}`;
+          mappingFailures.push(`${candidate.productName} → ${supplierName}: ${toActionableMessage(mappingError, '登録に失敗しました。')}`);
+        }
+      }
+
+      const errorById = new Map(result.errors.map((e) => [String(e.orderItemId), `${e.code}: ${e.message}`]));
+      await load();
+
+      setEditById((prev) => {
+        const next = { ...prev };
+        Object.entries(next).forEach(([id, row]) => {
+          const rowError = errorById.get(id);
+          next[id] = { ...row, rowError, selected: Boolean(rowError) };
+        });
+        return next;
+      });
+
+      if (mappingFailures.length > 0) {
+        setToast({
+          type: 'error',
+          message: `割当は保存されましたが、仕入先マッピングの登録に失敗しました。 ${mappingFailures.join(' / ')}`,
+        });
+      } else {
+        setToast(
+          result.failed > 0
+            ? { type: 'error', message: `一括保存は部分成功です（成功 ${result.succeeded} / 失敗 ${result.failed}）。成功行は引当済/出荷日反映済みです。` }
+            : { type: 'success', message: `一括保存に成功しました（成功 ${result.succeeded} / 失敗 ${result.failed}）。` },
+        );
+      }
+    } catch (e) {
+      const base = toActionableMessage(e, '一括保存に失敗しました。');
+      const extra = base.includes('422') || base.includes('validation')
+        ? '未選択（割当解除）の保存に未対応のAPIの可能性があります。backendの一括解除対応を確認してください。'
+        : '';
+      setToast({ type: 'error', message: `${base}${extra ? ` ${extra}` : ''}`.trim() });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveBulk = async () => {
     const selectedRows = sortedItems.filter((row) => editById[row.orderItemId]?.selected);
     const missingSupplierIds = selectedRows
@@ -346,33 +441,18 @@ export const OrderItemBulkAllocationPage = () => {
     });
     if (changes.length > 0 && !window.confirm(`保存済みの割当内容が変更されています。\n\n${changes.join('\n')}\n\n上書きして保存しますか？`)) return;
 
-    try {
-      const result = await bulkSaveOrderItemAllocations(payload);
-      const errorById = new Map(result.errors.map((e) => [String(e.orderItemId), `${e.code}: ${e.message}`]));
-
-      await load();
-
-      setEditById((prev) => {
-        const next = { ...prev };
-        Object.entries(next).forEach(([id, row]) => {
-          const rowError = errorById.get(id);
-          next[id] = { ...row, rowError, selected: Boolean(rowError) };
-        });
-        return next;
-      });
-
-      setToast(
-        result.failed > 0
-          ? { type: 'error', message: `一括保存は部分成功です（成功 ${result.succeeded} / 失敗 ${result.failed}）。成功行は引当済/出荷日反映済みです。` }
-          : { type: 'success', message: `一括保存に成功しました（成功 ${result.succeeded} / 失敗 ${result.failed}）。` },
-      );
-    } catch (e) {
-      const base = toActionableMessage(e, '一括保存に失敗しました。');
-      const extra = base.includes('422') || base.includes('validation')
-        ? '未選択（割当解除）の保存に未対応のAPIの可能性があります。backendの一括解除対応を確認してください。'
-        : '';
-      setToast({ type: 'error', message: `${base}${extra ? ` ${extra}` : ''}`.trim() });
+    const candidates = buildSupplierMappingCandidates(selectedRows.map((row) => ({
+      orderItemId: row.orderItemId,
+      productId: row.productId,
+      productName: row.productName,
+      supplierId: Number(editById[row.orderItemId].manualSupplierId),
+    })), mappingCountByProduct);
+    if (candidates.length > 0) {
+      setPendingMappingSave({ payload, candidates });
+      return;
     }
+
+    await performBulkSave(payload, []);
   };
 
   const selectedOrderItemIds = useMemo(
@@ -440,6 +520,51 @@ export const OrderItemBulkAllocationPage = () => {
   return (
     <section>
       {toast ? <div className={`toast toast-overlay ${toast.type}`}>{toast.message}</div> : null}
+      {pendingMappingSave ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="supplier-mapping-confirm-title"
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0, 0, 0, 0.35)', display: 'grid', placeItems: 'center', padding: 24 }}
+        >
+          <div className="card" style={{ width: 'min(640px, 100%)', maxHeight: '80vh', overflow: 'auto' }}>
+            <h3 id="supplier-mapping-confirm-title">仕入先マッピングのない商品があります</h3>
+            <p>今回指定した仕入先を商品マッピングへ追加しますか？</p>
+            <ul>
+              {pendingMappingSave.candidates.map((candidate) => (
+                <li key={`${candidate.productId}:${candidate.supplierId}`}>
+                  {candidate.productName} → {suppliers.find((supplier) => supplier.id === candidate.supplierId)?.label ?? `仕入先#${candidate.supplierId}`}
+                </li>
+              ))}
+            </ul>
+            <div className="list-controls">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  const pending = pendingMappingSave;
+                  setPendingMappingSave(null);
+                  void performBulkSave(pending.payload, pending.candidates);
+                }}
+              >
+                追加して保存
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={saving}
+                onClick={() => {
+                  const pending = pendingMappingSave;
+                  setPendingMappingSave(null);
+                  void performBulkSave(pending.payload, []);
+                }}
+              >
+                追加せず保存
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="card">
         <div className="list-header">
           <div>
@@ -451,7 +576,7 @@ export const OrderItemBulkAllocationPage = () => {
           <div className="list-controls">
             <button type="button" className="secondary" onClick={() => void applySuggestedSuppliers()}>自動で仕入先選択</button>
             <button type="button" className="secondary" onClick={applyOrderedQtyToAllocation}>割当数へ受注数を自動入力</button>
-            <button type="button" onClick={() => void saveBulk()}>選択行を一括保存</button>
+            <button type="button" onClick={() => void saveBulk()} disabled={saving}>選択行を一括保存</button>
             <button
               type="button"
               className="secondary"
