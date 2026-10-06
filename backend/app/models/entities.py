@@ -39,6 +39,14 @@ class StockoutPolicy(str, enum.Enum):
     split = "split"
 
 
+class PaymentTermsType(str, enum.Enum):
+    days_after_issue = "days_after_issue"
+    end_of_issue_month = "end_of_issue_month"
+    end_of_next_month = "end_of_next_month"
+    end_of_second_month = "end_of_second_month"
+    half_month_15_eom = "half_month_15_eom"
+
+
 class Customer(Base):
     __tablename__ = "customers"
 
@@ -48,6 +56,8 @@ class Customer(Base):
     region: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(255), index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    payment_terms_type: Mapped[PaymentTermsType | None] = mapped_column(Enum(PaymentTermsType, name="paymenttermstype", native_enum=False), nullable=True)
+    payment_terms_days: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
@@ -60,6 +70,8 @@ class Supplier(Base):
     import_key: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255), index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    payment_terms_type: Mapped[PaymentTermsType | None] = mapped_column(Enum(PaymentTermsType, name="paymenttermstype", native_enum=False), nullable=True)
+    payment_terms_days: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
@@ -279,6 +291,12 @@ class InvoiceStatus(str, enum.Enum):
     cancelled = "cancelled"
 
 
+class InvoicePaymentStatus(str, enum.Enum):
+    unpaid = "unpaid"
+    partially_paid = "partially_paid"
+    paid = "paid"
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
     __table_args__ = (
@@ -307,6 +325,7 @@ class Invoice(Base):
     tax_total: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     grand_total: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     status: Mapped[InvoiceStatus] = mapped_column(Enum(InvoiceStatus, name="invoicestatus"), default=InvoiceStatus.draft, index=True)
+    payment_status: Mapped[InvoicePaymentStatus] = mapped_column(Enum(InvoicePaymentStatus, name="invoicepaymentstatus", native_enum=False), default=InvoicePaymentStatus.unpaid, nullable=False, index=True)
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

@@ -1,5 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+import csv
+import io
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -2078,3 +2080,176 @@ def test_finalize_locks_invoice_row_state():
     assert row is not None
     assert row.status == InvoiceStatus.finalized
     assert row.is_locked is True
+
+
+def test_invoice_history_search_csv_payment_and_filtered_neighbors():
+    order_id = _seed_order(with_items=True)
+    client = _client()
+    created = client.post("/api/v1/invoices/generate", json={"order_id": order_id, "invoice_date": "2026-10-01"})
+    assert created.status_code == 201
+    invoice_id = created.json()["id"]
+    db = TestingSessionLocal()
+    invoice = db.get(Invoice, invoice_id)
+    invoice.status = InvoiceStatus.finalized
+    invoice.official_invoice_no = f"INV-HISTORY-{invoice.document_seq}"
+    invoice.due_date = date(2026, 10, 5)
+    product_rows = (db.query(Product).join(OrderItem, OrderItem.product_id == Product.id)
+        .filter(OrderItem.order_id == order_id).order_by(Product.id).all())
+    order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id).all()
+    db.add(InvoiceItem(
+        invoice_id=invoice.id,
+        order_item_id=order_items[1].id,
+        line_no=30,
+        line_ref=f"IVL-{invoice.document_seq:08d}-0030",
+        billable_qty=1,
+        billable_uom=product_rows[1].invoice_uom,
+        sales_unit_price=1,
+        line_amount=1,
+        tax_amount=0,
+    ))
+    customer = db.get(Customer, invoice.customer_id)
+    customer.name = f"History Customer {customer.customer_code}"
+    product_rows[0].name = f"History Product {product_rows[0].sku}"
+    draft = Invoice(
+        document_seq=(db.query(Invoice.document_seq).order_by(Invoice.document_seq.desc()).first() or (0,))[0] + 1,
+        invoice_no=f"IVD-HISTORY-DRAFT-{invoice.document_seq}",
+        customer_id=customer.id,
+        invoice_date=date(2026, 10, 2),
+        delivery_date=date(2026, 10, 2),
+        status=InvoiceStatus.draft,
+        subtotal=0,
+        tax_total=0,
+        grand_total=0,
+    )
+    db.add(draft)
+    db.commit()
+    sku = product_rows[0].sku
+    product_name = product_rows[0].name
+    other_sku = product_rows[1].sku
+    customer_code = customer.customer_code
+    customer_name = customer.name
+    customer_id = customer.id
+    official_invoice_no = invoice.official_invoice_no
+    db.close()
+
+    default = client.get("/api/v1/invoices/history", params={"search": customer_code})
+    assert default.status_code == 200
+    assert default.json()["total"] == 1
+    assert default.json()["items"][0]["invoice_id"] == invoice_id
+    all_statuses = client.get("/api/v1/invoices/history", params={"invoice_status": "all", "search": customer_code})
+    assert all_statuses.status_code == 200 and all_statuses.json()["total"] == 2
+    assert client.get("/api/v1/invoices/history", params={"search": official_invoice_no}).json()["total"] == 1
+    assert client.get("/api/v1/invoices/history", params={"search": customer_name}).json()["total"] == 1
+    sku_history = client.get("/api/v1/invoices/history", params={"search": sku}).json()
+    assert sku_history["total"] == 1
+    assert sku_history["items"][0]["line_count"] == 3
+    assert client.get("/api/v1/invoices/history", params={"search": product_name}).json()["total"] == 1
+    assert client.get("/api/v1/invoices/history", params={"date_from": "2026-10-01", "date_to": "2026-10-01", "search": customer_code}).json()["total"] == 1
+    assert client.get("/api/v1/invoices/history", params={"customer_id": customer_id, "invoice_status": "draft"}).json()["total"] == 1
+    assert client.get("/api/v1/invoices/history", params={"search": customer_code, "payment_status": "unpaid"}).json()["total"] == 1
+    assert client.get("/api/v1/invoices/history", params={"search": customer_code, "overdue": "true"}).json()["total"] == 1
+    assert client.get("/api/v1/invoices/history", params={"search": customer_code, "overdue": "false"}).json()["total"] == 0
+
+    header_csv = client.get("/api/v1/invoices/history/export/headers", params={"search": sku})
+    assert header_csv.status_code == 200 and header_csv.content.startswith(b"\xef\xbb\xbf")
+    header_rows = list(csv.DictReader(io.StringIO(header_csv.content.decode("utf-8-sig"))))
+    assert len(header_rows) == 1 and header_rows[0]["line_count"] == "3"
+    line_csv = client.get("/api/v1/invoices/history/export/lines", params={"search": sku})
+    line_rows = list(csv.DictReader(io.StringIO(line_csv.content.decode("utf-8-sig"))))
+    assert len(line_rows) == 1 and line_rows[0]["sku"] == sku
+    assert other_sku not in line_csv.content.decode("utf-8-sig")
+
+    changed = client.patch(f"/api/v1/invoices/{invoice_id}/payment-status", json={"payment_status": "paid"})
+    assert changed.status_code == 200 and changed.json()["payment_status"] == "paid"
+    assert client.get("/api/v1/invoices/history", params={"search": customer_code, "payment_status": "paid"}).json()["total"] == 1
+    db = TestingSessionLocal()
+    assert db.query(AuditLog).filter(AuditLog.entity_type == "invoice", AuditLog.entity_id == invoice_id).count() >= 1
+    db.close()
+
+    neighbors = client.get(f"/api/v1/invoices/history/{invoice_id}/neighbors", params={"search": sku, "invoice_status": "all", "sort": "invoice_no"})
+    assert neighbors.status_code == 200
+
+
+def test_invoice_history_neighbors_cross_page_boundary_and_use_display_number_sort():
+    order_id = _seed_order(with_items=True)
+    db = TestingSessionLocal()
+    customer = Customer(
+        customer_code=f"C-HISTORY-PAGE-{datetime.now(UTC).timestamp()}",
+        name="History Page Boundary Customer",
+        active=True,
+    )
+    db.add(customer)
+    db.flush()
+    next_seq = (db.query(Invoice.document_seq).order_by(Invoice.document_seq.desc()).first() or (0,))[0] + 1
+    invoices = []
+    for index in range(52):
+        invoice = Invoice(
+            document_seq=next_seq + index,
+            invoice_no=f"IVD-HISTORY-{51 - index:03}",
+            official_invoice_no=f"INV-HISTORY-{index:03}",
+            customer_id=customer.id,
+            invoice_date=date(2026, 9, 1),
+            delivery_date=date(2026, 9, 1),
+            status=InvoiceStatus.finalized,
+            subtotal=0,
+            tax_total=0,
+            grand_total=0,
+        )
+        db.add(invoice)
+        invoices.append(invoice)
+    db.flush()
+    order_item_id = db.query(OrderItem.id).filter(OrderItem.order_id == order_id).order_by(OrderItem.id).first()[0]
+    for invoice in invoices[:3]:
+        db.add(InvoiceItem(
+            invoice_id=invoice.id,
+            order_item_id=order_item_id,
+            line_no=10,
+            line_ref=f"IVL-{invoice.document_seq:08d}-0010",
+            billable_qty=1,
+            billable_uom="piece",
+            sales_unit_price=1,
+            line_amount=1,
+            tax_amount=0,
+        ))
+    db.commit()
+    customer_id = customer.id
+    ordered_ids = [invoice.id for invoice in invoices]
+    db.close()
+
+    client = _client()
+    first_page = client.get(
+        "/api/v1/invoices/history",
+        params={"customer_id": customer_id, "sort": "invoice_no", "direction": "asc", "page": 1, "page_size": 50},
+    )
+    second_page = client.get(
+        "/api/v1/invoices/history",
+        params={"customer_id": customer_id, "sort": "invoice_no", "direction": "asc", "page": 2, "page_size": 50},
+    )
+    assert first_page.status_code == 200
+    assert second_page.status_code == 200
+    assert first_page.json()["total"] == 52
+    assert [row["invoice_no"] for row in first_page.json()["items"][:2]] == ["INV-HISTORY-000", "INV-HISTORY-001"]
+    assert len(first_page.json()["items"]) == 50
+    assert [row["invoice_no"] for row in second_page.json()["items"]] == ["INV-HISTORY-050", "INV-HISTORY-051"]
+
+    header_csv = client.get(
+        "/api/v1/invoices/history/export/headers",
+        params={"customer_id": customer_id, "sort": "invoice_no", "direction": "asc"},
+    )
+    header_rows = list(csv.DictReader(io.StringIO(header_csv.content.decode("utf-8-sig"))))
+    assert [row["invoice_no"] for row in header_rows[:3]] == ["INV-HISTORY-000", "INV-HISTORY-001", "INV-HISTORY-002"]
+    line_csv = client.get(
+        "/api/v1/invoices/history/export/lines",
+        params={"customer_id": customer_id, "sort": "invoice_no", "direction": "asc"},
+    )
+    line_rows = list(csv.DictReader(io.StringIO(line_csv.content.decode("utf-8-sig"))))
+    assert [row["invoice_no"] for row in line_rows] == ["INV-HISTORY-000", "INV-HISTORY-001", "INV-HISTORY-002"]
+
+    boundary_id = first_page.json()["items"][-1]["invoice_id"]
+    neighbors = client.get(
+        f"/api/v1/invoices/history/{boundary_id}/neighbors",
+        params={"customer_id": customer_id, "sort": "invoice_no", "direction": "asc"},
+    )
+    assert neighbors.status_code == 200
+    assert neighbors.json()["prev_invoice_id"] == ordered_ids[48]
+    assert neighbors.json()["next_invoice_id"] == ordered_ids[50]

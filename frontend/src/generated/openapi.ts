@@ -1397,6 +1397,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invoices/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invoice History */
+        get: operations["list_invoice_history_api_v1_invoices_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/history/export/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Invoice History */
+        get: operations["export_invoice_history_api_v1_invoices_history_export__kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/history/{invoice_id}/neighbors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Invoice History Neighbors */
+        get: operations["get_invoice_history_neighbors_api_v1_invoices_history__invoice_id__neighbors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invoices/{invoice_id}/payment-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Invoice Payment Status */
+        patch: operations["update_invoice_payment_status_api_v1_invoices__invoice_id__payment_status_patch"];
+        trace?: never;
+    };
     "/api/v1/invoices/draft-candidates": {
         parameters: {
             query?: never;
@@ -2243,6 +2311,9 @@ export interface components {
         };
         /** CustomerCreateRequest */
         CustomerCreateRequest: {
+            payment_terms_type?: components["schemas"]["PaymentTermsType"] | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
             /** Region */
             region?: string | null;
             /** Name */
@@ -2302,6 +2373,9 @@ export interface components {
             name: string;
             /** Active */
             active: boolean;
+            payment_terms_type: components["schemas"]["PaymentTermsType"] | null;
+            /** Payment Terms Days */
+            payment_terms_days: number | null;
             /**
              * Created At
              * Format: date-time
@@ -2315,6 +2389,9 @@ export interface components {
         };
         /** CustomerUpdateRequest */
         CustomerUpdateRequest: {
+            payment_terms_type?: components["schemas"]["PaymentTermsType"] | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
             /** Region */
             region?: string | null;
             /** Name */
@@ -2730,6 +2807,49 @@ export interface components {
             /** Due Date */
             due_date?: string | null;
         };
+        /** InvoiceHistoryResponse */
+        InvoiceHistoryResponse: {
+            /** Items */
+            items: components["schemas"]["InvoiceHistoryRow"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /** InvoiceHistoryRow */
+        InvoiceHistoryRow: {
+            /** Invoice Id */
+            invoice_id: string;
+            /** Invoice No */
+            invoice_no: string;
+            /** Customer Id */
+            customer_id: number;
+            /** Customer Code */
+            customer_code: string;
+            /** Customer Name */
+            customer_name: string;
+            /**
+             * Issue Date
+             * Format: date
+             */
+            issue_date: string;
+            /** Due Date */
+            due_date: string | null;
+            invoice_status: components["schemas"]["InvoiceStatus"];
+            payment_status: components["schemas"]["InvoicePaymentStatus"];
+            /** Overdue */
+            overdue: boolean;
+            /** Line Count */
+            line_count: number;
+            /** Subtotal */
+            subtotal: number;
+            /** Tax */
+            tax: number;
+            /** Total */
+            total: number;
+        };
         /** InvoiceItemResponse */
         InvoiceItemResponse: {
             /** Id */
@@ -2809,6 +2929,15 @@ export interface components {
             prev_invoice_id: string | null;
             /** Next Invoice Id */
             next_invoice_id: string | null;
+        };
+        /**
+         * InvoicePaymentStatus
+         * @enum {string}
+         */
+        InvoicePaymentStatus: "unpaid" | "partially_paid" | "paid";
+        /** InvoicePaymentStatusUpdateRequest */
+        InvoicePaymentStatusUpdateRequest: {
+            payment_status: components["schemas"]["InvoicePaymentStatus"];
         };
         /** InvoiceReportLine */
         InvoiceReportLine: {
@@ -2964,6 +3093,8 @@ export interface components {
             /** Grand Total */
             grand_total: number;
             status: components["schemas"]["InvoiceStatus"];
+            /** @default unpaid */
+            payment_status: components["schemas"]["InvoicePaymentStatus"];
             /** Is Locked */
             is_locked: boolean;
             /**
@@ -3017,6 +3148,8 @@ export interface components {
             /** Due Date */
             due_date: string | null;
             status: components["schemas"]["InvoiceStatus"];
+            /** @default unpaid */
+            payment_status: components["schemas"]["InvoicePaymentStatus"];
             /** Subtotal */
             subtotal: number;
             /** Tax Total */
@@ -3431,6 +3564,11 @@ export interface components {
             /** Items */
             items: components["schemas"]["OrderItemResponse"][];
         };
+        /**
+         * PaymentTermsType
+         * @enum {string}
+         */
+        PaymentTermsType: "days_after_issue" | "end_of_issue_month" | "end_of_next_month" | "end_of_second_month" | "half_month_15_eom";
         /**
          * PricingBasis
          * @enum {string}
@@ -4044,6 +4182,9 @@ export interface components {
         StockoutPolicy: "backorder" | "substitute" | "cancel" | "split";
         /** SupplierCreateRequest */
         SupplierCreateRequest: {
+            payment_terms_type?: components["schemas"]["PaymentTermsType"] | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
             /** Name */
             name: string;
             /**
@@ -4185,6 +4326,9 @@ export interface components {
             name: string;
             /** Active */
             active: boolean;
+            payment_terms_type: components["schemas"]["PaymentTermsType"] | null;
+            /** Payment Terms Days */
+            payment_terms_days: number | null;
             /**
              * Created At
              * Format: date-time
@@ -4198,6 +4342,9 @@ export interface components {
         };
         /** SupplierUpdateRequest */
         SupplierUpdateRequest: {
+            payment_terms_type?: components["schemas"]["PaymentTermsType"] | null;
+            /** Payment Terms Days */
+            payment_terms_days?: number | null;
             /** Name */
             name?: string | null;
             /** Active */
@@ -8328,6 +8475,164 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvoiceDraftListRow"][];
+                };
+            };
+        };
+    };
+    list_invoice_history_api_v1_invoices_history_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                customer_id?: number | null;
+                invoice_status?: string | null;
+                payment_status?: components["schemas"]["InvoicePaymentStatus"] | null;
+                overdue?: boolean | null;
+                sort?: string;
+                direction?: string;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_invoice_history_api_v1_invoices_history_export__kind__get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                customer_id?: number | null;
+                invoice_status?: string | null;
+                payment_status?: components["schemas"]["InvoicePaymentStatus"] | null;
+                overdue?: boolean | null;
+                sort?: string;
+                direction?: string;
+            };
+            header?: never;
+            path: {
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_invoice_history_neighbors_api_v1_invoices_history__invoice_id__neighbors_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                customer_id?: number | null;
+                invoice_status?: string | null;
+                payment_status?: components["schemas"]["InvoicePaymentStatus"] | null;
+                overdue?: boolean | null;
+                sort?: string;
+                direction?: string;
+            };
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceNeighborsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_invoice_payment_status_api_v1_invoices__invoice_id__payment_status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoicePaymentStatusUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

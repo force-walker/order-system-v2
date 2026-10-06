@@ -1,61 +1,34 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { afterEach, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { InvoiceListPage } from './InvoiceListPage';
-import { listInvoiceSummaries } from '../services/invoiceService';
+import { exportInvoiceHistory, listInvoiceHistory } from '../services/invoiceService';
 
-vi.mock('../services/invoiceService', () => ({
-  listInvoiceSummaries: vi.fn(),
-  generateInvoicePdf: vi.fn(),
-}));
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  vi.mocked(listInvoiceSummaries).mockResolvedValue([
-    { invoiceId: 'inv-1', invoiceNo: 'INV-00000001', customerName: 'A', invoiceDate: '2026-09-29', deliveryDate: '2026-09-28', status: 'finalized', subtotal: 100, taxTotal: 0, grandTotal: 100, itemCount: 1 },
-    { invoiceId: 'inv-2', invoiceNo: 'INV-00000002', customerName: 'B', invoiceDate: '2026-09-30', deliveryDate: '2026-09-29', status: 'finalized', subtotal: 200, taxTotal: 0, grandTotal: 200, itemCount: 2 },
-  ]);
-});
-
+vi.mock('../services/invoiceService', () => ({ listInvoiceHistory: vi.fn(), exportInvoiceHistory: vi.fn() }));
+vi.mock('features/customers/services/customersService', () => ({ listCustomers: vi.fn().mockResolvedValue([]) }));
 afterEach(cleanup);
 
-const renderPage = () => render(<MemoryRouter><InvoiceListPage /></MemoryRouter>);
+it('loads finalized invoices by default and sends search/filter/sort/page to the backend', async () => {
+  vi.mocked(listInvoiceHistory).mockResolvedValue({ items: [{ invoiceId: 'inv-1', invoiceNo: 'INV-1', customerId: 1,
+    customerCode: 'C-1', customerName: '顧客A', issueDate: '2026-10-06', dueDate: '2026-10-31', invoiceStatus: 'finalized',
+    paymentStatus: 'unpaid', overdue: true, lineCount: 2, subtotal: 100, tax: 10, total: 110 }], total: 1, page: 1, pageSize: 50 });
+  render(<MemoryRouter><InvoiceListPage /></MemoryRouter>);
+  expect(await screen.findByText('INV-1')).toBeTruthy();
+  expect(screen.getByText('HK$100.00')).toBeTruthy();
+  expect(screen.getByText('HK$10.00')).toBeTruthy();
+  expect(screen.getByText('HK$110.00')).toBeTruthy();
+  expect(vi.mocked(listInvoiceHistory).mock.calls[0][0].invoiceStatus).toBe('finalized');
+  expect(screen.getByRole('link', { name: '詳細' }).getAttribute('href')).toBe('/invoices/inv-1?history=1');
+  fireEvent.change(screen.getByLabelText('検索'), { target: { value: 'ABC' } });
+  expect(await screen.findByText('INV-1')).toBeTruthy();
+  await waitFor(() => { const calls = vi.mocked(listInvoiceHistory).mock.calls; expect(calls[calls.length - 1]?.[0].search).toBe('ABC'); });
 
-it('filters by invoice_date and clears back to all periods', async () => {
-  const actor = userEvent.setup();
-  renderPage();
-  await screen.findByText('INV-00000001');
+  fireEvent.click(screen.getByRole('button', { name: 'Header CSV' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Line CSV' }));
+  expect(exportInvoiceHistory).toHaveBeenCalledWith('headers', expect.objectContaining({ search: 'ABC' }));
+  expect(exportInvoiceHistory).toHaveBeenCalledWith('lines', expect.objectContaining({ search: 'ABC' }));
 
-  await actor.type(screen.getByLabelText('請求日'), '2026-09-30');
-  expect(screen.queryByText('INV-00000001')).toBeNull();
-  expect(screen.getByText('INV-00000002')).toBeTruthy();
-
-  await actor.click(screen.getByRole('button', { name: '全期間' }));
-  expect(screen.getByText('INV-00000001')).toBeTruthy();
-});
-
-it('selects only visible invoices, supports indeterminate state, and clears hidden selections on filter change', async () => {
-  const actor = userEvent.setup();
-  renderPage();
-  await screen.findByText('INV-00000001');
-  const header = screen.getByRole('checkbox', { name: '表示中の請求書を全選択' }) as HTMLInputElement;
-  const first = screen.getByRole('checkbox', { name: '請求書 INV-00000001 を選択' }) as HTMLInputElement;
-
-  await actor.click(first);
-  expect(header.indeterminate).toBe(true);
-  await actor.click(header);
-  expect((screen.getByRole('checkbox', { name: '請求書 INV-00000001 を選択' }) as HTMLInputElement).checked).toBe(true);
-  expect((screen.getByRole('checkbox', { name: '請求書 INV-00000002 を選択' }) as HTMLInputElement).checked).toBe(true);
-
-  await actor.type(screen.getByLabelText('請求日'), '2026-09-30');
-  expect(screen.queryByRole('checkbox', { name: '請求書 INV-00000001 を選択' })).toBeNull();
-  expect((screen.getByRole('checkbox', { name: '請求書 INV-00000002 を選択' }) as HTMLInputElement).checked).toBe(true);
-  await actor.click(screen.getByRole('button', { name: '全期間' }));
-  expect((screen.getByRole('checkbox', { name: '請求書 INV-00000001 を選択' }) as HTMLInputElement).checked).toBe(false);
-  expect(header.indeterminate).toBe(true);
-  await actor.click(header);
-  expect((screen.getByRole('checkbox', { name: '請求書 INV-00000001 を選択' }) as HTMLInputElement).checked).toBe(true);
-  expect((screen.getByRole('checkbox', { name: '請求書 INV-00000002 を選択' }) as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Invoice No' }));
+  await waitFor(() => { const calls = vi.mocked(listInvoiceHistory).mock.calls; expect(calls[calls.length - 1]?.[0]).toEqual(expect.objectContaining({ sort: 'invoice_no', direction: 'desc' })); });
 });

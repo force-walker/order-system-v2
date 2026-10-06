@@ -265,6 +265,33 @@ def test_update_supplier_success_and_not_found():
     assert nf.json()["detail"]["code"] == "SUPPLIER_NOT_FOUND"
 
 
+def test_update_supplier_can_clear_payment_terms_to_null():
+    supplier_id = _seed_supplier("SUP-PAY-CLEAR")
+    client = _client()
+
+    configured = client.patch(
+        f"/api/v1/suppliers/{supplier_id}",
+        json={"payment_terms_type": "end_of_next_month", "payment_terms_days": None},
+    )
+    assert configured.status_code == 200
+    assert configured.json()["payment_terms_type"] == "end_of_next_month"
+
+    cleared = client.patch(
+        f"/api/v1/suppliers/{supplier_id}",
+        json={"payment_terms_type": None, "payment_terms_days": None},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["payment_terms_type"] is None
+    assert cleared.json()["payment_terms_days"] is None
+
+    db = TestingSessionLocal()
+    row = db.get(Supplier, supplier_id)
+    assert row is not None
+    assert row.payment_terms_type is None
+    assert row.payment_terms_days is None
+    db.close()
+
+
 def test_get_supplier_import_format():
     client = _client()
     res = client.get("/api/v1/suppliers/import-format")

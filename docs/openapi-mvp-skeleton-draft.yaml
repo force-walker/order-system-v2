@@ -3876,6 +3876,357 @@ paths:
                   Get
       security:
       - HTTPBearer: []
+  /api/v1/invoices/history:
+    get:
+      tags:
+      - invoices
+      summary: List Invoice History
+      operationId: list_invoice_history_api_v1_invoices_history_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 255
+          - type: 'null'
+          title: Search
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      - name: customer_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Customer Id
+      - name: invoice_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: finalized
+          title: Invoice Status
+      - name: payment_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/InvoicePaymentStatus'
+          - type: 'null'
+          title: Payment Status
+      - name: overdue
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Overdue
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: issue_date
+          title: Sort
+      - name: direction
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(asc|desc)$
+          default: desc
+          title: Direction
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Page Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceHistoryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/invoices/history/export/{kind}:
+    get:
+      tags:
+      - invoices
+      summary: Export Invoice History
+      operationId: export_invoice_history_api_v1_invoices_history_export__kind__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kind
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      - name: customer_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Customer Id
+      - name: invoice_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: finalized
+          title: Invoice Status
+      - name: payment_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/InvoicePaymentStatus'
+          - type: 'null'
+          title: Payment Status
+      - name: overdue
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Overdue
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: issue_date
+          title: Sort
+      - name: direction
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(asc|desc)$
+          default: desc
+          title: Direction
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/invoices/history/{invoice_id}/neighbors:
+    get:
+      tags:
+      - invoices
+      summary: Get Invoice History Neighbors
+      operationId: get_invoice_history_neighbors_api_v1_invoices_history__invoice_id__neighbors_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Invoice Id
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      - name: customer_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Customer Id
+      - name: invoice_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: finalized
+          title: Invoice Status
+      - name: payment_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/InvoicePaymentStatus'
+          - type: 'null'
+          title: Payment Status
+      - name: overdue
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Overdue
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: issue_date
+          title: Sort
+      - name: direction
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(asc|desc)$
+          default: desc
+          title: Direction
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceNeighborsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/invoices/{invoice_id}/payment-status:
+    patch:
+      tags:
+      - invoices
+      summary: Update Invoice Payment Status
+      operationId: update_invoice_payment_status_api_v1_invoices__invoice_id__payment_status_patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: invoice_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Invoice Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoicePaymentStatusUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/invoices/draft-candidates:
     get:
       tags:
@@ -5859,6 +6210,16 @@ components:
       title: BulkOperationSummary
     CustomerCreateRequest:
       properties:
+        payment_terms_type:
+          anyOf:
+          - $ref: '#/components/schemas/PaymentTermsType'
+          - type: 'null'
+        payment_terms_days:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Payment Terms Days
         region:
           anyOf:
           - type: string
@@ -5980,6 +6341,15 @@ components:
         active:
           type: boolean
           title: Active
+        payment_terms_type:
+          anyOf:
+          - $ref: '#/components/schemas/PaymentTermsType'
+          - type: 'null'
+        payment_terms_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Payment Terms Days
         created_at:
           type: string
           format: date-time
@@ -5996,11 +6366,23 @@ components:
       - region
       - name
       - active
+      - payment_terms_type
+      - payment_terms_days
       - created_at
       - updated_at
       title: CustomerResponse
     CustomerUpdateRequest:
       properties:
+        payment_terms_type:
+          anyOf:
+          - $ref: '#/components/schemas/PaymentTermsType'
+          - type: 'null'
+        payment_terms_days:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Payment Terms Days
         region:
           anyOf:
           - type: string
@@ -6773,6 +7155,92 @@ components:
       - order_id
       - invoice_date
       title: InvoiceGenerateRequest
+    InvoiceHistoryResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/InvoiceHistoryRow'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        page_size:
+          type: integer
+          title: Page Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - page_size
+      title: InvoiceHistoryResponse
+    InvoiceHistoryRow:
+      properties:
+        invoice_id:
+          type: string
+          title: Invoice Id
+        invoice_no:
+          type: string
+          title: Invoice No
+        customer_id:
+          type: integer
+          title: Customer Id
+        customer_code:
+          type: string
+          title: Customer Code
+        customer_name:
+          type: string
+          title: Customer Name
+        issue_date:
+          type: string
+          format: date
+          title: Issue Date
+        due_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Due Date
+        invoice_status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        payment_status:
+          $ref: '#/components/schemas/InvoicePaymentStatus'
+        overdue:
+          type: boolean
+          title: Overdue
+        line_count:
+          type: integer
+          title: Line Count
+        subtotal:
+          type: number
+          title: Subtotal
+        tax:
+          type: number
+          title: Tax
+        total:
+          type: number
+          title: Total
+      type: object
+      required:
+      - invoice_id
+      - invoice_no
+      - customer_id
+      - customer_code
+      - customer_name
+      - issue_date
+      - due_date
+      - invoice_status
+      - payment_status
+      - overdue
+      - line_count
+      - subtotal
+      - tax
+      - total
+      title: InvoiceHistoryRow
     InvoiceItemResponse:
       properties:
         id:
@@ -6916,6 +7384,21 @@ components:
       - prev_invoice_id
       - next_invoice_id
       title: InvoiceNeighborsResponse
+    InvoicePaymentStatus:
+      type: string
+      enum:
+      - unpaid
+      - partially_paid
+      - paid
+      title: InvoicePaymentStatus
+    InvoicePaymentStatusUpdateRequest:
+      properties:
+        payment_status:
+          $ref: '#/components/schemas/InvoicePaymentStatus'
+      type: object
+      required:
+      - payment_status
+      title: InvoicePaymentStatusUpdateRequest
     InvoiceReportLine:
       properties:
         invoice_item_id:
@@ -7199,6 +7682,9 @@ components:
           title: Grand Total
         status:
           $ref: '#/components/schemas/InvoiceStatus'
+        payment_status:
+          $ref: '#/components/schemas/InvoicePaymentStatus'
+          default: unpaid
         is_locked:
           type: boolean
           title: Is Locked
@@ -7295,6 +7781,9 @@ components:
           title: Due Date
         status:
           $ref: '#/components/schemas/InvoiceStatus'
+        payment_status:
+          $ref: '#/components/schemas/InvoicePaymentStatus'
+          default: unpaid
         subtotal:
           type: number
           title: Subtotal
@@ -8198,6 +8687,15 @@ components:
       - order
       - items
       title: OrderWithItemsCreateResponse
+    PaymentTermsType:
+      type: string
+      enum:
+      - days_after_issue
+      - end_of_issue_month
+      - end_of_next_month
+      - end_of_second_month
+      - half_month_15_eom
+      title: PaymentTermsType
     PricingBasis:
       type: string
       enum:
@@ -9764,6 +10262,16 @@ components:
       title: StockoutPolicy
     SupplierCreateRequest:
       properties:
+        payment_terms_type:
+          anyOf:
+          - $ref: '#/components/schemas/PaymentTermsType'
+          - type: 'null'
+        payment_terms_days:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Payment Terms Days
         name:
           type: string
           maxLength: 255
@@ -10042,6 +10550,15 @@ components:
         active:
           type: boolean
           title: Active
+        payment_terms_type:
+          anyOf:
+          - $ref: '#/components/schemas/PaymentTermsType'
+          - type: 'null'
+        payment_terms_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Payment Terms Days
         created_at:
           type: string
           format: date-time
@@ -10057,11 +10574,23 @@ components:
       - import_key
       - name
       - active
+      - payment_terms_type
+      - payment_terms_days
       - created_at
       - updated_at
       title: SupplierResponse
     SupplierUpdateRequest:
       properties:
+        payment_terms_type:
+          anyOf:
+          - $ref: '#/components/schemas/PaymentTermsType'
+          - type: 'null'
+        payment_terms_days:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Payment Terms Days
         name:
           anyOf:
           - type: string

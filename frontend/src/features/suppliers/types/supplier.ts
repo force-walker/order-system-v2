@@ -5,6 +5,8 @@ export type Supplier = {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  paymentTermsType?: 'days_after_issue' | 'end_of_issue_month' | 'end_of_next_month' | 'end_of_second_month' | 'half_month_15_eom';
+  paymentTermsDays?: number;
 };
 
 export type SupplierListParams = {
@@ -23,11 +25,15 @@ export type SupplierListResult = {
 export type SupplierCreateRequest = {
   name: string;
   active: boolean;
+  paymentTermsType?: Supplier['paymentTermsType'] | null;
+  paymentTermsDays?: number | null;
 };
 
 export type SupplierUpdateRequest = {
   name?: string;
   active?: boolean;
+  paymentTermsType?: Supplier['paymentTermsType'] | null;
+  paymentTermsDays?: number | null;
 };
 
 export type SupplierProductMapping = {

@@ -1,10 +1,24 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from app.models.entities import PaymentTermsType
 
 
-class CustomerCreateRequest(BaseModel):
+class PaymentTermsMixin(BaseModel):
+    payment_terms_type: PaymentTermsType | None = None
+    payment_terms_days: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_payment_terms(self):
+        if self.payment_terms_type == PaymentTermsType.days_after_issue and self.payment_terms_days is None:
+            raise ValueError("payment_terms_days is required for days_after_issue")
+        if self.payment_terms_type not in (None, PaymentTermsType.days_after_issue):
+            self.payment_terms_days = None
+        return self
+
+
+class CustomerCreateRequest(PaymentTermsMixin):
     region: str | None = Field(default=None, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     active: bool = True
@@ -12,7 +26,7 @@ class CustomerCreateRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class CustomerUpdateRequest(BaseModel):
+class CustomerUpdateRequest(PaymentTermsMixin):
     region: str | None = Field(default=None, max_length=64)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     active: bool | None = None
@@ -25,6 +39,8 @@ class CustomerResponse(BaseModel):
     region: str | None
     name: str
     active: bool
+    payment_terms_type: PaymentTermsType | None
+    payment_terms_days: int | None
     created_at: datetime
     updated_at: datetime
 

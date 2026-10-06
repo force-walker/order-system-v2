@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.entities import InvoiceStatus, OrderStatus
+from app.models.entities import InvoicePaymentStatus, InvoiceStatus, OrderStatus
 
 
 class InvoiceCreateRequest(BaseModel):
@@ -115,6 +115,7 @@ class InvoiceResponse(BaseModel):
     tax_total: float
     grand_total: float
     status: InvoiceStatus
+    payment_status: InvoicePaymentStatus = InvoicePaymentStatus.unpaid
     is_locked: bool
     created_at: datetime
     updated_at: datetime
@@ -294,10 +295,39 @@ class InvoiceSummaryRow(BaseModel):
     delivery_date: date
     due_date: date | None
     status: InvoiceStatus
+    payment_status: InvoicePaymentStatus = InvoicePaymentStatus.unpaid
     subtotal: float
     tax_total: float
     grand_total: float
     item_count: int
+
+
+class InvoiceHistoryRow(BaseModel):
+    invoice_id: str
+    invoice_no: str
+    customer_id: int
+    customer_code: str
+    customer_name: str
+    issue_date: date
+    due_date: date | None
+    invoice_status: InvoiceStatus
+    payment_status: InvoicePaymentStatus
+    overdue: bool
+    line_count: int
+    subtotal: float
+    tax: float
+    total: float
+
+
+class InvoiceHistoryResponse(BaseModel):
+    items: list[InvoiceHistoryRow]
+    total: int
+    page: int
+    page_size: int
+
+
+class InvoicePaymentStatusUpdateRequest(BaseModel):
+    payment_status: InvoicePaymentStatus
 
 
 class InvoiceNeighborsResponse(BaseModel):

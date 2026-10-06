@@ -33,7 +33,7 @@ const navigation = [
   ],
   [
     "/invoices",
-    "請求書"
+    "請求履歴"
   ],
   [
     "/products",

@@ -12,11 +12,15 @@ type Props = {
 type FormState = {
   name: string;
   active: boolean;
+  paymentTermsType: string;
+  paymentTermsDays: string;
 };
 
 const toInitialState = (initial?: Supplier): FormState => ({
   name: initial?.name ?? '',
   active: initial?.active ?? true,
+  paymentTermsType: initial?.paymentTermsType ?? '',
+  paymentTermsDays: initial?.paymentTermsDays == null ? '' : String(initial.paymentTermsDays),
 });
 
 export const SupplierForm = ({ initialValue, submitLabel, onSubmit }: Props) => {
@@ -41,7 +45,9 @@ export const SupplierForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
     setError('');
     setSubmitting(true);
     try {
-      await onSubmit({ name: form.name.trim(), active: form.active });
+      await onSubmit({ name: form.name.trim(), active: form.active,
+        paymentTermsType: form.paymentTermsType ? form.paymentTermsType as any : null,
+        paymentTermsDays: form.paymentTermsType === 'days_after_issue' ? Number(form.paymentTermsDays) : null });
     } catch (e) {
       setError(toActionableMessage(e, '仕入先の保存に失敗しました'));
     } finally {
@@ -72,6 +78,17 @@ export const SupplierForm = ({ initialValue, submitLabel, onSubmit }: Props) => 
           <option value="false">無効</option>
         </select>
       </label>
+      <label>支払条件
+        <select value={form.paymentTermsType} onChange={(e) => setForm((p) => ({ ...p, paymentTermsType: e.target.value }))}>
+          <option value="">未設定</option><option value="days_after_issue">発行日から○日後</option>
+          <option value="end_of_issue_month">当月末</option><option value="end_of_next_month">翌月末</option>
+          <option value="end_of_second_month">翌々月末</option><option value="half_month_15_eom">15日締め・月末/翌15日払い</option>
+        </select>
+      </label>
+      {form.paymentTermsType === 'days_after_issue' ? <label>支払サイト（日）
+        <input type="number" min="0" inputMode="numeric" required value={form.paymentTermsDays}
+          onChange={(e) => setForm((p) => ({ ...p, paymentTermsDays: e.target.value }))} />
+      </label> : null}
 
       <div className="form-actions" style={{ gridColumn: '1 / -1' }}>
         <button type="submit" disabled={submitting}>{submitting ? '保存中...' : submitLabel}</button>

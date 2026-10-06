@@ -1,22 +1,24 @@
 import type { EntityId } from 'shared/entityId';
 import { newestInvoiceFirst } from 'shared/entityId';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { PdfExportButton } from 'components/common/PdfExportButton';
-import { generateInvoicePdf, getInvoiceDetailView, listInvoiceSummaries } from 'features/orders/services/invoiceService';
+import { generateInvoicePdf, getInvoiceDetailView, getInvoiceHistoryNeighbors, listInvoiceSummaries, updateInvoicePaymentStatus } from 'features/orders/services/invoiceService';
 import type { InvoiceDetailView, InvoiceSummaryRow } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 import { openPdfBlob } from 'shared/pdf';
 
-const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
+const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'HKD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const InvoiceDetailPage = () => {
   const { invoiceId } = useParams();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [data, setData] = useState<InvoiceDetailView | null>(null);
   const [summaries, setSummaries] = useState<InvoiceSummaryRow[]>([]);
+  const [historyNav, setHistoryNav] = useState<{prevId: EntityId | null; nextId: EntityId | null} | null>(null);
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [pdfError, setPdfError] = useState('');
 
@@ -26,12 +28,20 @@ export const InvoiceDetailPage = () => {
       setLoading(true);
       setError('');
       try {
-        const [detail, list] = await Promise.all([
+        const historyContext = searchParams.get('history') === '1';
+        const contextParams = { search: searchParams.get('q') ?? undefined, dateFrom: searchParams.get('from') ?? undefined,
+          dateTo: searchParams.get('to') ?? undefined, customerId: searchParams.get('customer') ? Number(searchParams.get('customer')) : undefined,
+          invoiceStatus: searchParams.get('status') ?? 'finalized', paymentStatus: searchParams.get('payment') ?? undefined,
+          overdue: searchParams.get('overdue') ?? undefined, sort: searchParams.get('sort') ?? 'issue_date', direction: searchParams.get('dir') ?? 'desc',
+          page: Number(searchParams.get('page') ?? 1), pageSize: 50 };
+        const [detail, list, neighbors] = await Promise.all([
           getInvoiceDetailView(invoiceId ?? ''),
-          listInvoiceSummaries(),
+          historyContext ? Promise.resolve([]) : listInvoiceSummaries(),
+          historyContext ? getInvoiceHistoryNeighbors(invoiceId ?? '', contextParams) : Promise.resolve(null),
         ]);
         setData(detail);
         setSummaries(list);
+        setHistoryNav(neighbors);
       } catch (e) {
         setError(toActionableMessage(e, '請求書詳細の取得に失敗しました。'));
       } finally {
@@ -39,7 +49,7 @@ export const InvoiceDetailPage = () => {
       }
     };
     void load();
-  }, [invoiceId]);
+  }, [invoiceId, searchParams.toString()]);
 
   const onGeneratePdf = async () => {
     if (!data) return;
@@ -55,7 +65,14 @@ export const InvoiceDetailPage = () => {
     }
   };
 
+  const onPaymentStatus = async (paymentStatus: 'unpaid' | 'partially_paid' | 'paid') => {
+    if (!data) return;
+    await updateInvoicePaymentStatus(data.invoiceId, paymentStatus);
+    setData({ ...data, paymentStatus });
+  };
+
   const nav = useMemo(() => {
+    if (historyNav) return historyNav;
     if (!data) return { prevId: null as EntityId | null, nextId: null as EntityId | null };
     const sorted = [...summaries].sort(newestInvoiceFirst);
     const idx = sorted.findIndex((r) => r.invoiceId === data.invoiceId);
@@ -64,7 +81,10 @@ export const InvoiceDetailPage = () => {
       nextId: sorted[idx - 1]?.invoiceId ?? null,
       prevId: sorted[idx + 1]?.invoiceId ?? null,
     };
-  }, [data, summaries]);
+  }, [data, summaries, searchParams.toString(), historyNav]);
+
+  const historyParams = new URLSearchParams(searchParams);
+  historyParams.delete('history');
 
   if (error) return <ErrorState title="請求書詳細の取得に失敗しました" description={error} />;
   if (loading) return <LoadingState title="請求書詳細を読み込み中" description="しばらくお待ちください。" />;
@@ -80,7 +100,7 @@ export const InvoiceDetailPage = () => {
             {pdfError ? <p className="field-error">{pdfError}</p> : null}
           </div>
           <div style={{ display: 'grid', gap: 6, justifyItems: 'end' }}>
-            <Link to="/invoices" className="order-link">← 請求書一覧へ</Link>
+            <Link to={`/invoices?${historyParams}`} className="order-link">← 請求履歴へ</Link>
             <PdfExportButton
               busy={pdfGenerating}
               idleLabel="請求書PDF"
@@ -91,12 +111,12 @@ export const InvoiceDetailPage = () => {
             />
             <div style={{ display: 'flex', gap: 14 }}>
               {nav.nextId ? (
-                <Link to={`/invoices/${nav.nextId}`} className="order-link">次の請求書詳細へジャンプ</Link>
+                <Link to={`/invoices/${nav.nextId}?${searchParams}`} className="order-link">次の請求書詳細へジャンプ</Link>
               ) : (
                 <span className="nav-link-disabled">次の請求書詳細へジャンプ</span>
               )}
               {nav.prevId ? (
-                <Link to={`/invoices/${nav.prevId}`} className="order-link">前の請求書詳細へジャンプ</Link>
+                <Link to={`/invoices/${nav.prevId}?${searchParams}`} className="order-link">前の請求書詳細へジャンプ</Link>
               ) : (
                 <span className="nav-link-disabled">前の請求書詳細へジャンプ</span>
               )}
@@ -109,6 +129,10 @@ export const InvoiceDetailPage = () => {
             <p><strong>取引先:</strong> {data.customerName}</p>
             <p><strong>請求日:</strong> {data.invoiceDate}</p>
             <p><strong>納品日:</strong> {data.deliveryDate}</p>
+            <p><strong>支払期限:</strong> {data.dueDate ?? '-'}</p>
+            <label><strong>回収状況:</strong> <select value={data.paymentStatus ?? 'unpaid'} onChange={(e) => void onPaymentStatus(e.target.value as any)}>
+              <option value="unpaid">未回収</option><option value="partially_paid">一部回収</option><option value="paid">回収済み</option>
+            </select></label>
           </div>
           <div>
             <p><strong>小計:</strong> {currency.format(data.subtotal)}</p>

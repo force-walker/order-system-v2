@@ -20,7 +20,7 @@ vi.mock('../services/ordersService', () => ({
   clearDirtyOrderStatus: vi.fn(), hasDirtyOrderStatus: () => false,
 }));
 vi.mock('../services/invoiceService', () => ({
-  getInvoiceDetailView: vi.fn(), listInvoiceSummaries: vi.fn(), generateInvoicePdf: vi.fn(),
+  getInvoiceDetailView: vi.fn(), listInvoiceSummaries: vi.fn(), generateInvoicePdf: vi.fn(), getInvoiceHistoryNeighbors: vi.fn(), updateInvoicePaymentStatus: vi.fn(),
   getInvoiceDraftItems: vi.fn(), finalizeInvoiceDraft: vi.fn(), finalizeInvoiceItemLine: vi.fn(),
 }));
 vi.mock('../components/OrderForm', () => ({
@@ -37,7 +37,7 @@ beforeEach(() => {
   vi.mocked(orders.getOrderItem).mockResolvedValue(null);
   vi.mocked(invoices.getInvoiceDraftItems).mockResolvedValue([]);
   vi.mocked(invoices.listInvoiceSummaries).mockResolvedValue([]);
-  vi.mocked(invoices.getInvoiceDetailView).mockResolvedValue({ invoiceId: id, invoiceNo: 'INV', customerName: 'Test', invoiceDate: '', deliveryDate: '', status: 'draft', subtotal: 0, taxTotal: 0, grandTotal: 0, items: [] });
+  vi.mocked(invoices.getInvoiceDetailView).mockResolvedValue({ invoiceId: id, invoiceNo: 'INV', customerName: 'Test', invoiceDate: '', deliveryDate: '', status: 'draft', paymentStatus: 'unpaid', subtotal: 100, taxTotal: 10, grandTotal: 110, items: [] });
 });
 afterEach(cleanup);
 const show = (path: string, url: string, page: React.ReactElement) => render(
@@ -56,6 +56,36 @@ it('loads order item details with both UUIDs', async () => {
 it('loads invoice details using the route UUID', async () => {
   show('/invoices/:invoiceId', `/invoices/${id}`, <InvoiceDetailPage />);
   await waitFor(() => expect(invoices.getInvoiceDetailView).toHaveBeenCalledWith(id));
+  expect(invoices.getInvoiceHistoryNeighbors).not.toHaveBeenCalled();
+  expect(invoices.listInvoiceSummaries).toHaveBeenCalled();
+  expect(await screen.findByText(/HK\$110\.00/)).toBeTruthy();
+});
+it('uses default history neighbors when only the history context marker is present', async () => {
+  vi.mocked(invoices.getInvoiceHistoryNeighbors).mockResolvedValue({ prevId: null, nextId: null });
+  show('/invoices/:invoiceId', `/invoices/${id}?history=1`, <InvoiceDetailPage />);
+  await waitFor(() => expect(invoices.getInvoiceHistoryNeighbors).toHaveBeenCalledWith(id, expect.objectContaining({
+    invoiceStatus: 'finalized', sort: 'issue_date', direction: 'desc', page: 1,
+  })));
+  expect(invoices.listInvoiceSummaries).not.toHaveBeenCalled();
+  expect(screen.getByRole('link', { name: '← 請求履歴へ' }).getAttribute('href')).toBe('/invoices');
+});
+it('uses filtered history neighbors across page boundaries and preserves context', async () => {
+  const previousId = '00000000-0000-4000-8000-000000000049';
+  const nextId = '00000000-0000-4000-8000-000000000050';
+  vi.mocked(invoices.getInvoiceHistoryNeighbors).mockResolvedValue({ prevId: previousId, nextId });
+  show('/invoices/:invoiceId', `/invoices/${id}?history=1&q=ABC&page=2&sort=invoice_no&dir=asc`, <InvoiceDetailPage />);
+  await waitFor(() => expect(invoices.getInvoiceHistoryNeighbors).toHaveBeenCalledWith(id, expect.objectContaining({
+    search: 'ABC', page: 2, sort: 'invoice_no', direction: 'asc',
+  })));
+  expect(screen.getByRole('link', { name: '次の請求書詳細へジャンプ' }).getAttribute('href')).toContain(`/invoices/${nextId}?history=1&q=ABC&page=2&sort=invoice_no&dir=asc`);
+  expect(screen.getByRole('link', { name: '前の請求書詳細へジャンプ' }).getAttribute('href')).toContain(`/invoices/${previousId}?history=1&q=ABC&page=2&sort=invoice_no&dir=asc`);
+  expect(screen.getByRole('link', { name: '← 請求履歴へ' }).getAttribute('href')).toBe('/invoices?q=ABC&page=2&sort=invoice_no&dir=asc');
+});
+it('updates invoice payment status', async () => {
+  vi.mocked(invoices.updateInvoicePaymentStatus).mockResolvedValue(undefined);
+  show('/invoices/:invoiceId', `/invoices/${id}`, <InvoiceDetailPage />);
+  await userEvent.selectOptions(await screen.findByLabelText(/回収状況/), 'paid');
+  await waitFor(() => expect(invoices.updateInvoicePaymentStatus).toHaveBeenCalledWith(id, 'paid'));
 });
 it('loads and finalizes an invoice draft using its UUID', async () => {
   show('/invoices/drafts/:invoiceId', `/invoices/drafts/${id}`, <InvoiceDraftDetailPage />);

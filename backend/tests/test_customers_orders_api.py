@@ -124,6 +124,34 @@ def test_update_customer_success_and_not_found():
     assert nf.json()["detail"]["code"] == "CUSTOMER_NOT_FOUND"
 
 
+def test_update_customer_can_clear_payment_terms_to_null():
+    cid = _seed_customer("CUST-PAY-CLEAR")
+    client = _client()
+
+    configured = client.patch(
+        f"/api/v1/customers/{cid}",
+        json={"payment_terms_type": "days_after_issue", "payment_terms_days": 30},
+    )
+    assert configured.status_code == 200
+    assert configured.json()["payment_terms_type"] == "days_after_issue"
+    assert configured.json()["payment_terms_days"] == 30
+
+    cleared = client.patch(
+        f"/api/v1/customers/{cid}",
+        json={"payment_terms_type": None, "payment_terms_days": None},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["payment_terms_type"] is None
+    assert cleared.json()["payment_terms_days"] is None
+
+    db = TestingSessionLocal()
+    row = db.get(Customer, cid)
+    assert row is not None
+    assert row.payment_terms_type is None
+    assert row.payment_terms_days is None
+    db.close()
+
+
 def test_create_customer_validation_error_is_422():
     client = _client()
     res = client.post("/api/v1/customers", json={})

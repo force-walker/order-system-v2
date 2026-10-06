@@ -20,6 +20,8 @@ type ApiSupplier = {
   active: boolean;
   created_at: string;
   updated_at: string;
+  payment_terms_type?: Supplier['paymentTermsType'] | null;
+  payment_terms_days?: number | null;
 };
 
 type ApiSupplierProductMapping = {
@@ -83,6 +85,8 @@ const toSupplier = (row: ApiSupplier): Supplier => ({
   active: row.active,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+  paymentTermsType: row.payment_terms_type ?? undefined,
+  paymentTermsDays: row.payment_terms_days ?? undefined,
 });
 
 const toImportFormat = (row: ApiImportFormatResponse): ImportFormat => ({
@@ -131,6 +135,8 @@ export const createSupplier = async (payload: SupplierCreateRequest): Promise<Su
     body: {
       name: payload.name,
       active: payload.active,
+      payment_terms_type: payload.paymentTermsType,
+      payment_terms_days: payload.paymentTermsDays,
     },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
@@ -144,6 +150,8 @@ export const updateSupplier = async (supplierId: number, payload: SupplierUpdate
     body: {
       name: payload.name,
       active: payload.active,
+      payment_terms_type: payload.paymentTermsType,
+      payment_terms_days: payload.paymentTermsDays,
     },
   });
   if (!res.ok) throw await parseApiErrorPayload(res);

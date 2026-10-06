@@ -16,7 +16,7 @@ const cases = [
   ['/orders/uuid/edit', '注文一覧'], ['/orders/uuid/items/item-uuid', '注文一覧'],
   ['/reports/shipping', '帳票'], ['/purchases', '納品確認'],
   ['/invoices/drafts', '請求ドラフト'], ['/invoices/drafts/uuid', '請求ドラフト'],
-  ['/invoices', '請求書'], ['/invoices/uuid', '請求書'],
+  ['/invoices', '請求履歴'], ['/invoices/uuid', '請求履歴'],
   ...['products', 'customers', 'suppliers'].flatMap((section, index) =>
     ['', '/new', '/import', '/123', '/123/edit'].map(suffix =>
       ['/' + section + suffix, ['商品', '顧客', '仕入先'][index]])),
@@ -40,7 +40,7 @@ describe('navigation selection', () => {
   it('updates selection when moving between overlapping sections', async () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={['/orders/new']}><AppLayout /></MemoryRouter>);
-    for (const label of ['注文一覧', '一括割当', '注文作成', '請求ドラフト', '請求書']) {
+    for (const label of ['注文一覧', '一括割当', '注文作成', '請求ドラフト', '請求履歴']) {
       await user.click(screen.getByRole('link', { name: label }));
       expectSelected(label);
     }

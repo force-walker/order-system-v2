@@ -1,8 +1,11 @@
 from datetime import date, datetime
+import csv
+import io
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.order_lookup import get_order_or_404 as _get_order_or_404
@@ -25,8 +28,10 @@ from app.core.numbering import (
     ensure_order_delivery_number,
     generate_official_invoice_no,
 )
+from app.core.payment_terms import calculate_due_date
+from app.core.business_time import hong_kong_today
 from app.db.session import get_db
-from app.models.entities import Customer, Delivery, Invoice, InvoiceItem, InvoiceLineStatus, InvoiceStatus, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, SupplierAllocation
+from app.models.entities import Customer, Delivery, Invoice, InvoiceItem, InvoiceLineStatus, InvoicePaymentStatus, InvoiceStatus, LineStatus, Order, OrderItem, OrderStatus, PricingBasis, Product, PurchaseResult, SupplierAllocation
 from app.schemas.common import ApiErrorResponse
 from app.schemas.invoice import (
     InvoiceBatchFinalizeRequest,
@@ -43,8 +48,11 @@ from app.schemas.invoice import (
     InvoiceFinalizeResponse,
     InvoiceGenerateRequest,
     InvoiceGenerateFromDeliveryRequest,
+    InvoiceHistoryResponse,
+    InvoiceHistoryRow,
     InvoiceItemResponse,
     InvoiceItemUpdateRequest,
+    InvoicePaymentStatusUpdateRequest,
     InvoiceNeighborsResponse,
     InvoiceReportLine,
     InvoiceReportResponse,
@@ -68,6 +76,15 @@ INVOICE_COMMON_ERROR_RESPONSES = {
 def _validate_due_date(invoice_date, due_date) -> None:
     if due_date is not None and due_date < invoice_date:
         raise HTTPException(status_code=422, detail={"code": "INVALID_DATE_RANGE", "message": "due_date must be on or after invoice_date"})
+
+
+def _resolved_due_date(db: Session, customer_id: int, issue_date: date, explicit: date | None) -> date | None:
+    if explicit is not None:
+        return explicit
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if customer is None:
+        return None
+    return calculate_due_date(issue_date, customer.payment_terms_type, customer.payment_terms_days)
 
 
 
@@ -350,6 +367,7 @@ def _invoice_response(db: Session, invoice: Invoice) -> InvoiceResponse:
         tax_total=float(invoice.tax_total),
         grand_total=float(invoice.grand_total),
         status=invoice.status,
+        payment_status=invoice.payment_status,
         is_locked=invoice.is_locked,
         created_at=invoice.created_at,
         updated_at=invoice.updated_at,
@@ -683,6 +701,187 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
         )
 
     return result
+
+
+def _history_query(
+    db: Session,
+    *,
+    search: str | None,
+    date_from: date | None,
+    date_to: date | None,
+    customer_id: int | None,
+    invoice_status: InvoiceStatus | None,
+    payment_status: InvoicePaymentStatus | None,
+    overdue: bool | None,
+):
+    line_count = (
+        select(func.count(InvoiceItem.id))
+        .where(InvoiceItem.invoice_id == Invoice.id)
+        .correlate(Invoice)
+        .scalar_subquery()
+        .label("line_count")
+    )
+    query = (
+        db.query(Invoice, Customer, line_count)
+        .join(Customer, Customer.id == Invoice.customer_id)
+    )
+    if search:
+        query = query.filter(or_(_history_header_search_condition(search), _history_line_search_exists(search)))
+    if date_from:
+        query = query.filter(Invoice.invoice_date >= date_from)
+    if date_to:
+        query = query.filter(Invoice.invoice_date <= date_to)
+    if customer_id is not None:
+        query = query.filter(Invoice.customer_id == customer_id)
+    if invoice_status is not None:
+        query = query.filter(Invoice.status == invoice_status)
+    if payment_status is not None:
+        query = query.filter(Invoice.payment_status == payment_status)
+    if overdue is True:
+        query = query.filter(Invoice.payment_status != InvoicePaymentStatus.paid, Invoice.due_date < hong_kong_today())
+    elif overdue is False:
+        query = query.filter(or_(Invoice.payment_status == InvoicePaymentStatus.paid, Invoice.due_date.is_(None), Invoice.due_date >= hong_kong_today()))
+    return query
+
+
+def _history_header_search_condition(search: str):
+    pattern = f"%{search.strip()}%"
+    return or_(Invoice.invoice_no.ilike(pattern), Invoice.invoice_draft_no.ilike(pattern),
+        Invoice.official_invoice_no.ilike(pattern), Customer.name.ilike(pattern), Customer.customer_code.ilike(pattern))
+
+
+def _history_joined_line_search_condition(search: str):
+    pattern = f"%{search.strip()}%"
+    return or_(Product.sku.ilike(pattern), Product.name.ilike(pattern))
+
+
+def _history_line_search_exists(search: str):
+    return (
+        select(InvoiceItem.id)
+        .join(OrderItem, OrderItem.id == InvoiceItem.order_item_id)
+        .join(Product, Product.id == OrderItem.product_id)
+        .where(InvoiceItem.invoice_id == Invoice.id, _history_joined_line_search_condition(search))
+        .exists()
+    )
+
+
+def _history_display_invoice_no():
+    return func.coalesce(Invoice.official_invoice_no, Invoice.invoice_no)
+
+
+def _history_ordering(sort: str, direction: str):
+    sort_columns = {"issue_date": Invoice.invoice_date, "due_date": Invoice.due_date, "invoice_no": _history_display_invoice_no(),
+        "customer": Customer.name, "invoice_status": Invoice.status, "payment_status": Invoice.payment_status, "total": Invoice.grand_total}
+    ordering = asc if direction == "asc" else desc
+    return ordering(sort_columns.get(sort, Invoice.invoice_date)), ordering(_history_display_invoice_no()), ordering(Invoice.id)
+
+
+def _history_rows(rows) -> list[InvoiceHistoryRow]:
+    today = hong_kong_today()
+    return [InvoiceHistoryRow(
+        invoice_id=invoice.id, invoice_no=invoice.official_invoice_no or invoice.invoice_no,
+        customer_id=customer.id, customer_code=customer.customer_code, customer_name=customer.name,
+        issue_date=invoice.invoice_date, due_date=invoice.due_date, invoice_status=invoice.status,
+        payment_status=invoice.payment_status,
+        overdue=invoice.payment_status != InvoicePaymentStatus.paid and invoice.due_date is not None and invoice.due_date < today,
+        line_count=int(line_count), subtotal=float(invoice.subtotal), tax=float(invoice.tax_total), total=float(invoice.grand_total),
+    ) for invoice, customer, line_count in rows]
+
+
+@router.get("/history", response_model=InvoiceHistoryResponse)
+def list_invoice_history(
+    search: str | None = Query(default=None, max_length=255),
+    date_from: date | None = None, date_to: date | None = None,
+    customer_id: int | None = None,
+    invoice_status: str | None = "finalized",
+    payment_status: InvoicePaymentStatus | None = None,
+    overdue: bool | None = None,
+    sort: str = Query(default="issue_date"), direction: str = Query(default="desc", pattern="^(asc|desc)$"),
+    page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> InvoiceHistoryResponse:
+    parsed_invoice_status = None if invoice_status in (None, "all") else InvoiceStatus(invoice_status)
+    query = _history_query(db, search=search, date_from=date_from, date_to=date_to, customer_id=customer_id,
+        invoice_status=parsed_invoice_status, payment_status=payment_status, overdue=overdue)
+    total = query.count()
+    rows = query.order_by(*_history_ordering(sort, direction)).offset((page - 1) * page_size).limit(page_size).all()
+    return InvoiceHistoryResponse(items=_history_rows(rows), total=total, page=page, page_size=page_size)
+
+
+@router.get("/history/export/{kind}")
+def export_invoice_history(
+    kind: str, search: str | None = None, date_from: date | None = None, date_to: date | None = None,
+    customer_id: int | None = None, invoice_status: str | None = "finalized",
+    payment_status: InvoicePaymentStatus | None = None, overdue: bool | None = None,
+    sort: str = Query(default="issue_date"), direction: str = Query(default="desc", pattern="^(asc|desc)$"),
+    db: Session = Depends(get_db),
+) -> Response:
+    if kind not in {"headers", "lines"}:
+        raise HTTPException(status_code=404, detail={"code": "EXPORT_NOT_FOUND", "message": "unknown export type"})
+    parsed_invoice_status = None if invoice_status in (None, "all") else InvoiceStatus(invoice_status)
+    base = _history_query(db, search=search, date_from=date_from, date_to=date_to, customer_id=customer_id,
+        invoice_status=parsed_invoice_status, payment_status=payment_status, overdue=overdue)
+    rows = base.order_by(*_history_ordering(sort, direction)).all()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    if kind == "headers":
+        writer.writerow(["invoice_no", "issue_date", "due_date", "customer_code", "customer_name", "invoice_status", "payment_status", "overdue", "line_count", "subtotal", "tax", "total"])
+        for row in _history_rows(rows):
+            writer.writerow([row.invoice_no, row.issue_date, row.due_date or "", row.customer_code, row.customer_name,
+                row.invoice_status.value, row.payment_status.value, str(row.overdue).lower(), row.line_count, row.subtotal, row.tax, row.total])
+    else:
+        writer.writerow(["invoice_no", "issue_date", "due_date", "customer_code", "customer_name", "invoice_status", "payment_status",
+            "line_no", "line_ref", "sku", "product_name", "billable_qty", "billable_uom", "sales_unit_price", "line_amount", "unit_cost_basis", "gross_profit", "gross_margin_pct"])
+        invoice_ids = [invoice.id for invoice, _, _ in rows]
+        detail_query = (db.query(Invoice, Customer, InvoiceItem, Product).join(Customer, Customer.id == Invoice.customer_id)
+            .join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id).join(OrderItem, OrderItem.id == InvoiceItem.order_item_id)
+            .join(Product, Product.id == OrderItem.product_id).filter(Invoice.id.in_(invoice_ids)))
+        if search:
+            detail_query = detail_query.filter(or_(
+                _history_header_search_condition(search),
+                _history_joined_line_search_condition(search),
+            ))
+        details = detail_query.order_by(*_history_ordering(sort, direction), InvoiceItem.line_no.asc()).all() if invoice_ids else []
+        for invoice, customer, item, product in details:
+            gross_profit = float(item.line_amount) - (float(item.billable_qty) * float(item.unit_cost_basis)) if item.unit_cost_basis is not None else ""
+            gross_margin = gross_profit / float(item.line_amount) * 100 if gross_profit != "" and float(item.line_amount) else ""
+            writer.writerow([invoice.official_invoice_no or invoice.invoice_no, invoice.invoice_date, invoice.due_date or "", customer.customer_code,
+                customer.name, invoice.status.value, invoice.payment_status.value, item.line_no, item.line_ref, product.sku, product.name,
+                item.billable_qty, item.billable_uom, item.sales_unit_price, item.line_amount, item.unit_cost_basis or "", gross_profit, gross_margin])
+    return Response(content="\ufeff" + output.getvalue(), media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="invoice-history-{kind}.csv"'})
+
+
+@router.get("/history/{invoice_id}/neighbors", response_model=InvoiceNeighborsResponse)
+def get_invoice_history_neighbors(
+    invoice_id: str, search: str | None = None, date_from: date | None = None, date_to: date | None = None,
+    customer_id: int | None = None, invoice_status: str | None = "finalized",
+    payment_status: InvoicePaymentStatus | None = None, overdue: bool | None = None,
+    sort: str = "issue_date", direction: str = Query(default="desc", pattern="^(asc|desc)$"),
+    db: Session = Depends(get_db),
+) -> InvoiceNeighborsResponse:
+    _get_invoice_or_404(db, invoice_id)
+    parsed_status = None if invoice_status in (None, "all") else InvoiceStatus(invoice_status)
+    query = _history_query(db, search=search, date_from=date_from, date_to=date_to, customer_id=customer_id,
+        invoice_status=parsed_status, payment_status=payment_status, overdue=overdue)
+    ordered = [invoice.id for invoice, _, _ in query.order_by(*_history_ordering(sort, direction)).all()]
+    if invoice_id not in ordered:
+        return InvoiceNeighborsResponse(invoice_id=invoice_id, prev_invoice_id=None, next_invoice_id=None)
+    index = ordered.index(invoice_id)
+    return InvoiceNeighborsResponse(invoice_id=invoice_id,
+        prev_invoice_id=ordered[index - 1] if index > 0 else None,
+        next_invoice_id=ordered[index + 1] if index + 1 < len(ordered) else None)
+
+
+@router.patch("/{invoice_id}/payment-status", response_model=InvoiceResponse)
+def update_invoice_payment_status(invoice_id: str, payload: InvoicePaymentStatusUpdateRequest, db: Session = Depends(get_db)) -> InvoiceResponse:
+    invoice = _get_invoice_or_404(db, invoice_id)
+    before = {"payment_status": invoice.payment_status.value}
+    invoice.payment_status = payload.payment_status
+    write_audit_log(db, entity_type="invoice", entity_id=invoice.id, action=AuditAction.UPDATE,
+                    before=before, after={"payment_status": invoice.payment_status.value})
+    db.commit(); db.refresh(invoice)
+    return _invoice_response(db, invoice)
 
 
 def _current_allocation_targets(db: Session, order_item_id: str) -> list[SupplierAllocation]:
@@ -1356,7 +1555,7 @@ def generate_invoice(payload: InvoiceGenerateRequest, db: Session = Depends(get_
         delivery_id=(delivery.id if delivery is not None else None),
         invoice_date=payload.invoice_date,
         delivery_date=(delivery.delivery_date if delivery is not None else order.delivery_date),
-        due_date=payload.due_date,
+        due_date=_resolved_due_date(db, order.customer_id, payload.invoice_date, payload.due_date),
         subtotal=0,
         tax_total=0,
         grand_total=0,
@@ -1440,7 +1639,7 @@ def generate_invoice_from_delivery(payload: InvoiceGenerateFromDeliveryRequest, 
         delivery_id=delivery.id,
         invoice_date=payload.invoice_date,
         delivery_date=delivery.delivery_date,
-        due_date=payload.due_date,
+        due_date=_resolved_due_date(db, delivery.customer_id, payload.invoice_date, payload.due_date),
         subtotal=0,
         tax_total=0,
         grand_total=0,
@@ -1641,7 +1840,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
         delivery_id=(delivery.id if delivery is not None else None),
         invoice_date=payload.invoice_date,
         delivery_date=(delivery.delivery_date if delivery is not None else order.delivery_date),
-        due_date=payload.due_date,
+        due_date=_resolved_due_date(db, order.customer_id, payload.invoice_date, payload.due_date),
         subtotal=0,
         tax_total=0,
         grand_total=0,

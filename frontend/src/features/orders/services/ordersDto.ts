@@ -25,12 +25,16 @@ export const toApiCustomerCreate = (payload: CustomerCreateRequest): ApiCustomer
   name: payload.name,
   region: payload.region,
   active: payload.active,
+  payment_terms_type: payload.paymentTermsType,
+  payment_terms_days: payload.paymentTermsDays,
 } as unknown as ApiCustomerCreateRequest);
 
 export const toApiCustomerUpdate = (payload: CustomerUpdateRequest): ApiCustomerUpdateRequest => ({
   name: payload.name,
   region: payload.region,
   active: payload.active,
+  payment_terms_type: payload.paymentTermsType,
+  payment_terms_days: payload.paymentTermsDays,
 } as unknown as ApiCustomerUpdateRequest);
 
 export const toApiProductCreate = (payload: ProductCreateRequest): ApiProductCreateRequest => ({
@@ -93,6 +97,8 @@ export const toCustomerDetail = (row: ApiCustomerResponse): CustomerDetail => ({
   name: row.name,
   region: (row as unknown as { region?: string | null }).region ?? undefined,
   active: row.active,
+  paymentTermsType: (row as any).payment_terms_type ?? undefined,
+  paymentTermsDays: (row as any).payment_terms_days ?? undefined,
 });
 
 export const toProductOption = (row: ApiProductResponse): ProductOption => ({

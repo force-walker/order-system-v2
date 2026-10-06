@@ -85,7 +85,7 @@ def create_supplier(payload: SupplierCreateRequest, db: Session = Depends(get_db
     if exists is not None:
         raise HTTPException(status_code=409, detail={"code": "SUPPLIER_CODE_ALREADY_EXISTS", "message": "supplier code already exists"})
 
-    row = Supplier(supplier_code=supplier_code, name=payload.name, active=payload.active)
+    row = Supplier(supplier_code=supplier_code, **payload.model_dump())
     db.add(row)
     db.flush()
     write_audit_log(db, entity_type="supplier", entity_id=row.id, action=AuditAction.CREATE)

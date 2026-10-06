@@ -83,18 +83,26 @@ export type CustomerDetail = {
   name: string;
   region?: string;
   active: boolean;
+  paymentTermsType?: PaymentTermsType | null;
+  paymentTermsDays?: number | null;
 };
+
+export type PaymentTermsType = 'days_after_issue' | 'end_of_issue_month' | 'end_of_next_month' | 'end_of_second_month' | 'half_month_15_eom';
 
 export type CustomerCreateRequest = {
   name: string;
   region?: string;
   active: boolean;
+  paymentTermsType?: PaymentTermsType | null;
+  paymentTermsDays?: number | null;
 };
 
 export type CustomerUpdateRequest = {
   name?: string;
   region?: string;
   active?: boolean;
+  paymentTermsType?: PaymentTermsType | null;
+  paymentTermsDays?: number | null;
 };
 
 export type ProductOption = {
@@ -212,6 +220,13 @@ export type PurchaseResultCreateRequest = {
 };
 
 export type InvoiceStatus = 'draft' | 'finalized' | 'sent' | 'cancelled';
+export type InvoicePaymentStatus = 'unpaid' | 'partially_paid' | 'paid';
+
+export type InvoiceHistoryRow = {
+  invoiceId: EntityId; invoiceNo: string; customerId: number; customerCode: string; customerName: string;
+  issueDate: string; dueDate?: string; invoiceStatus: InvoiceStatus; paymentStatus: InvoicePaymentStatus;
+  overdue: boolean; lineCount: number; subtotal: number; tax: number; total: number;
+};
 
 export type InvoiceDraftItem = {
   id: EntityId;
@@ -334,6 +349,8 @@ export type InvoiceDetailView = {
   invoiceDate: string;
   deliveryDate: string;
   status: InvoiceStatus;
+  paymentStatus?: InvoicePaymentStatus;
+  dueDate?: string;
   subtotal: number;
   taxTotal: number;
   grandTotal: number;

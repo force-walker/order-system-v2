@@ -1,7 +1,7 @@
 import type { EntityId } from 'shared/entityId';
 import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClient';
 import { parseApiErrorPayload } from 'shared/error';
-import type { InvoiceDetailView, InvoiceDraftCandidate, InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceStatus, InvoiceSummaryRow } from 'features/orders/types/order';
+import type { InvoiceDetailView, InvoiceDraftCandidate, InvoiceDraftItem, InvoiceDraftListRow, InvoiceDraftSummary, InvoiceHistoryRow, InvoicePaymentStatus, InvoiceStatus, InvoiceSummaryRow } from 'features/orders/types/order';
 import { markOrdersStatusDirty } from './ordersService';
 
 type ApiInvoiceSummary = {
@@ -14,6 +14,7 @@ type ApiInvoiceSummary = {
   tax_total: number;
   grand_total: number;
   status: InvoiceStatus;
+  payment_status: InvoicePaymentStatus;
 };
 
 type ApiInvoiceItem = {
@@ -395,7 +396,9 @@ export const listInvoiceSummaries = async (): Promise<InvoiceSummaryRow[]> => {
 };
 
 export const getInvoiceDetailView = async (invoiceId: EntityId): Promise<InvoiceDetailView> => {
-  const report = await getInvoiceReport(invoiceId);
+  const [report, invoiceRes] = await Promise.all([getInvoiceReport(invoiceId), fetchWithAuth(`/api/v1/invoices/${invoiceId}`)]);
+  if (!invoiceRes.ok) throw await parseApiErrorPayload(invoiceRes);
+  const invoice = await invoiceRes.json() as ApiInvoiceSummary & { due_date: string | null };
 
   return {
     invoiceId: report.invoice_id,
@@ -404,6 +407,8 @@ export const getInvoiceDetailView = async (invoiceId: EntityId): Promise<Invoice
     invoiceDate: report.invoice_date,
     deliveryDate: report.delivery_date,
     status: report.status,
+    paymentStatus: invoice.payment_status,
+    dueDate: invoice.due_date ?? undefined,
     subtotal: report.subtotal,
     taxTotal: report.tax_total,
     grandTotal: report.grand_total,
@@ -425,4 +430,46 @@ export const generateInvoicePdf = async (invoiceId: EntityId): Promise<Blob> => 
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/pdf`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   return await res.blob();
+};
+
+export type InvoiceHistoryParams = { search?: string; dateFrom?: string; dateTo?: string; customerId?: number; invoiceStatus?: string;
+  paymentStatus?: string; overdue?: string; sort?: string; direction?: string; page?: number; pageSize?: number };
+
+const historyQuery = (params: InvoiceHistoryParams) => {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value == null || value === '' || (value === 'all' && key !== 'invoiceStatus')) return;
+    const apiKey = ({ dateFrom: 'date_from', dateTo: 'date_to', customerId: 'customer_id', invoiceStatus: 'invoice_status', paymentStatus: 'payment_status', pageSize: 'page_size' } as Record<string, string>)[key] ?? key;
+    q.set(apiKey, String(value));
+  });
+  return q;
+};
+
+export const listInvoiceHistory = async (params: InvoiceHistoryParams): Promise<{ items: InvoiceHistoryRow[]; total: number; page: number; pageSize: number }> => {
+  const res = await fetchWithAuth(`/api/v1/invoices/history?${historyQuery(params)}`);
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const data = await res.json() as any;
+  return { items: data.items.map((r: any) => ({ invoiceId: r.invoice_id, invoiceNo: r.invoice_no, customerId: r.customer_id,
+    customerCode: r.customer_code, customerName: r.customer_name, issueDate: r.issue_date, dueDate: r.due_date ?? undefined,
+    invoiceStatus: r.invoice_status, paymentStatus: r.payment_status, overdue: r.overdue, lineCount: r.line_count,
+    subtotal: r.subtotal, tax: r.tax, total: r.total })), total: data.total, page: data.page, pageSize: data.page_size };
+};
+
+export const getInvoiceHistoryNeighbors = async (invoiceId: EntityId, params: InvoiceHistoryParams) => {
+  const res = await fetchWithAuth(`/api/v1/invoices/history/${invoiceId}/neighbors?${historyQuery(params)}`);
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const row = await res.json() as { prev_invoice_id: EntityId | null; next_invoice_id: EntityId | null };
+  return { prevId: row.prev_invoice_id, nextId: row.next_invoice_id };
+};
+
+export const updateInvoicePaymentStatus = async (invoiceId: EntityId, paymentStatus: InvoicePaymentStatus) => {
+  const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/payment-status`, { method: 'PATCH', body: { payment_status: paymentStatus } });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+};
+
+export const exportInvoiceHistory = async (kind: 'headers' | 'lines', params: InvoiceHistoryParams) => {
+  const res = await fetchWithAuth(`/api/v1/invoices/history/export/${kind}?${historyQuery(params)}`);
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = `invoice-history-${kind}.csv`; a.click(); URL.revokeObjectURL(url);
 };

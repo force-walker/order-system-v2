@@ -137,4 +137,5 @@ npm run sync:openapi
 - Empty Header prevention, last Order-detail deletion rejection, and deprecated Header-only create APIs
 - Purchase-to-Invoice Draft frontend/API contract aligned (`purchase_result_ids` / `invoice_id`)
 - Explicit Invoice Draft candidates for completed `purchased` Orders; Purchase Result save no longer auto-creates or silently drops Invoice Draft failures
+- Invoice History provides backend search/filter/sort/pagination and Header/Line CSV export. Customer/Supplier payment terms share one due-date calculator; Invoice due dates are snapshots and payment status is independent of document status.
 - Tailscale-oriented host startup and user documentation

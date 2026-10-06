@@ -1,161 +1,41 @@
-import type { EntityId } from 'shared/entityId';
-import { newestInvoiceFirst } from 'shared/entityId';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
-import { PdfExportButton } from 'components/common/PdfExportButton';
-import { generateInvoicePdf, listInvoiceSummaries } from 'features/orders/services/invoiceService';
-import type { InvoiceSummaryRow } from 'features/orders/types/order';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ErrorState, LoadingState } from 'components/common/AsyncState';
+import { listCustomers } from 'features/customers/services/customersService';
+import { exportInvoiceHistory, listInvoiceHistory, type InvoiceHistoryParams } from 'features/orders/services/invoiceService';
+import type { CustomerOption, InvoiceHistoryRow } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
-import { openPdfBlob } from 'shared/pdf';
+import { hongKongDatePreset } from 'shared/hongKongDate';
 
-const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
-
+const money = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'HKD' });
 export const InvoiceListPage = () => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [rows, setRows] = useState<InvoiceSummaryRow[]>([]);
-  const [pdfGeneratingId, setPdfGeneratingId] = useState<EntityId | null>(null);
-  const [pdfError, setPdfError] = useState('');
-  const [invoiceDate, setInvoiceDate] = useState('');
-  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<EntityId[]>([]);
-  const selectAllRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        setRows(await listInvoiceSummaries());
-      } catch (e) {
-        setError(toActionableMessage(e, '請求書一覧の取得に失敗しました。'));
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
-  }, []);
-
-  const sorted = useMemo(
-    () => rows.filter((row) => !invoiceDate || row.invoiceDate === invoiceDate).sort(newestInvoiceFirst),
-    [rows, invoiceDate],
-  );
-  const visibleIds = useMemo(() => sorted.map((row) => row.invoiceId), [sorted]);
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedInvoiceIds.includes(id));
-  const someVisibleSelected = visibleIds.some((id) => selectedInvoiceIds.includes(id));
-
-  useEffect(() => {
-    const visible = new Set(visibleIds);
-    setSelectedInvoiceIds((current) => current.filter((id) => visible.has(id)));
-  }, [invoiceDate, rows]);
-
-  useEffect(() => {
-    if (selectAllRef.current) selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
-  }, [allVisibleSelected, someVisibleSelected]);
-
-  const toggleAllVisible = (checked: boolean) => {
-    setSelectedInvoiceIds(checked ? visibleIds : []);
-  };
-
-  const onGeneratePdf = async (invoiceId: EntityId) => {
-    setPdfGeneratingId(invoiceId);
-    setPdfError('');
-    try {
-      const blob = await generateInvoicePdf(invoiceId);
-      openPdfBlob(blob);
-    } catch (e) {
-      setPdfError(toActionableMessage(e, '請求書PDFの生成に失敗しました。'));
-    } finally {
-      setPdfGeneratingId(null);
-    }
-  };
-
-  if (error) return <ErrorState title="請求書一覧の取得に失敗しました" description={error} />;
-  if (loading) return <LoadingState title="請求書一覧を読み込み中" description="しばらくお待ちください。" />;
-
-  if (sorted.length === 0) return <EmptyState title="請求書がありません" description="発行済み/下書き請求書がありません。" />;
-
-  return (
-    <section>
-      <div className="card">
-        <div className="list-header">
-          <div>
-            <h2>請求書一覧</h2>
-            <p className="subtle">発行済み請求書の参照ページです。請求書PDF は帳票出力のみで、ステータス変更は行いません。</p>
-          </div>
-        </div>
-        <div className="list-controls" style={{ marginBottom: 12 }}>
-          <label className="filter-label">
-            請求日
-            <input aria-label="請求日" type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
-          </label>
-          <button type="button" className="secondary" onClick={() => setInvoiceDate('')}>全期間</button>
-        </div>
-        {pdfError ? <p className="field-error" style={{ marginTop: 0, marginBottom: 12 }}>{pdfError}</p> : null}
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    ref={selectAllRef}
-                    type="checkbox"
-                    aria-label="表示中の請求書を全選択"
-                    checked={allVisibleSelected}
-                    disabled={visibleIds.length === 0}
-                    onChange={(event) => toggleAllVisible(event.target.checked)}
-                  />
-                </th>
-                <th>請求書番号</th>
-                <th>取引先</th>
-                <th>日付</th>
-                <th>ステータス</th>
-                <th style={{ textAlign: 'right' }}>合計金額</th>
-                <th style={{ textAlign: 'right' }}>明細件数</th>
-                <th>請求書PDF</th>
-                <th>詳細</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 ? (
-                <tr><td colSpan={9} className="subtle">指定した請求日の請求書はありません。</td></tr>
-              ) : sorted.map((r) => (
-                <tr key={r.invoiceId}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      aria-label={`請求書 ${r.invoiceNo} を選択`}
-                      checked={selectedInvoiceIds.includes(r.invoiceId)}
-                      onChange={(event) => setSelectedInvoiceIds((current) => (
-                        event.target.checked
-                          ? [...new Set([...current, r.invoiceId])]
-                          : current.filter((id) => id !== r.invoiceId)
-                      ))}
-                    />
-                  </td>
-                  <td>{r.invoiceNo}</td>
-                  <td>{r.customerName}</td>
-                  <td>{r.invoiceDate}</td>
-                  <td>{r.status}</td>
-                  <td style={{ textAlign: 'right' }}>{currency.format(r.grandTotal)}</td>
-                  <td style={{ textAlign: 'right' }}>{r.itemCount}</td>
-                  <td>
-                    <PdfExportButton
-                      busy={pdfGeneratingId === r.invoiceId}
-                      idleLabel="請求書PDF"
-                      busyLabel="ダウンロード中..."
-                      onClick={() => {
-                        void onGeneratePdf(r.invoiceId);
-                      }}
-                    />
-                  </td>
-                  <td><Link to={`/invoices/${r.invoiceId}`}>詳細</Link></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  );
+  const [params, setParams] = useSearchParams();
+  const [rows, setRows] = useState<InvoiceHistoryRow[]>([]); const [total, setTotal] = useState(0);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  const value = (key: string, fallback = '') => params.get(key) ?? fallback;
+  const query: InvoiceHistoryParams = { search: value('q'), dateFrom: value('from'), dateTo: value('to'), customerId: value('customer') ? Number(value('customer')) : undefined,
+    invoiceStatus: params.has('status') ? (value('status') || 'all') : 'finalized', paymentStatus: value('payment'), overdue: value('overdue'), sort: value('sort', 'issue_date'), direction: value('dir', 'desc'), page: Number(value('page', '1')), pageSize: 50 };
+  useEffect(() => { setLoading(true); setError(''); Promise.all([listInvoiceHistory(query), listCustomers()]).then(([result, customerRows]) => {
+    setRows(result.items); setTotal(result.total); setCustomers(customerRows);
+  }).catch((e) => setError(toActionableMessage(e, '請求履歴の取得に失敗しました'))).finally(() => setLoading(false)); }, [params.toString()]);
+  const set = (key: string, nextValue: string) => { const next = new URLSearchParams(params); nextValue ? next.set(key, nextValue) : next.delete(key); if (key !== 'page') next.delete('page'); setParams(next); };
+  const sort = (key: string) => { const next = new URLSearchParams(params); const same = value('sort', 'issue_date') === key; next.set('sort', key); next.set('dir', same && value('dir', 'desc') === 'desc' ? 'asc' : 'desc'); next.delete('page'); setParams(next); };
+  const preset = (kind: 'today'|'week'|'month'|'year') => { const range = hongKongDatePreset(kind);
+    const next = new URLSearchParams(params); next.set('from', range.from); next.set('to', range.to); next.delete('page'); setParams(next); };
+  const detailContext = new URLSearchParams(params); detailContext.set('history', '1');
+  if (error) return <ErrorState title="請求履歴の取得に失敗しました" description={error} />;
+  if (loading) return <LoadingState title="請求履歴を読み込み中" description="しばらくお待ちください。" />;
+  return <section className="card"><h2>請求履歴 / Invoice History</h2><div className="list-controls">
+    <label>検索<input value={value('q')} onChange={(e) => set('q', e.target.value)} placeholder="請求番号・取引先・SKU・商品名" /></label>
+    <button onClick={() => preset('today')}>今日</button><button onClick={() => preset('week')}>今週</button><button onClick={() => preset('month')}>今月</button><button onClick={() => preset('year')}>今年</button>
+    <label>開始日<input type="date" value={value('from')} onChange={(e) => set('from', e.target.value)} /></label><label>終了日<input type="date" value={value('to')} onChange={(e) => set('to', e.target.value)} /></label>
+    <label>取引先<select value={value('customer')} onChange={(e) => set('customer', e.target.value)}><option value="">全取引先</option>{customers.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
+    <label>請求Status<select value={value('status', 'finalized')} onChange={(e) => set('status', e.target.value)}><option value="all">全Status</option>{['draft','finalized','sent','cancelled'].map(s => <option key={s}>{s}</option>)}</select></label>
+    <label>回収Status<select value={value('payment')} onChange={(e) => set('payment', e.target.value)}><option value="">全Status</option>{['unpaid','partially_paid','paid'].map(s => <option key={s}>{s}</option>)}</select></label>
+    <label>期限超過<select value={value('overdue')} onChange={(e) => set('overdue', e.target.value)}><option value="">すべて</option><option value="true">期限超過のみ</option><option value="false">期限内のみ</option></select></label>
+    <button onClick={() => void exportInvoiceHistory('headers', query)}>Header CSV</button><button onClick={() => void exportInvoiceHistory('lines', query)}>Line CSV</button></div>
+    <div className="table-wrap"><table><thead><tr>{[['issue_date','Issue Date'],['due_date','Due Date'],['invoice_no','Invoice No'],['customer','Customer'],['invoice_status','Invoice Status'],['payment_status','Payment Status']].map(([k,l]) => <th key={k}><button className="link-button" onClick={() => sort(k)}>{l}</button></th>)}<th>期限超過</th><th>行数</th><th>Subtotal</th><th>Tax</th><th><button className="link-button" onClick={() => sort('total')}>Total</button></th><th>詳細</th></tr></thead><tbody>
+      {rows.map(r => <tr key={String(r.invoiceId)}><td>{r.issueDate}</td><td>{r.dueDate ?? '-'}</td><td>{r.invoiceNo}</td><td>{r.customerName}</td><td>{r.invoiceStatus}</td><td>{r.paymentStatus}</td><td>{r.overdue ? '期限超過' : ''}</td><td>{r.lineCount}</td><td>{money.format(r.subtotal)}</td><td>{money.format(r.tax)}</td><td>{money.format(r.total)}</td><td><Link to={`/invoices/${r.invoiceId}?${detailContext}`}>詳細</Link></td></tr>)}</tbody></table></div>
+    {rows.length === 0 ? <p>条件に一致する請求書はありません。</p> : null}<div className="form-actions"><button disabled={query.page === 1} onClick={() => set('page', String((query.page ?? 1)-1))}>← 前へ</button><span>{query.page} / {Math.max(1, Math.ceil(total/50))}</span><button disabled={(query.page ?? 1)*50 >= total} onClick={() => set('page', String((query.page ?? 1)+1))}>次へ →</button></div>
+  </section>;
 };

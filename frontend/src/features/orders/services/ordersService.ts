@@ -17,6 +17,7 @@ import type {
 import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClient';
 import { parseApiErrorPayload, ServiceError } from 'shared/error';
 import {
+  toApiCustomerCreate,
   toApiCustomerUpdate,
   toApiOrderCreateHeader,
   toApiProductCreate,
@@ -503,10 +504,7 @@ export const createCustomer = async (payload: CustomerCreateRequest): Promise<Cu
 
   const res = await fetchWithAuth('/api/v1/customers', {
     method: 'POST',
-    body: {
-      name: payload.name,
-      active: payload.active,
-    },
+    body: toApiCustomerCreate(payload),
   });
   if (!res.ok) throw await parseApiErrorPayload(res);
 
