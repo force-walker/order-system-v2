@@ -20,7 +20,7 @@ import { toActionableMessage } from 'shared/error';
 type RowEdit = {
   selected: boolean;
   purchaseUnitCost: string;
-  actualWeightKg: string;
+  actualQty: string;
   rowError?: string;
 };
 
@@ -101,11 +101,9 @@ export const PurchasePage = () => {
       ]);
       setSuppliers(supplierOptions);
 
-      const actualWeightByAllocationId = new Map<number, number | undefined>();
       const unitCostByAllocationId = new Map<number, number | undefined>();
       const persistedByAllocationId: Record<number, PurchaseResultItem> = {};
       persisted.items.forEach((q) => {
-        actualWeightByAllocationId.set(q.allocationId, q.actualWeightKg);
         unitCostByAllocationId.set(q.allocationId, q.unitCost);
         persistedByAllocationId[q.allocationId] = q;
       });
@@ -149,14 +147,17 @@ export const PurchasePage = () => {
       setEditByItemId((prev) =>
         Object.fromEntries(
           allocated.map((r) => {
-            const restoredActualWeight = typeof r.allocationId === 'number' ? actualWeightByAllocationId.get(r.allocationId) : undefined;
+            const persistedResult = typeof r.allocationId === 'number' ? persistedByAllocationId[r.allocationId] : undefined;
+            const restoredActualQty = r.pricingBasis === 'uom_kg'
+              ? persistedResult?.actualWeightKg ?? persistedResult?.purchasedQty
+              : persistedResult?.purchasedQty;
             const restoredUnitCost = typeof r.allocationId === 'number' ? unitCostByAllocationId.get(r.allocationId) : undefined;
             return [
               r.orderItemId,
               {
                 selected: prev[r.orderItemId]?.selected ?? false,
                 purchaseUnitCost: prev[r.orderItemId]?.purchaseUnitCost ?? (restoredUnitCost != null ? String(restoredUnitCost) : ''),
-                actualWeightKg: prev[r.orderItemId]?.actualWeightKg ?? (restoredActualWeight != null ? String(restoredActualWeight) : ''),
+                actualQty: prev[r.orderItemId]?.actualQty ?? String(restoredActualQty ?? r.manualQty ?? r.orderedQty),
                 rowError: undefined,
               },
             ];
@@ -297,23 +298,24 @@ export const PurchasePage = () => {
     const payload = selectedRows.map((r) => {
       const edit = editByItemId[r.orderItemId];
       const units = unitsByProductId[r.productId] ?? { orderUom: 'count', purchaseUom: 'count', invoiceUom: 'count', isCatchWeight: false, weightCaptureRequired: false };
-      const received = Number(r.manualQty ?? r.orderedQty);
-      const actualWeightText = edit.actualWeightKg.trim();
-      const actualWeightKg = actualWeightText === '' ? undefined : Number(actualWeightText);
+      const actualQtyText = edit.actualQty.trim();
+      const actualQty = actualQtyText === '' ? Number.NaN : Number(actualQtyText);
+      const actualWeightKg = r.pricingBasis === 'uom_kg' ? actualQty : undefined;
       const unitCostText = edit.purchaseUnitCost.trim();
       const unitCost = unitCostText === '' ? undefined : Number(unitCostText);
-      const shortage = Math.max(r.orderedQty - received, 0);
+      const expectedQty = Number(r.manualQty ?? 0);
+      const shortage = Math.max(expectedQty - actualQty, 0);
       return {
         orderItemId: r.orderItemId,
         row: {
           allocationId: Number(r.allocationId),
           supplierId: r.manualSupplierId ?? undefined,
-          purchasedQty: received,
+          purchasedQty: actualQty,
           purchasedUom: units.purchaseUom,
           unitCost,
           actualWeightKg,
           shortageQty: shortage > 0 ? shortage : undefined,
-          resultStatus: shortage > 0 ? ('partially_filled' as const) : ('filled' as const),
+          resultStatus: actualQty < expectedQty ? ('partially_filled' as const) : ('filled' as const),
           invoiceableFlag: true,
         },
       };
@@ -328,22 +330,16 @@ export const PurchasePage = () => {
         if (Number.isNaN(parsedUnitCost) || parsedUnitCost < 0) return true;
       }
 
-      const actualWeightRaw = editByItemId[p.orderItemId]?.actualWeightKg ?? '';
+      const actualQtyRaw = editByItemId[p.orderItemId]?.actualQty ?? '';
       const workItem = selectedRows.find((row) => row.orderItemId === p.orderItemId);
-      const productUnits = workItem ? unitsByProductId[workItem.productId] : undefined;
-      const requiresActualWeight = Boolean(
-        workItem
-        && (workItem.pricingBasis === 'uom_kg' || productUnits?.isCatchWeight || productUnits?.weightCaptureRequired),
-      );
-      if (requiresActualWeight && actualWeightRaw.trim() === '') return true;
-      if (actualWeightRaw.trim() !== '') {
-        const parsed = Number(actualWeightRaw);
-        if (Number.isNaN(parsed) || parsed <= 0) return true;
-      }
+      if (!workItem || actualQtyRaw.trim() === '') return true;
+      const parsed = Number(actualQtyRaw);
+      if (Number.isNaN(parsed) || parsed < 0) return true;
+      if (workItem.pricingBasis === 'uom_kg' && parsed <= 0) return true;
       return false;
     });
     if (invalid.length > 0) {
-      setToast({ type: 'error', message: '受取数量/実測重量の数値入力を確認してください。' });
+      setToast({ type: 'error', message: '実数量の数値入力を確認してください。' });
       return;
     }
 
@@ -352,8 +348,8 @@ export const PurchasePage = () => {
       const persisted = purchaseResultByAllocationId[row.allocationId];
       if (!persisted) return [];
       const lines: string[] = [];
-      if (persisted.purchasedQty !== row.purchasedQty) lines.push(`購入数量: ${persisted.purchasedQty} ${persisted.purchasedUom} → ${row.purchasedQty} ${row.purchasedUom}`);
-      if ((persisted.actualWeightKg ?? undefined) !== row.actualWeightKg) lines.push(`Actual Weight: ${persisted.actualWeightKg ?? '-'} KG → ${row.actualWeightKg ?? '-'} KG`);
+      if (persisted.purchasedQty !== row.purchasedQty) lines.push(`実数量: ${persisted.purchasedQty} ${persisted.purchasedUom} → ${row.purchasedQty} ${row.purchasedUom}`);
+      if ((persisted.actualWeightKg ?? undefined) !== row.actualWeightKg) lines.push(`請求重量同期値: ${persisted.actualWeightKg ?? '-'} KG → ${row.actualWeightKg ?? '-'} KG`);
       if ((persisted.unitCost ?? undefined) !== row.unitCost) lines.push(`仕入単価: ${persisted.unitCost ?? '-'} → ${row.unitCost ?? '-'}`);
       if (lines.length > 0 && persisted.invoiceQty != null) {
         return [{ orderItemId, locked: true, lines }];
@@ -447,7 +443,7 @@ export const PurchasePage = () => {
                   <th className="col-product" onClick={() => onSort('productName')} style={{ cursor: 'pointer' }}>{sortLabel('productName', '商品')}</th>
                   <th className="col-supplier" onClick={() => onSort('supplierName')} style={{ cursor: 'pointer' }}>{sortLabel('supplierName', '仕入先')}</th>
                   <th className="col-ordered">受注数量</th>
-                  <th className="col-invoice">実測重量</th>
+                  <th className="col-invoice">実数量</th>
                   <th className="col-unit-cost">仕入単価</th>
                 </tr>
               </thead>
@@ -481,16 +477,15 @@ export const PurchasePage = () => {
                       <td className="col-supplier">{supplierName}</td>
                       <td className="col-ordered">{r.orderedQty} {units.orderUom}</td>
                       <td className="col-invoice">
-                        {units.isCatchWeight || units.weightCaptureRequired || r.pricingBasis === 'uom_kg' ? <>
-                          <input
+                        <input
                           type="number"
                           inputMode="decimal"
                           min={0}
                           step="0.001"
-                          data-actual-weight-row={rowIndex}
-                          aria-label={`${r.productName} 実測重量`}
-                          value={edit?.actualWeightKg ?? ''}
-                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], actualWeightKg: e.target.value, rowError: undefined } }))}
+                          data-actual-qty-row={rowIndex}
+                          aria-label={`${r.productName} 実数量`}
+                          value={edit?.actualQty ?? ''}
+                          onChange={(e) => setEditByItemId((prev) => ({ ...prev, [r.orderItemId]: { ...prev[r.orderItemId], actualQty: e.target.value, rowError: undefined } }))}
                           onKeyDown={(e) => {
                             const native = e.nativeEvent as KeyboardEvent;
                             const isComposing = native.isComposing || native.keyCode === 229;
@@ -511,7 +506,7 @@ export const PurchasePage = () => {
                             target.focus();
                           }}
                           placeholder=""
-                        /> KG</> : <span className="subtle">対象外</span>}
+                        /> <span className="subtle">{units.purchaseUom}</span>
                       </td>
                       <td className="col-unit-cost">
                         <input
@@ -535,7 +530,7 @@ export const PurchasePage = () => {
                             if (!moveDown && !moveUp) return;
 
                             const targetRow = moveDown ? rowIndex + 1 : rowIndex;
-                            const target = document.querySelector<HTMLInputElement>(`input[data-actual-weight-row="${targetRow}"]`);
+                            const target = document.querySelector<HTMLInputElement>(`input[data-actual-qty-row="${targetRow}"]`);
                             if (!target) return;
 
                             e.preventDefault();

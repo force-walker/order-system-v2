@@ -91,7 +91,7 @@ export const OrderItemBulkAllocationPage = () => {
               {
                 selected: old?.selected ?? false,
                 manualSupplierId: old?.manualSupplierId ?? row.manualSupplierId,
-                manualQty: old?.manualQty ?? (row.manualQty == null ? '' : String(row.manualQty)),
+                manualQty: old?.manualQty ?? String(row.manualQty ?? row.orderedQty),
                 rowError: old?.rowError,
               },
             ];
@@ -233,7 +233,7 @@ export const OrderItemBulkAllocationPage = () => {
         if (currentQty !== '') continue;
         next[row.orderItemId] = {
           ...next[row.orderItemId],
-          manualQty: hasSameQuantityAxis(row) ? String(row.orderedQty) : '',
+          manualQty: String(row.orderedQty),
           rowError: undefined,
         };
       }
@@ -264,7 +264,7 @@ export const OrderItemBulkAllocationPage = () => {
         next[row.orderItemId] = {
           ...current,
           manualSupplierId: selectedSupplierId,
-          manualQty: selectedSupplierId == null || !hasSameQuantityAxis(row) ? '' : String(row.orderedQty),
+          manualQty: selectedSupplierId == null ? '' : String(row.orderedQty),
           rowError: undefined,
         };
       }
@@ -654,7 +654,7 @@ export const OrderItemBulkAllocationPage = () => {
                           type="number"
                           inputMode="decimal"
                           min={0}
-                          step="1"
+                          step="0.001"
                           value={edit?.manualQty ?? ''}
                           onChange={(e) =>
                             setEditById((prev) => ({
@@ -671,7 +671,7 @@ export const OrderItemBulkAllocationPage = () => {
                             {shortageQty > 0 ? <span className="field-error">不足: {shortageQty}</span> : <span className="subtle">不足: -</span>}
                             <div className={Math.abs(diffQty) > 1e-9 ? 'field-error' : 'subtle'}>差分: {diffQty > 0 ? `+${diffQty}` : diffQty}</div>
                           </>
-                        ) : <span className="subtle">異単位（手入力）</span>}
+                        ) : <span className="subtle">異単位（換算なし）</span>}
                         {edit?.rowError ? <div className="field-error">{edit.rowError}</div> : null}
                       </td>
                     </tr>

@@ -115,7 +115,7 @@ it('blocks selected rows without a final supplier before calling the API', async
   expect(bulkSaveOrderItemAllocations).not.toHaveBeenCalled();
 });
 
-it('keeps cross-unit purchase quantity blank and requires explicit input', async () => {
+it('copies the ordered quantity as the cross-unit allocation initial value without conversion', async () => {
   const actor = userEvent.setup();
   vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([{
     ...savedRow,
@@ -132,21 +132,19 @@ it('keeps cross-unit purchase quantity blank and requires explicit input', async
 
   const row = (await screen.findByText('ORD-1')).closest('tr')!;
   const qty = row.querySelector<HTMLInputElement>('input[type="number"]')!;
-  expect(qty.value).toBe('');
-  expect(row.textContent).toContain('異単位（手入力）');
+  expect(qty.value).toBe('3');
+  expect(qty.step).toBe('0.001');
+  expect(row.textContent).toContain('異単位（換算なし）');
 
   await actor.selectOptions(row.querySelector('select')!, '1');
+  await actor.clear(qty);
+  await actor.type(qty, '3.75');
   await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-  await actor.click(screen.getByRole('button', { name: '選択行を一括保存' }));
-  expect(await screen.findByText('仕入数量を入力してください')).toBeTruthy();
-  expect(bulkSaveOrderItemAllocations).not.toHaveBeenCalled();
-
-  await actor.type(qty, '18.5');
   await actor.click(screen.getByRole('button', { name: '選択行を一括保存' }));
   await waitFor(() => expect(bulkSaveOrderItemAllocations).toHaveBeenCalledWith([{
     orderItemId: 'item-1',
     supplierId: 1,
-    allocatedQty: 18.5,
+    allocatedQty: 3.75,
   }]));
 });
 
