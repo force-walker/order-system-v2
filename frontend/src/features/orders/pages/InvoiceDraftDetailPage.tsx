@@ -98,7 +98,7 @@ export const InvoiceDraftDetailPage = () => {
                 {rows.map((r) => {
                   const isInvoiced = r.invoiceLineStatus === 'invoiced';
                   return (
-                    <tr key={r.id}>
+                    <tr key={r.id} style={r.priceLimitExceeded ? { backgroundColor: '#fff4e5' } : undefined}>
                       <td><Link to={`/orders/item-allocations`}>{r.orderItemId}</Link></td>
                       <td>{r.billableQty}</td>
                       <td>{r.billableUom}</td>
@@ -106,6 +106,12 @@ export const InvoiceDraftDetailPage = () => {
                         {r.salesUnitPrice}
                         <div className="subtle" style={{ fontSize: 12 }}>自動計算値（仕入単価ベース）</div>
                         {r.autoPriceError ? <div className="field-error">{r.autoPriceError}</div> : null}
+                        {r.priceLimitExceeded ? (
+                          <div className="field-error">
+                            仕入単価が上限を超過しています（上限 {r.priceCeiling} / 実績 {r.highestPurchaseUnitCost}{' '}
+                            {r.purchaseCostCurrency ?? 'JPY'} / {r.purchaseCostUom}）
+                          </div>
+                        ) : null}
                       </td>
                       <td>{r.lineAmount}</td>
                       <td>{r.taxAmount}</td>

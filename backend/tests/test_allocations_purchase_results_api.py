@@ -44,9 +44,9 @@ def _seed_allocation(final_qty: float = 3, final_supplier_id: int | None = None,
     p = Product(
         sku=f"S-{datetime.now(UTC).timestamp()}",
         name="P",
-        order_uom="count",
-        purchase_uom="count",
-        invoice_uom="count",
+        order_uom="piece",
+        purchase_uom="piece",
+        invoice_uom="piece",
         is_catch_weight=False,
         weight_capture_required=False,
         pricing_basis_default=PricingBasis.uom_count,
@@ -90,7 +90,7 @@ def _seed_allocation(final_qty: float = 3, final_supplier_id: int | None = None,
         target_price=10,
         final_supplier_id=final_supplier_id,
         final_qty=final_qty,
-        final_uom="count",
+        final_uom="piece",
     )
     db.add(alloc)
     db.commit()
@@ -393,7 +393,7 @@ def test_purchase_result_completion_advances_items_individually_and_header_when_
         suggested_qty=2,
         final_supplier_id=101,
         final_qty=2,
-        final_uom="count",
+        final_uom="piece",
     )
     db.add(second_allocation)
     db.commit()
@@ -472,7 +472,7 @@ def test_purchase_completion_supports_split_allocations_and_excludes_cancelled_i
             suggested_qty=qty,
             final_supplier_id=101 + index,
             final_qty=qty,
-            final_uom="count",
+            final_uom="piece",
             split_group_id=parent.split_group_id,
             parent_allocation_id=parent.id,
             is_split_child=True,
@@ -756,17 +756,17 @@ def test_purchase_result_requires_product_purchase_uom_and_reports_distinct_uoms
     allocation = db.query(SupplierAllocation).filter(SupplierAllocation.id == aid).one()
     item = db.query(OrderItem).filter(OrderItem.id == allocation.order_item_id).one()
     product = db.query(Product).filter(Product.id == item.product_id).one()
-    product.order_uom = "CTN"
-    product.purchase_uom = "CASE"
-    product.invoice_uom = "KG"
-    allocation.final_uom = "CASE"
+    product.order_uom = "piece"
+    product.purchase_uom = "case"
+    product.invoice_uom = "case"
+    allocation.final_uom = "case"
     db.commit()
     db.close()
     client = _client()
 
     rejected = client.post(
         "/api/v1/purchase-results",
-        json={"allocation_id": aid, "purchased_qty": 2, "purchased_uom": "CTN", "result_status": "filled", "invoiceable_flag": True},
+        json={"allocation_id": aid, "purchased_qty": 2, "purchased_uom": "kg", "result_status": "filled", "invoiceable_flag": True},
     )
     assert rejected.status_code == 422
     assert rejected.json()["detail"]["code"] == "PURCHASE_UOM_MISMATCH"
@@ -776,10 +776,10 @@ def test_purchase_result_requires_product_purchase_uom_and_reports_distinct_uoms
         json={"allocation_id": aid, "purchased_qty": 2, "purchased_uom": "CASE", "actual_weight_kg": 21.73, "result_status": "filled", "invoiceable_flag": True},
     )
     assert created.status_code == 201, created.text
-    assert created.json()["order_uom"] == "CTN"
-    assert created.json()["purchase_uom"] == "CASE"
-    assert created.json()["purchased_uom"] == "CASE"
-    assert created.json()["invoice_uom"] == "KG"
+    assert created.json()["order_uom"] == "piece"
+    assert created.json()["purchase_uom"] == "case"
+    assert created.json()["purchased_uom"] == "case"
+    assert created.json()["invoice_uom"] == "case"
 
 
 def test_purchase_result_unit_cost_negative_is_422():

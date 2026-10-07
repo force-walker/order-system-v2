@@ -6847,6 +6847,29 @@ components:
           - type: string
           - type: 'null'
           title: Validation Message
+        price_limit_exceeded:
+          type: boolean
+          title: Price Limit Exceeded
+          default: false
+        price_ceiling:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Price Ceiling
+        highest_purchase_unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Highest Purchase Unit Cost
+        purchase_cost_uom:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Purchase Cost Uom
+        purchase_cost_currency:
+          type: string
+          title: Purchase Cost Currency
+          default: JPY
       type: object
       required:
       - order_item_id
@@ -7043,6 +7066,29 @@ components:
           type: boolean
           title: Gross Margin Unavailable
           default: false
+        price_limit_exceeded:
+          type: boolean
+          title: Price Limit Exceeded
+          default: false
+        price_ceiling:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Price Ceiling
+        highest_purchase_unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Highest Purchase Unit Cost
+        purchase_cost_uom:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Purchase Cost Uom
+        purchase_cost_currency:
+          type: string
+          title: Purchase Cost Currency
+          default: JPY
       type: object
       required:
       - invoice_id
@@ -7317,6 +7363,29 @@ components:
           type: boolean
           title: Gross Margin Unavailable
           default: false
+        price_limit_exceeded:
+          type: boolean
+          title: Price Limit Exceeded
+          default: false
+        price_ceiling:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Price Ceiling
+        highest_purchase_unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Highest Purchase Unit Cost
+        purchase_cost_uom:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Purchase Cost Uom
+        purchase_cost_currency:
+          type: string
+          title: Purchase Cost Currency
+          default: JPY
         created_at:
           type: string
           format: date-time
@@ -8146,6 +8215,12 @@ components:
         order_no:
           type: string
           title: Order No
+        document_seq:
+          type: integer
+          title: Document Seq
+        line_no:
+          type: integer
+          title: Line No
         order_status:
           $ref: '#/components/schemas/OrderStatus'
         customer_name:
@@ -8196,6 +8271,8 @@ components:
       - order_item_id
       - order_id
       - order_no
+      - document_seq
+      - line_no
       - order_status
       - customer_name
       - product_id

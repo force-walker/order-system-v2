@@ -293,8 +293,50 @@ def _draft_item_metrics(item: InvoiceItem) -> tuple[float | None, bool]:
     return margin.gross_margin_pct, margin.gross_margin_unavailable
 
 
-def _invoice_item_response(item: InvoiceItem) -> InvoiceItemResponse:
+def _purchase_price_limit(db: Session, order_item_id: str) -> dict[str, object]:
+    item_product = (
+        db.query(OrderItem, Product)
+        .join(Product, Product.id == OrderItem.product_id)
+        .filter(OrderItem.id == order_item_id)
+        .first()
+    )
+    if item_product is None:
+        return {"price_limit_exceeded": False}
+    item, product = item_product
+    if item.price_ceiling is None:
+        return {"price_limit_exceeded": False}
+    results = (
+        db.query(PurchaseResult)
+        .join(SupplierAllocation, SupplierAllocation.id == PurchaseResult.allocation_id)
+        .filter(SupplierAllocation.order_item_id == item.id)
+        .all()
+    )
+    expected_uom = normalize_product_uom(product.purchase_uom)
+    comparable = [
+        result for result in results
+        if normalize_product_uom(result.purchased_uom) == expected_uom
+        and (result.final_unit_cost is not None or result.unit_cost is not None)
+    ]
+    if not comparable:
+        return {
+            "price_limit_exceeded": False,
+            "price_ceiling": float(item.price_ceiling),
+            "purchase_cost_uom": expected_uom,
+            "purchase_cost_currency": "JPY",
+        }
+    highest = max(float(result.final_unit_cost if result.final_unit_cost is not None else result.unit_cost) for result in comparable)
+    return {
+        "price_limit_exceeded": highest > float(item.price_ceiling),
+        "price_ceiling": float(item.price_ceiling),
+        "highest_purchase_unit_cost": highest,
+        "purchase_cost_uom": expected_uom,
+        "purchase_cost_currency": "JPY",
+    }
+
+
+def _invoice_item_response(db: Session, item: InvoiceItem) -> InvoiceItemResponse:
     gross_margin_pct, gross_margin_unavailable = _draft_item_metrics(item)
+    price_limit = _purchase_price_limit(db, item.order_item_id)
     return InvoiceItemResponse(
         id=item.id,
         uuid=item.uuid,
@@ -314,6 +356,7 @@ def _invoice_item_response(item: InvoiceItem) -> InvoiceItemResponse:
         tax_amount=float(item.tax_amount),
         gross_margin_pct=gross_margin_pct,
         gross_margin_unavailable=gross_margin_unavailable,
+        **price_limit,
         created_at=item.created_at,
         updated_at=item.updated_at,
     )
@@ -641,7 +684,7 @@ def list_invoices(
             query = query.filter(Invoice.customer_id == delivery.customer_id, Invoice.delivery_date == delivery.delivery_date)
     if status is not None:
         query = query.filter(Invoice.status == status)
-    rows = query.order_by(Invoice.created_at.desc()).all()
+    rows = query.order_by(Invoice.document_seq.desc(), Invoice.id.desc()).all()
     return [_invoice_response(db, row) for row in rows]
 
 
@@ -655,7 +698,7 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
         .join(Product, Product.id == OrderItem.product_id)
         .join(Customer, Customer.id == Invoice.customer_id)
         .filter(Invoice.status == InvoiceStatus.draft)
-        .order_by(Order.order_no.asc(), InvoiceItem.line_no.asc(), InvoiceItem.id.asc())
+        .order_by(Invoice.document_seq.desc(), InvoiceItem.line_no.asc(), InvoiceItem.id.asc())
         .all()
     )
 
@@ -665,6 +708,7 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
         gross_margin_pct, gross_margin_unavailable = _draft_item_metrics(item)
         line_amount = float(item.line_amount)
         unit_cost_basis = float(item.unit_cost_basis) if item.unit_cost_basis is not None else None
+        price_limit = _purchase_price_limit(db, item.order_item_id)
         result.append(
             InvoiceDraftListRow(
                 invoice_id=inv.id,
@@ -697,6 +741,7 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
                 line_amount=line_amount,
                 gross_margin_pct=gross_margin_pct,
                 gross_margin_unavailable=gross_margin_unavailable,
+                **price_limit,
             )
         )
 
@@ -961,7 +1006,7 @@ def list_invoice_draft_candidates(
         query = query.filter(Order.customer_id == customer_id)
 
     candidates: list[InvoiceDraftCandidate] = []
-    for order, customer in query.order_by(Order.delivery_date.asc(), Order.order_no.asc()).all():
+    for order, customer in query.order_by(Order.document_seq.desc(), Order.id.desc()).all():
         items = (
             db.query(OrderItem)
             .filter(
@@ -1039,6 +1084,7 @@ def list_invoice_draft_candidates(
                     gross_margin_unavailable=bool(values["gross_margin_unavailable"]),
                     validation_code=validation_code,
                     validation_message=validation_message,
+                    **_purchase_price_limit(db, item.id),
                 )
             )
         if not result_ids:
@@ -1087,7 +1133,7 @@ def get_invoice_by_uuid(invoice_uuid: str, db: Session = Depends(get_db)) -> Inv
 def list_invoice_items(invoice_id: str, db: Session = Depends(get_db)) -> list[InvoiceItemResponse]:
     invoice = _get_invoice_or_404(db, invoice_id)
     rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice.id).order_by(InvoiceItem.line_no.asc(), InvoiceItem.created_at.asc()).all()
-    return [_invoice_item_response(row) for row in rows]
+    return [_invoice_item_response(db, row) for row in rows]
 
 
 @router.get(
@@ -1098,7 +1144,7 @@ def list_invoice_items(invoice_id: str, db: Session = Depends(get_db)) -> list[I
 def list_invoice_items_by_uuid(invoice_uuid: str, db: Session = Depends(get_db)) -> list[InvoiceItemResponse]:
     invoice = _get_invoice_by_uuid_or_404(db, invoice_uuid)
     rows = db.query(InvoiceItem).filter(InvoiceItem.invoice_id == invoice.id).order_by(InvoiceItem.line_no.asc(), InvoiceItem.id.asc()).all()
-    return [_invoice_item_response(row) for row in rows]
+    return [_invoice_item_response(db, row) for row in rows]
 
 
 @router.get(
@@ -1108,7 +1154,7 @@ def list_invoice_items_by_uuid(invoice_uuid: str, db: Session = Depends(get_db))
 )
 def get_invoice_neighbors(invoice_id: str, db: Session = Depends(get_db)) -> InvoiceNeighborsResponse:
     invoice = _get_invoice_or_404(db, invoice_id)
-    ordered_ids = [row_id for (row_id,) in db.query(Invoice.id).order_by(Invoice.created_at.desc()).all()]
+    ordered_ids = [row_id for (row_id,) in db.query(Invoice.id).order_by(Invoice.document_seq.desc(), Invoice.id.desc()).all()]
     idx = ordered_ids.index(invoice.id)
 
     prev_invoice_id = ordered_ids[idx - 1] if idx > 0 else None
@@ -1387,7 +1433,7 @@ def update_invoice_draft_item(
 
     db.commit()
     db.refresh(item)
-    return _invoice_item_response(item)
+    return _invoice_item_response(db, item)
 
 
 @router.patch(
@@ -1455,7 +1501,7 @@ def update_invoice_draft_item_by_uuid(
 
     db.commit()
     db.refresh(item)
-    return _invoice_item_response(item)
+    return _invoice_item_response(db, item)
 
 
 @router.post(
@@ -1490,7 +1536,7 @@ def finalize_invoice_item_line(invoice_id: str, invoice_item_id: str, db: Sessio
 
     db.commit()
     db.refresh(item)
-    return _invoice_item_response(item)
+    return _invoice_item_response(db, item)
 
 
 @router.post(
@@ -1525,7 +1571,7 @@ def finalize_invoice_item_line_by_uuid(invoice_uuid: str, invoice_item_uuid: str
 
     db.commit()
     db.refresh(item)
-    return _invoice_item_response(item)
+    return _invoice_item_response(db, item)
 
 
 @router.post(
@@ -1727,7 +1773,7 @@ def generate_draft_from_purchase_results(payload: InvoiceDraftFromPurchaseResult
         .join(Product, Product.id == OrderItem.product_id)
         .filter(OrderItem.order_id == order.id)
         .filter(PurchaseResult.id.in_(payload.purchase_result_ids))
-        .order_by(PurchaseResult.id.asc())
+        .order_by(OrderItem.line_no.asc(), PurchaseResult.id.asc())
     )
     if db.get_bind().dialect.name == "postgresql":
         rows_query = rows_query.with_for_update(of=PurchaseResult)

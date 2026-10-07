@@ -171,6 +171,36 @@ it('toggles candidate checkboxes, supports multi-select/select-all and shows pri
   expect(screen.getAllByText('10')[0]).toBeTruthy();
 });
 
+it('shows purchase price ceiling warnings without disabling invoice actions', async () => {
+  const actor = userEvent.setup();
+  const overLimitCandidate = candidate('LIMIT');
+  Object.assign(overLimitCandidate.items[0], {
+    priceLimitExceeded: true,
+    priceCeiling: 1000,
+    highestPurchaseUnitCost: 1080,
+    purchaseCostCurrency: 'JPY',
+    purchaseCostUom: 'kg',
+  });
+  const overLimitDraft = {
+    ...row('limit-draft', 'ABC Trading'),
+    priceLimitExceeded: true,
+    priceCeiling: 1000,
+    highestPurchaseUnitCost: 1080,
+    purchaseCostCurrency: 'JPY',
+    purchaseCostUom: 'kg',
+  };
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([overLimitCandidate]);
+  vi.mocked(listInvoiceDraftListRows).mockResolvedValue([overLimitDraft]);
+
+  renderPage();
+
+  expect((await screen.findAllByText(/仕入単価が受注時の上限価格を超えています/))).toHaveLength(2);
+  expect(screen.getAllByText(/上限: JPY 1,000\/kg/)).toHaveLength(2);
+  expect(screen.getAllByText(/実績: JPY 1,080\/kg/)).toHaveLength(2);
+  await actor.click(screen.getByRole('checkbox', { name: 'ORD-LIMIT SKU-1 を選択' }));
+  expect((screen.getByRole('button', { name: '選択した候補からドラフト作成 (1)' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
 afterEach(cleanup);
 
 const renderPage = () => render(<MemoryRouter><InvoiceDraftPage /></MemoryRouter>);

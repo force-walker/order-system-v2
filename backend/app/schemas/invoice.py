@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.entities import InvoicePaymentStatus, InvoiceStatus, OrderStatus
+from app.core.uom import canonicalize_uom_input
 
 
 class InvoiceCreateRequest(BaseModel):
@@ -142,6 +143,11 @@ class InvoiceItemResponse(BaseModel):
     tax_amount: float
     gross_margin_pct: float | None = None
     gross_margin_unavailable: bool = False
+    price_limit_exceeded: bool = False
+    price_ceiling: float | None = None
+    highest_purchase_unit_cost: float | None = None
+    purchase_cost_uom: str | None = None
+    purchase_cost_currency: str = "JPY"
     created_at: datetime
     updated_at: datetime
 
@@ -179,6 +185,11 @@ class InvoiceDraftListRow(BaseModel):
     line_amount: float
     gross_margin_pct: float | None = None
     gross_margin_unavailable: bool = False
+    price_limit_exceeded: bool = False
+    price_ceiling: float | None = None
+    highest_purchase_unit_cost: float | None = None
+    purchase_cost_uom: str | None = None
+    purchase_cost_currency: str = "JPY"
 
 
 class InvoiceDraftCandidateItem(BaseModel):
@@ -204,6 +215,11 @@ class InvoiceDraftCandidateItem(BaseModel):
     gross_margin_unavailable: bool = False
     validation_code: str | None = None
     validation_message: str | None = None
+    price_limit_exceeded: bool = False
+    price_ceiling: float | None = None
+    highest_purchase_unit_cost: float | None = None
+    purchase_cost_uom: str | None = None
+    purchase_cost_currency: str = "JPY"
 
 
 class InvoiceDraftCandidate(BaseModel):
@@ -222,6 +238,11 @@ class InvoiceItemUpdateRequest(BaseModel):
     billable_qty: float = Field(ge=0)
     billable_uom: str | None = Field(default=None, min_length=1, max_length=32)
     sales_unit_price: float = Field(ge=0)
+
+    @field_validator("billable_uom", mode="before")
+    @classmethod
+    def canonicalize_billable_uom(cls, value):
+        return canonicalize_uom_input(value)
 
 
 class InvoiceDraftGenerateResult(BaseModel):

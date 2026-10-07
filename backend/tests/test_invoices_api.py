@@ -569,6 +569,7 @@ def test_invoice_candidates_include_purchased_without_delivery_and_legacy_shippe
     assert by_order[purchased_order_id]["items"][0]["purchase_result_ids"] == [purchased_result_id]
     assert by_order[purchased_order_id]["items"][0]["product_sku"]
     assert by_order[purchased_order_id]["items"][0]["sales_unit_price"] >= 0
+    assert by_order[purchased_order_id]["items"][0]["price_limit_exceeded"] is False
     assert {
         "purchase_unit_cost",
         "exchange_rate",
@@ -1733,6 +1734,143 @@ def test_draft_generation_uses_system_settings_and_freight_weight():
     assert float(row["gross_margin_pct"]) == 25.0
 
 
+def test_invoice_candidate_and_detail_warn_when_purchase_cost_exceeds_order_price_ceiling():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    db = TestingSessionLocal()
+    item = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.created_at.asc()).first()
+    assert item is not None
+    item.price_ceiling = Decimal("900.00")
+    item_id = item.id
+    db.commit()
+    db.close()
+
+    purchase_result_id = _seed_purchase_result_for_order(
+        order_id,
+        purchased_qty=2,
+        final_unit_cost=1000,
+        order_item_id=item_id,
+    )
+    client = _client()
+    candidate = next(row for row in client.get("/api/v1/invoices/draft-candidates").json() if row["order_id"] == order_id)
+    candidate_item = next(row for row in candidate["items"] if row["order_item_id"] == item_id)
+    assert candidate_item["price_limit_exceeded"] is True
+    assert float(candidate_item["price_ceiling"]) == 900.0
+    assert float(candidate_item["highest_purchase_unit_cost"]) == 1000.0
+    assert candidate_item["purchase_cost_currency"] == "JPY"
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [purchase_result_id],
+        },
+    )
+    assert draft.status_code == 201, draft.text
+    detail = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items")
+    assert detail.status_code == 200
+    assert detail.json()[0]["price_limit_exceeded"] is True
+
+
+def test_purchase_cost_equal_to_order_price_ceiling_does_not_warn():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    db = TestingSessionLocal()
+    item = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.created_at.asc()).first()
+    assert item is not None
+    item.price_ceiling = Decimal("1000.00")
+    item_id = item.id
+    db.commit()
+    db.close()
+    _seed_purchase_result_for_order(order_id, purchased_qty=2, final_unit_cost=1000, order_item_id=item_id)
+
+    candidate = next(row for row in _client().get("/api/v1/invoices/draft-candidates").json() if row["order_id"] == order_id)
+    candidate_item = next(row for row in candidate["items"] if row["order_item_id"] == item_id)
+    assert candidate_item["price_limit_exceeded"] is False
+
+
+def test_price_ceiling_warning_uses_highest_effective_cost_and_does_not_block_finalize():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    db = TestingSessionLocal()
+    item = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.created_at.asc()).first()
+    assert item is not None
+    item.price_ceiling = Decimal("1000.00")
+    item_id = item.id
+    db.commit()
+    db.close()
+    first_id = _seed_purchase_result_for_order(order_id, purchased_qty=1, unit_cost=800, order_item_id=item_id)
+    db = TestingSessionLocal()
+    first_result = db.get(PurchaseResult, first_id)
+    allocation = db.get(SupplierAllocation, first_result.allocation_id)
+    allocation.final_qty = 2
+    second_result = PurchaseResult(
+        allocation_id=allocation.id,
+        supplier_id=allocation.final_supplier_id,
+        purchased_qty=1,
+        purchased_uom=allocation.final_uom,
+        unit_cost=900,
+        final_unit_cost=1080,
+        result_status=PurchaseResultStatus.filled,
+        invoiceable_flag=True,
+    )
+    db.add(second_result)
+    db.commit()
+    second_id = second_result.id
+    db.close()
+
+    client = _client()
+    candidate = next(row for row in client.get("/api/v1/invoices/draft-candidates").json() if row["order_id"] == order_id)
+    candidate_item = next(row for row in candidate["items"] if row["order_item_id"] == item_id)
+    assert candidate_item["price_limit_exceeded"] is True
+    assert float(candidate_item["highest_purchase_unit_cost"]) == 1080.0
+
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": [first_id, second_id],
+        },
+    )
+    assert draft.status_code == 201, draft.text
+    finalized = client.post(f"/api/v1/invoices/{draft.json()['invoice_id']}/finalize")
+    assert finalized.status_code == 200, finalized.text
+
+
+def test_invoice_generation_preserves_source_order_item_line_order():
+    order_id = _seed_order(with_items=True)
+    _seed_system_settings()
+    db = TestingSessionLocal()
+    source_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+    assert len(source_items) == 2
+    source_items[0].line_no = 20
+    source_items[1].line_no = 10
+    expected_order_item_ids = [source_items[1].id, source_items[0].id]
+    db.commit()
+    db.close()
+    result_ids = [
+        _seed_purchase_result_for_order(order_id, purchased_qty=1, order_item_id=item_id, actual_weight_kg=1)
+        for item_id in reversed(expected_order_item_ids)
+    ]
+
+    client = _client()
+    draft = client.post(
+        "/api/v1/invoices/generate-draft-from-purchase-results",
+        json={
+            "order_id": order_id,
+            "invoice_date": str(date.today()),
+            "purchase_result_ids": result_ids,
+        },
+    )
+    assert draft.status_code == 201, draft.text
+    invoice_items = client.get(f"/api/v1/invoices/{draft.json()['invoice_id']}/items")
+    assert invoice_items.status_code == 200
+    assert [row["order_item_id"] for row in invoice_items.json()] == expected_order_item_ids
+    assert [row["line_no"] for row in invoice_items.json()] == [10, 20]
+
+
 def test_draft_generation_without_freight_weight_is_rejected():
     order_id = _seed_order(with_items=True)
     _seed_system_settings(exchange_rate="2.0000", jp_gross_margin_pct="25.000", freight_unit_price="12.00")
@@ -2095,10 +2233,11 @@ def test_invoice_history_search_csv_payment_and_filtered_neighbors():
     invoice.due_date = date(2026, 10, 5)
     product_rows = (db.query(Product).join(OrderItem, OrderItem.product_id == Product.id)
         .filter(OrderItem.order_id == order_id).order_by(Product.id).all())
-    order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).order_by(OrderItem.id).all()
+    order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+    second_product_item = next(item for item in order_items if item.product_id == product_rows[1].id)
     db.add(InvoiceItem(
         invoice_id=invoice.id,
-        order_item_id=order_items[1].id,
+            order_item_id=second_product_item.id,
         line_no=30,
         line_ref=f"IVL-{invoice.document_seq:08d}-0030",
         billable_qty=1,

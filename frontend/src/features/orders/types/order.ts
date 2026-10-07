@@ -243,6 +243,11 @@ export type InvoiceDraftItem = {
   taxAmount: number;
   grossMarginPct?: number;
   grossMarginUnavailable?: boolean;
+  priceLimitExceeded?: boolean;
+  priceCeiling?: number;
+  highestPurchaseUnitCost?: number;
+  purchaseCostUom?: string;
+  purchaseCostCurrency?: string;
 };
 
 export type InvoiceDraftSummary = {
@@ -278,6 +283,11 @@ export type InvoiceDraftListRow = {
   lineAmount: number;
   grossMarginPct?: number;
   grossMarginUnavailable?: boolean;
+  priceLimitExceeded?: boolean;
+  priceCeiling?: number;
+  highestPurchaseUnitCost?: number;
+  purchaseCostUom?: string;
+  purchaseCostCurrency?: string;
 };
 
 export type InvoiceDraftCandidate = {
@@ -315,6 +325,11 @@ export type InvoiceDraftCandidateItem = {
   grossMarginUnavailable: boolean;
   validationCode?: string;
   validationMessage?: string;
+  priceLimitExceeded?: boolean;
+  priceCeiling?: number;
+  highestPurchaseUnitCost?: number;
+  purchaseCostUom?: string;
+  purchaseCostCurrency?: string;
 };
 
 export type InvoiceSummaryRow = {

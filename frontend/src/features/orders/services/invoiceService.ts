@@ -33,6 +33,11 @@ type ApiInvoiceItem = {
   tax_amount: number;
   gross_margin_pct?: number | null;
   gross_margin_unavailable?: boolean;
+  price_limit_exceeded?: boolean;
+  price_ceiling?: number | null;
+  highest_purchase_unit_cost?: number | null;
+  purchase_cost_uom?: string | null;
+  purchase_cost_currency?: string;
 };
 
 type ApiInvoiceDraftListRow = {
@@ -55,6 +60,11 @@ type ApiInvoiceDraftListRow = {
   line_amount: number;
   gross_margin_pct: number | null;
   gross_margin_unavailable: boolean;
+  price_limit_exceeded?: boolean;
+  price_ceiling?: number | null;
+  highest_purchase_unit_cost?: number | null;
+  purchase_cost_uom?: string | null;
+  purchase_cost_currency?: string;
 };
 
 type ApiInvoiceDraftCandidate = {
@@ -89,6 +99,11 @@ type ApiInvoiceDraftCandidate = {
     gross_margin_unavailable: boolean;
     validation_code: string | null;
     validation_message: string | null;
+    price_limit_exceeded?: boolean;
+    price_ceiling?: number | null;
+    highest_purchase_unit_cost?: number | null;
+    purchase_cost_uom?: string | null;
+    purchase_cost_currency?: string;
   }>;
 };
 
@@ -225,6 +240,11 @@ export const getInvoiceDraftItems = async (invoiceId: EntityId): Promise<Invoice
     taxAmount: r.tax_amount,
     grossMarginPct: r.gross_margin_pct ?? undefined,
     grossMarginUnavailable: r.gross_margin_unavailable ?? false,
+    priceLimitExceeded: r.price_limit_exceeded ?? false,
+    priceCeiling: r.price_ceiling ?? undefined,
+    highestPurchaseUnitCost: r.highest_purchase_unit_cost ?? undefined,
+    purchaseCostUom: r.purchase_cost_uom ?? undefined,
+    purchaseCostCurrency: r.purchase_cost_currency,
   }));
 };
 
@@ -244,6 +264,11 @@ export const finalizeInvoiceItemLine = async (invoiceId: EntityId, invoiceItemId
     autoPriceError: r.auto_price_error ?? undefined,
     lineAmount: r.line_amount,
     taxAmount: r.tax_amount,
+    priceLimitExceeded: r.price_limit_exceeded ?? false,
+    priceCeiling: r.price_ceiling ?? undefined,
+    highestPurchaseUnitCost: r.highest_purchase_unit_cost ?? undefined,
+    purchaseCostUom: r.purchase_cost_uom ?? undefined,
+    purchaseCostCurrency: r.purchase_cost_currency,
   };
 };
 
@@ -272,6 +297,11 @@ export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]>
     lineAmount: r.line_amount,
     grossMarginPct: r.gross_margin_pct ?? undefined,
     grossMarginUnavailable: r.gross_margin_unavailable,
+    priceLimitExceeded: r.price_limit_exceeded ?? false,
+    priceCeiling: r.price_ceiling ?? undefined,
+    highestPurchaseUnitCost: r.highest_purchase_unit_cost ?? undefined,
+    purchaseCostUom: r.purchase_cost_uom ?? undefined,
+    purchaseCostCurrency: r.purchase_cost_currency,
   }));
 };
 
@@ -311,6 +341,11 @@ export const listInvoiceDraftCandidates = async (): Promise<InvoiceDraftCandidat
       grossMarginUnavailable: item.gross_margin_unavailable,
       validationCode: item.validation_code ?? undefined,
       validationMessage: item.validation_message ?? undefined,
+      priceLimitExceeded: item.price_limit_exceeded ?? false,
+      priceCeiling: item.price_ceiling ?? undefined,
+      highestPurchaseUnitCost: item.highest_purchase_unit_cost ?? undefined,
+      purchaseCostUom: item.purchase_cost_uom ?? undefined,
+      purchaseCostCurrency: item.purchase_cost_currency,
     })),
   }));
 };
@@ -343,6 +378,11 @@ export const updateInvoiceDraftItem = async (
     taxAmount: r.tax_amount,
     grossMarginPct: r.gross_margin_pct ?? undefined,
     grossMarginUnavailable: r.gross_margin_unavailable ?? false,
+    priceLimitExceeded: r.price_limit_exceeded ?? false,
+    priceCeiling: r.price_ceiling ?? undefined,
+    highestPurchaseUnitCost: r.highest_purchase_unit_cost ?? undefined,
+    purchaseCostUom: r.purchase_cost_uom ?? undefined,
+    purchaseCostCurrency: r.purchase_cost_currency,
   };
 };
 

@@ -488,7 +488,7 @@ export const InvoiceDraftPage = () => {
                       : undefined;
                     const previewMargin = previewAmount && previewProfit != null ? previewProfit / previewAmount * 100 : undefined;
                     return (
-                    <tr key={`candidate-${candidate.orderId}-${item.orderItemId}`}>
+                    <tr key={`candidate-${candidate.orderId}-${item.orderItemId}`} style={item.priceLimitExceeded ? { background: '#fff4df' } : undefined}>
                       <td>
                         <input
                           type="checkbox"
@@ -507,6 +507,13 @@ export const InvoiceDraftPage = () => {
                       <td>未作成</td>
                       <td style={{ textAlign: 'right' }}>
                         {formatNumber(item.unitCostBasis)}
+                        {item.priceLimitExceeded ? (
+                          <div className="field-error">
+                            ⚠ 仕入単価が受注時の上限価格を超えています<br />
+                            上限: {item.purchaseCostCurrency} {formatNumber(item.priceCeiling)}/{item.purchaseCostUom}<br />
+                            実績: {item.purchaseCostCurrency} {formatNumber(item.highestPurchaseUnitCost)}/{item.purchaseCostUom}
+                          </div>
+                        ) : null}
                         <details className="pricing-breakdown">
                           <summary>原価内訳</summary>
                           <dl>
@@ -547,7 +554,7 @@ export const InvoiceDraftPage = () => {
                   const isDraft = row.status === 'draft';
                   const isSaving = Boolean(savingByItemId[row.invoiceItemId]);
                   return (
-                    <tr key={row.invoiceItemId}>
+                    <tr key={row.invoiceItemId} style={row.priceLimitExceeded ? { background: '#fff4df' } : undefined}>
                       <td>
                         <input
                           type="checkbox"
@@ -567,7 +574,16 @@ export const InvoiceDraftPage = () => {
                       <td>{row.invoiceDate}</td>
                       <td>{row.deliveryDate}</td>
                       <td>{STATUS_LABEL[row.status]}</td>
-                      <td style={{ textAlign: 'right' }}>{formatNumber(row.unitCostBasis)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {formatNumber(row.unitCostBasis)}
+                        {row.priceLimitExceeded ? (
+                          <div className="field-error">
+                            ⚠ 仕入単価が受注時の上限価格を超えています<br />
+                            上限: {row.purchaseCostCurrency} {formatNumber(row.priceCeiling)}/{row.purchaseCostUom}<br />
+                            実績: {row.purchaseCostCurrency} {formatNumber(row.highestPurchaseUnitCost)}/{row.purchaseCostUom}
+                          </div>
+                        ) : null}
+                      </td>
                       <td style={{ textAlign: 'right', minWidth: 140 }}>
                         <input
                           type="number"

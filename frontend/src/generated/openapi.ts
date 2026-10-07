@@ -2653,6 +2653,22 @@ export interface components {
             validation_code?: string | null;
             /** Validation Message */
             validation_message?: string | null;
+            /**
+             * Price Limit Exceeded
+             * @default false
+             */
+            price_limit_exceeded: boolean;
+            /** Price Ceiling */
+            price_ceiling?: number | null;
+            /** Highest Purchase Unit Cost */
+            highest_purchase_unit_cost?: number | null;
+            /** Purchase Cost Uom */
+            purchase_cost_uom?: string | null;
+            /**
+             * Purchase Cost Currency
+             * @default JPY
+             */
+            purchase_cost_currency: string;
         };
         /** InvoiceDraftFromPurchaseResultsRequest */
         InvoiceDraftFromPurchaseResultsRequest: {
@@ -2757,6 +2773,22 @@ export interface components {
              * @default false
              */
             gross_margin_unavailable: boolean;
+            /**
+             * Price Limit Exceeded
+             * @default false
+             */
+            price_limit_exceeded: boolean;
+            /** Price Ceiling */
+            price_ceiling?: number | null;
+            /** Highest Purchase Unit Cost */
+            highest_purchase_unit_cost?: number | null;
+            /** Purchase Cost Uom */
+            purchase_cost_uom?: string | null;
+            /**
+             * Purchase Cost Currency
+             * @default JPY
+             */
+            purchase_cost_currency: string;
         };
         /** InvoiceDraftRecalculateResponse */
         InvoiceDraftRecalculateResponse: {
@@ -2901,6 +2933,22 @@ export interface components {
              * @default false
              */
             gross_margin_unavailable: boolean;
+            /**
+             * Price Limit Exceeded
+             * @default false
+             */
+            price_limit_exceeded: boolean;
+            /** Price Ceiling */
+            price_ceiling?: number | null;
+            /** Highest Purchase Unit Cost */
+            highest_purchase_unit_cost?: number | null;
+            /** Purchase Cost Uom */
+            purchase_cost_uom?: string | null;
+            /**
+             * Purchase Cost Currency
+             * @default JPY
+             */
+            purchase_cost_currency: string;
             /**
              * Created At
              * Format: date-time
@@ -3321,6 +3369,10 @@ export interface components {
             order_id: string;
             /** Order No */
             order_no: string;
+            /** Document Seq */
+            document_seq: number;
+            /** Line No */
+            line_no: number;
             order_status: components["schemas"]["OrderStatus"];
             /** Customer Name */
             customer_name: string;
