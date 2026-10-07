@@ -33,7 +33,7 @@ type RowEdit = {
 type SortKey = 'orderNo' | 'deliveryDate' | 'customerName' | 'productName' | 'manualSupplierId' | 'orderedQty' | 'manualQty' | 'shortageQty';
 
 type SortState = {
-  key: SortKey;
+  key: SortKey | null;
   direction: 'asc' | 'desc';
 };
 
@@ -70,7 +70,7 @@ export const OrderItemBulkAllocationPage = () => {
   const [bulkSupplierId, setBulkSupplierId] = useState<number | ''>('');
   const [bulkSupplierQuery, setBulkSupplierQuery] = useState('');
   const [selectVisibleChecked, setSelectVisibleChecked] = useState(false);
-  const [sort, setSort] = useState<SortState>({ key: 'deliveryDate', direction: 'asc' });
+  const [sort, setSort] = useState<SortState>({ key: null, direction: 'asc' });
   const [filterUnassignedSupplierOnly, setFilterUnassignedSupplierOnly] = useState(false);
   const [filterNonZeroDiffOnly, setFilterNonZeroDiffOnly] = useState(false);
   const [labelGenerating, setLabelGenerating] = useState(false);
@@ -112,7 +112,7 @@ export const OrderItemBulkAllocationPage = () => {
               {
                 selected: old?.selected ?? false,
                 manualSupplierId: old?.manualSupplierId ?? row.manualSupplierId,
-                manualQty: old?.manualQty ?? String(row.manualQty ?? row.orderedQty),
+                manualQty: old?.manualQty ?? (row.manualQty == null ? '' : String(row.manualQty)),
                 rowError: old?.rowError,
               },
             ];
@@ -160,6 +160,8 @@ export const OrderItemBulkAllocationPage = () => {
 
   const sortedItems = useMemo(() => {
     const rows = [...filteredItems];
+    if (sort.key === null) return rows;
+    const sortKey = sort.key;
     const getShortage = (row: OrderItemAllocationWorkItem) => {
       const manualQty = Number(editById[row.orderItemId]?.manualQty ?? row.manualQty ?? 0);
       const shortage = hasSameQuantityAxis(row)
@@ -185,7 +187,7 @@ export const OrderItemBulkAllocationPage = () => {
         shortageQty: getShortage(a) - getShortage(b),
       };
 
-      const base = compareMap[sort.key];
+      const base = compareMap[sortKey];
       return sort.direction === 'asc' ? base : -base;
     });
 
@@ -208,7 +210,8 @@ export const OrderItemBulkAllocationPage = () => {
   const onSort = (key: SortKey) => {
     setSort((prev) => {
       if (prev.key !== key) return { key, direction: 'asc' };
-      return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      if (prev.direction === 'asc') return { key, direction: 'desc' };
+      return { key: null, direction: 'asc' };
     });
   };
 
@@ -217,7 +220,7 @@ export const OrderItemBulkAllocationPage = () => {
     return `${label} ${sort.direction === 'asc' ? '↑' : '↓'}`;
   };
 
-  const applySuggestedSuppliers = async () => {
+  const applyAutomaticAllocation = async () => {
     const targetIds = sortedItems.map((row) => row.orderItemId);
     if (targetIds.length === 0) return;
 
@@ -228,39 +231,21 @@ export const OrderItemBulkAllocationPage = () => {
         const next = { ...prev };
         for (const s of suggestions) {
           if (!next[s.orderItemId]) continue;
-          const currentSupplier = next[s.orderItemId].manualSupplierId;
-          if (currentSupplier != null) continue;
+          const current = next[s.orderItemId];
+          const sourceRow = sortedItems.find((row) => row.orderItemId === s.orderItemId);
           next[s.orderItemId] = {
-            ...next[s.orderItemId],
-            manualSupplierId: s.suggestedSupplierId,
+            ...current,
+            manualSupplierId: current.manualSupplierId ?? s.suggestedSupplierId,
+            manualQty: current.manualQty.trim() || (sourceRow ? String(sourceRow.orderedQty) : ''),
             rowError: undefined,
           };
         }
         return next;
       });
-      setToast({ type: 'success', message: `自動で仕入先選択を反映しました（${map.size}件）。` });
+      setToast({ type: 'success', message: `仕入先・数量を自動割当しました（${map.size}件）。数量は換算せず受注数量の数値をコピーしています。` });
     } catch (e) {
-      setToast({ type: 'error', message: toActionableMessage(e, '仕入先の自動提案に失敗しました。') });
+      setToast({ type: 'error', message: toActionableMessage(e, '仕入先・数量の自動割当に失敗しました。') });
     }
-  };
-
-  const applyOrderedQtyToAllocation = () => {
-    if (sortedItems.length === 0) return;
-    setEditById((prev) => {
-      const next = { ...prev };
-      for (const row of sortedItems) {
-        if (!next[row.orderItemId]) continue;
-        const currentQty = String(next[row.orderItemId].manualQty ?? '').trim();
-        if (currentQty !== '') continue;
-        next[row.orderItemId] = {
-          ...next[row.orderItemId],
-          manualQty: String(row.orderedQty),
-          rowError: undefined,
-        };
-      }
-      return next;
-    });
-    setToast({ type: 'success', message: `割当数へ受注数を自動入力しました（${sortedItems.length}件）。` });
   };
 
   const toggleSelectVisible = (checked: boolean) => {
@@ -574,8 +559,7 @@ export const OrderItemBulkAllocationPage = () => {
             <p className="subtle">ラベルPDF生成対象: {selectedOrderItemIds.length}件</p>
           </div>
           <div className="list-controls">
-            <button type="button" className="secondary" onClick={() => void applySuggestedSuppliers()}>自動で仕入先選択</button>
-            <button type="button" className="secondary" onClick={applyOrderedQtyToAllocation}>割当数へ受注数を自動入力</button>
+            <button type="button" className="secondary" onClick={() => void applyAutomaticAllocation()}>仕入先・数量を自動割当</button>
             <button type="button" onClick={() => void saveBulk()} disabled={saving}>選択行を一括保存</button>
             <button
               type="button"

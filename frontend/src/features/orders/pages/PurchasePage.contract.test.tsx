@@ -28,6 +28,7 @@ vi.mock('features/products/services/productsService', () => ({ getProductDetail:
 const rows = [
   {
     orderItemId: 'item-a', allocationId: 11, orderId: 'order-a', orderNo: 'ORD-A',
+    documentSeq: 2, lineNo: 10,
     orderStatus: 'allocated' as const, customerName: 'Customer A', productId: 1, productName: 'Product A', orderedQty: 2,
     pricingBasis: 'uom_kg' as const,
     orderUom: 'case', purchaseUom: 'kg',
@@ -36,6 +37,7 @@ const rows = [
   },
   {
     orderItemId: 'item-b', allocationId: 22, orderId: 'order-b', orderNo: 'ORD-B',
+    documentSeq: 1, lineNo: 10,
     orderStatus: 'purchased' as const, customerName: 'Customer B', productId: 2, productName: 'Product B', orderedQty: 3,
     pricingBasis: 'uom_count' as const,
     orderUom: 'PC', purchaseUom: 'PC',
@@ -104,7 +106,8 @@ it('keeps an allocated uom_count CTN line visible without requiring actual weigh
 
   const tableRow = (await screen.findByText('ORD-A')).closest('tr')!;
   const actualQty = screen.getByRole('spinbutton', { name: 'Product A 実数量' }) as HTMLInputElement;
-  expect(actualQty.value).toBe('2');
+  expect(actualQty.value).toBe('');
+  await actor.type(actualQty, '2');
   await actor.click(tableRow.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await actor.click(screen.getByRole('button', { name: '選択行を保存 (1)' }));
   await waitFor(() => expect(bulkUpsertPurchaseResults).toHaveBeenCalledWith([
@@ -220,6 +223,8 @@ it('marks a cross-unit result filled when actual equals allocation even if order
   renderPurchasePage();
 
   const row = (await screen.findByText('ORD-A')).closest('tr')!;
+  const actualQty = screen.getByRole('spinbutton', { name: 'Product A 実数量' });
+  await actor.type(actualQty, '18.5');
   await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await actor.click(screen.getByRole('button', { name: '選択行を保存 (1)' }));
 
@@ -240,6 +245,8 @@ it('marks a same-unit result filled against allocation quantity rather than orde
   renderPurchasePage();
 
   const row = (await screen.findByText('ORD-B')).closest('tr')!;
+  const actualQty = screen.getByRole('spinbutton', { name: 'Product B 実数量' });
+  await actor.type(actualQty, '8');
   await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await actor.click(screen.getByRole('button', { name: '選択行を保存 (1)' }));
 
@@ -347,6 +354,8 @@ it('saves purchase results without generating invoice drafts automatically', asy
   const actualQty = screen.getByRole('spinbutton', { name: 'Product A 実数量' });
   await actor.clear(actualQty);
   await actor.type(actualQty, '21.73');
+  const countActualQty = screen.getByRole('spinbutton', { name: 'Product B 実数量' });
+  await actor.type(countActualQty, '3');
   await actor.click(rowA!.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await actor.click(rowB!.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
   await actor.click(screen.getByRole('button', { name: '選択行を保存 (2)' }));

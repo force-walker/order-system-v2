@@ -65,7 +65,7 @@ export const PurchasePage = () => {
   const [customerFilter, setCustomerFilter] = useState('');
   const [productFilter, setProductFilter] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('customerName');
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [lastSelectedId, setLastSelectedId] = useState<EntityId | null>(null);
   const [deliveryDate, setDeliveryDate] = useState(getDefaultDeliveryDate);
@@ -157,7 +157,7 @@ export const PurchasePage = () => {
               {
                 selected: prev[r.orderItemId]?.selected ?? false,
                 purchaseUnitCost: prev[r.orderItemId]?.purchaseUnitCost ?? (restoredUnitCost != null ? String(restoredUnitCost) : ''),
-                actualQty: prev[r.orderItemId]?.actualQty ?? String(restoredActualQty ?? r.manualQty ?? r.orderedQty),
+                actualQty: prev[r.orderItemId]?.actualQty ?? (restoredActualQty == null ? '' : String(restoredActualQty)),
                 rowError: undefined,
               },
             ];
@@ -215,6 +215,7 @@ export const PurchasePage = () => {
 
   const sortedRows = useMemo(() => {
     const sorted = [...filteredRows];
+    if (sortKey === null) return sorted;
     const dir = sortDirection === 'asc' ? 1 : -1;
 
     sorted.sort((a, b) => {
@@ -232,7 +233,12 @@ export const PurchasePage = () => {
 
   const onSort = (key: SortKey) => {
     if (sortKey === key) {
-      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else {
+        setSortKey(null);
+        setSortDirection('asc');
+      }
       return;
     }
     setSortKey(key);

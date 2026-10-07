@@ -9,6 +9,7 @@ import {
   bulkSaveOrderItemAllocations,
   listOrderItemAllocationWorkItems,
   listSupplierFilterOptions,
+  suggestOrderItemAllocations,
 } from '../services/orderItemAllocationsService';
 import {
   createSupplierProductMappingGlobal,
@@ -46,6 +47,7 @@ beforeEach(() => {
   vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([]);
   vi.mocked(listSupplierFilterOptions).mockResolvedValue([]);
   vi.mocked(bulkSaveOrderItemAllocations).mockResolvedValue({ total: 1, succeeded: 1, failed: 0, errors: [] });
+  vi.mocked(suggestOrderItemAllocations).mockResolvedValue([]);
   vi.mocked(listProductSupplierMappings).mockImplementation(async (productId) => [mapping(1, productId)]);
   vi.mocked(createSupplierProductMappingGlobal).mockResolvedValue(mapping());
 });
@@ -78,6 +80,8 @@ const savedRow = {
   allocationId: 11,
   orderId: 'order-1',
   orderNo: 'ORD-1',
+  documentSeq: 1,
+  lineNo: 10,
   orderStatus: 'allocated' as const,
   customerName: 'Customer A',
   productId: 1,
@@ -139,7 +143,7 @@ it('blocks selected rows without a final supplier before calling the API', async
   expect(bulkSaveOrderItemAllocations).not.toHaveBeenCalled();
 });
 
-it('copies the ordered quantity as the cross-unit allocation initial value without conversion', async () => {
+it('starts a new allocation blank and copies the ordered quantity without conversion from the combined auto button', async () => {
   const actor = userEvent.setup();
   vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([{
     ...savedRow,
@@ -156,11 +160,17 @@ it('copies the ordered quantity as the cross-unit allocation initial value witho
 
   const row = (await screen.findByText('ORD-1')).closest('tr')!;
   const qty = row.querySelector<HTMLInputElement>('input[type="number"]')!;
-  expect(qty.value).toBe('3');
+  expect(qty.value).toBe('');
   expect(qty.step).toBe('0.001');
   expect(row.textContent).toContain('異単位（換算なし）');
 
-  await actor.selectOptions(row.querySelector('select')!, '1');
+  vi.mocked(suggestOrderItemAllocations).mockResolvedValue([{
+    orderItemId: 'item-1', suggestedSupplierId: 1, suggestedQty: null, reason: 'mapping',
+  }]);
+  await actor.click(screen.getByRole('button', { name: '仕入先・数量を自動割当' }));
+  expect(qty.value).toBe('3');
+  expect((row.querySelector('select') as HTMLSelectElement).value).toBe('1');
+
   await actor.clear(qty);
   await actor.type(qty, '3.75');
   await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
@@ -170,6 +180,27 @@ it('copies the ordered quantity as the cross-unit allocation initial value witho
     supplierId: 1,
     allocatedQty: 3.75,
   }]));
+});
+
+it('keeps persisted allocation quantity and does not overwrite manual values with automatic allocation', async () => {
+  const actor = userEvent.setup();
+  vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([savedRow]);
+  vi.mocked(listSupplierFilterOptions).mockResolvedValue([
+    { id: 1, label: '1: Supplier A' },
+    { id: 2, label: '2: Supplier B' },
+  ]);
+  vi.mocked(suggestOrderItemAllocations).mockResolvedValue([{
+    orderItemId: 'item-1', suggestedSupplierId: 2, suggestedQty: 99, reason: 'mapping',
+  }]);
+  render(<MemoryRouter><OrderItemBulkAllocationPage /></MemoryRouter>);
+
+  const row = (await screen.findByText('ORD-1')).closest('tr')!;
+  const qty = row.querySelector<HTMLInputElement>('input[type="number"]')!;
+  expect(qty.value).toBe('2');
+  expect((row.querySelector('select') as HTMLSelectElement).value).toBe('1');
+  await actor.click(screen.getByRole('button', { name: '仕入先・数量を自動割当' }));
+  expect(qty.value).toBe('2');
+  expect((row.querySelector('select') as HTMLSelectElement).value).toBe('1');
 });
 
 it('resaves an unchanged allocation without overwrite confirmation', async () => {
