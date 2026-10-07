@@ -20,6 +20,7 @@ it('loads finalized invoices by default and sends search/filter/sort/page to the
   expect(screen.getByText('HK$110.00')).toBeTruthy();
   expect(vi.mocked(listInvoiceHistory).mock.calls[0][0].invoiceStatus).toBe('finalized');
   expect(screen.getByRole('link', { name: '詳細' }).getAttribute('href')).toBe('/invoices/inv-1?history=1');
+  expect(screen.getByRole('button', { name: 'Invoice No' }).className).toContain('invoice-history-sort');
   fireEvent.change(screen.getByLabelText('検索'), { target: { value: 'ABC' } });
   expect(await screen.findByText('INV-1')).toBeTruthy();
   await waitFor(() => { const calls = vi.mocked(listInvoiceHistory).mock.calls; expect(calls[calls.length - 1]?.[0].search).toBe('ABC'); });

@@ -397,6 +397,14 @@ button.danger {
 
 button:disabled { opacity: 0.6; }
 
+.invoice-history-sort {
+  background: transparent;
+  color: #111827;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+}
+
 @media (max-width: 900px) {
   .two-col,
   .three-col,
