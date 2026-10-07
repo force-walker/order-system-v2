@@ -197,6 +197,25 @@ def test_worklist_suggest_and_bulk_save_flow():
     db.close()
 
 
+def test_worklist_defaults_to_newest_document_then_source_line_order():
+    older_order_id, older_items, _ = _seed_order_with_items(item_count=2)
+    newer_order_id, newer_items, _ = _seed_order_with_items(item_count=2)
+    db = TestingSessionLocal()
+    db.get(Order, older_order_id).document_seq = 100
+    db.get(Order, newer_order_id).document_seq = 101
+    db.get(OrderItem, older_items[0]).line_no = 20
+    db.get(OrderItem, older_items[1]).line_no = 10
+    db.get(OrderItem, newer_items[0]).line_no = 20
+    db.get(OrderItem, newer_items[1]).line_no = 10
+    db.commit()
+    db.close()
+
+    response = _client().get("/api/v1/order-item-allocations")
+    assert response.status_code == 200
+    target_ids = set(older_items + newer_items)
+    actual = [row["order_item_id"] for row in response.json() if row["order_item_id"] in target_ids]
+    assert actual == [newer_items[1], newer_items[0], older_items[1], older_items[0]]
+
 def test_bulk_save_partial_success_and_validation_conflict():
     ok_item_id, supplier_id, _, _ = _seed_order_item(product_name="OK")
     ng_item_id, _, _, _ = _seed_order_item(product_name="NG")

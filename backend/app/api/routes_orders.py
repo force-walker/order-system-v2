@@ -330,7 +330,7 @@ def list_orders(
         cutoff = _stale_cutoff_delivery_date(_now_hk())
         query = query.filter(Order.delivery_date < cutoff, Order.status.in_([OrderStatus.new, OrderStatus.confirmed, OrderStatus.allocated]))
 
-    rows = query.order_by(Order.created_at.desc()).all()
+    rows = query.order_by(Order.document_seq.desc(), Order.id.desc()).all()
     return [OrderResponse.model_validate(r) for r in rows]
 
 
@@ -602,7 +602,7 @@ def generate_purchase_confirmation_pdf(order_id: str, payload: PurchaseConfirmat
         .outerjoin(SupplierAllocation, SupplierAllocation.order_item_id == OrderItem.id)
         .outerjoin(Supplier, Supplier.id == SupplierAllocation.final_supplier_id)
         .filter(OrderItem.order_id == order.id)
-        .order_by(Product.name.desc(), OrderItem.id.desc())
+        .order_by(OrderItem.line_no.asc(), OrderItem.id.asc())
         .all()
     )
 
@@ -836,7 +836,7 @@ def list_order_items(order_id: str, db: Session = Depends(get_db)) -> list[Order
 @router.get("/uuid/{order_uuid}/items", response_model=list[OrderItemResponse])
 def list_order_items_by_order_uuid(order_uuid: str, db: Session = Depends(get_db)) -> list[OrderItemResponse]:
     order = _get_order_by_uuid_or_404(db, order_uuid)
-    rows = db.query(OrderItem).filter(OrderItem.order_id == order.id).order_by(OrderItem.id.asc()).all()
+    rows = db.query(OrderItem).filter(OrderItem.order_id == order.id).order_by(OrderItem.line_no.asc(), OrderItem.id.asc()).all()
     return [OrderItemResponse.model_validate(r) for r in rows]
 
 

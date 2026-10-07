@@ -88,7 +88,7 @@ def list_order_item_allocation_work_items(
     if customer_name is not None:
         query = query.filter(Customer.name.ilike(f"%{customer_name}%"))
 
-    rows = query.order_by(Order.delivery_date.asc(), Order.id.asc(), OrderItem.id.asc()).all()
+    rows = query.order_by(Order.document_seq.desc(), OrderItem.line_no.asc(), OrderItem.id.asc()).all()
 
     result: list[OrderItemAllocationWorkItem] = []
     for item, order, product, _customer in rows:
@@ -105,6 +105,8 @@ def list_order_item_allocation_work_items(
                 allocation_id=(alloc.id if alloc is not None else None),
                 order_id=order.id,
                 order_no=order.order_no,
+                document_seq=order.document_seq,
+                line_no=item.line_no,
                 order_status=order.status,
                 customer_name=_customer.name,
                 product_id=product.id,

@@ -9,6 +9,8 @@ export type OrderItemAllocationWorkItem = {
   allocationId: number | null;
   orderId: EntityId;
   orderNo: string;
+  documentSeq: number;
+  lineNo: number;
   orderStatus: OrderStatus;
   customerName: string;
   productId: number;
@@ -62,6 +64,8 @@ type ApiWorkItem = {
   allocation_id: number | null;
   order_id: EntityId;
   order_no: string;
+  document_seq: number;
+  line_no: number;
   order_status: OrderStatus;
   customer_name: string;
   product_id: number;
@@ -124,6 +128,8 @@ export const listOrderItemAllocationWorkItems = async (params: {
     allocationId: row.allocation_id,
     orderId: row.order_id,
     orderNo: row.order_no,
+    documentSeq: row.document_seq,
+    lineNo: row.line_no,
     orderStatus: row.order_status,
     customerName: row.customer_name,
     productId: row.product_id,

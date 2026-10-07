@@ -10,6 +10,8 @@ class OrderItemAllocationWorkItem(BaseModel):
     allocation_id: int | None = None
     order_id: str
     order_no: str
+    document_seq: int
+    line_no: int
     order_status: OrderStatus
     customer_name: str
     product_id: int
