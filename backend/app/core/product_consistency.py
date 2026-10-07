@@ -2,11 +2,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from app.models.entities import PricingBasis
+from app.core.uom import CANONICAL_UOMS, normalize_uom
 
 
-# These are the only canonical Product UOM codes. Legacy values such as PC,
-# count, and CTN are deliberately not treated as aliases.
-SUPPORTED_PRODUCT_UOMS = frozenset({"case", "kg", "piece"})
+# These are the only canonical Product UOM codes. Known legacy spellings are
+# normalized before validation; values outside that explicit alias map remain
+# invalid and are never guessed.
+SUPPORTED_PRODUCT_UOMS = CANONICAL_UOMS
 
 
 @dataclass(frozen=True)
@@ -25,8 +27,7 @@ class ProductConsistencyIssue:
 
 
 def normalize_product_uom(value: str | None) -> str | None:
-    normalized = (value or "").strip().casefold()
-    return normalized or None
+    return normalize_uom(value)
 
 
 def validate_product_master_consistency(

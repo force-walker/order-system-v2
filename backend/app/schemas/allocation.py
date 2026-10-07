@@ -1,9 +1,18 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.uom import canonicalize_uom_input
 
 
-class AllocationOverrideRequest(BaseModel):
+class AllocationUomInput(BaseModel):
+    @field_validator("final_uom", mode="before", check_fields=False)
+    @classmethod
+    def canonicalize_final_uom(cls, value):
+        return canonicalize_uom_input(value)
+
+
+class AllocationOverrideRequest(AllocationUomInput):
     final_supplier_id: int = Field(gt=0)
     final_qty: float = Field(ge=0)
     final_uom: str = Field(min_length=1, max_length=32)
@@ -11,7 +20,7 @@ class AllocationOverrideRequest(BaseModel):
     override_note: str | None = Field(default=None, max_length=1000)
 
 
-class SplitPart(BaseModel):
+class SplitPart(AllocationUomInput):
     final_supplier_id: int | None = Field(default=None, gt=0)
     final_qty: float = Field(ge=0)
     final_uom: str = Field(min_length=1, max_length=32)

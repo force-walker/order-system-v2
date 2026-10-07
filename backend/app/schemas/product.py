@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.entities import PricingBasis
+from app.core.uom import normalize_uom
 
 
 class ProductUomInput(BaseModel):
@@ -12,7 +13,10 @@ class ProductUomInput(BaseModel):
     @classmethod
     def normalize_uom(cls, value):
         if isinstance(value, str):
-            return value.strip().casefold()
+            # Known aliases are canonicalized before consistency validation.
+            # Unknown values are deliberately left for the domain validator so
+            # clients retain the structured PRODUCT_UOM_INVALID error details.
+            return normalize_uom(value)
         return value
 
 

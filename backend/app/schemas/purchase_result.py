@@ -1,11 +1,19 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.entities import PurchaseResultStatus
+from app.core.uom import canonicalize_uom_input
 
 
-class PurchaseResultCreateRequest(BaseModel):
+class PurchaseResultUomInput(BaseModel):
+    @field_validator("purchased_uom", mode="before", check_fields=False)
+    @classmethod
+    def canonicalize_purchased_uom(cls, value):
+        return canonicalize_uom_input(value)
+
+
+class PurchaseResultCreateRequest(PurchaseResultUomInput):
     model_config = ConfigDict(extra="forbid")
 
     allocation_id: int = Field(gt=0)
@@ -23,7 +31,7 @@ class PurchaseResultCreateRequest(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
-class PurchaseResultUpdateRequest(BaseModel):
+class PurchaseResultUpdateRequest(PurchaseResultUomInput):
     model_config = ConfigDict(extra="forbid")
 
     supplier_id: int | None = Field(default=None, gt=0)

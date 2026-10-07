@@ -109,13 +109,15 @@ def test_create_rejects_blank_or_unsupported_uom_and_normalizes_case(client):
     assert normalized.json()["invoice_uom"] == "case"
     assert normalize_product_uom(" KG ") == "kg"
 
-    for unsupported_uom in ("PC", "count"):
-        rejected = client.post(
+    for legacy_uom in ("PC", "count"):
+        canonicalized = client.post(
             "/api/v1/products",
-            json=_payload(order_uom=unsupported_uom, purchase_uom=unsupported_uom, invoice_uom=unsupported_uom),
+            json=_payload(order_uom=legacy_uom, purchase_uom=legacy_uom, invoice_uom=legacy_uom),
         )
-        assert rejected.status_code == 422
-        assert "PRODUCT_UOM_INVALID" in _rules(rejected)
+        assert canonicalized.status_code == 201
+        assert canonicalized.json()["order_uom"] == "piece"
+        assert canonicalized.json()["purchase_uom"] == "piece"
+        assert canonicalized.json()["invoice_uom"] == "piece"
 
 
 def test_patch_validates_merged_final_state_and_updates_pricing_basis(client):
