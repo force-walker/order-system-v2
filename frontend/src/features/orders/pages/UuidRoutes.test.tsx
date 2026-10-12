@@ -26,6 +26,9 @@ vi.mock('../services/invoiceService', () => ({
 vi.mock('../components/OrderForm', () => ({
   OrderForm: ({ onSubmit, initialValue }: any) => <button onClick={() => onSubmit(initialValue)}>保存テスト</button>,
 }));
+vi.mock('components/common/RelatedDocuments', () => ({
+  RelatedDocuments: ({ type, id }: { type: string; id: string }) => <div data-testid="related-documents">{type}:{id}</div>,
+}));
 const id = '30ae4186-04b9-4a13-985b-79edf1d061bc';
 const itemId = '57048d30-023a-4886-a623-3ef334c8d51c';
 beforeEach(() => {
@@ -89,6 +92,7 @@ it('updates invoice payment status', async () => {
 });
 it('loads and finalizes an invoice draft using its UUID', async () => {
   show('/invoices/drafts/:invoiceId', `/invoices/drafts/${id}`, <InvoiceDraftDetailPage />);
+  expect((await screen.findByTestId('related-documents')).textContent).toBe(`invoice:${id}`);
   await userEvent.click(await screen.findByRole('button', { name: '請求書発行' }));
   expect(invoices.getInvoiceDraftItems).toHaveBeenCalledWith(id);
   expect(invoices.finalizeInvoiceDraft).toHaveBeenCalledWith(id);

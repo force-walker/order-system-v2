@@ -20,6 +20,7 @@ from app.api.routes_orders import router as orders_router
 from app.api.routes_products import router as products_router
 from app.api.routes_purchase_results import router as purchase_results_router
 from app.api.routes_reports import router as reports_router
+from app.api.routes_related_documents import router as related_documents_router
 from app.api.routes_supplier_product_mappings import router as supplier_product_mappings_router
 from app.api.routes_suppliers import router as suppliers_router
 from app.api.routes_system_settings import router as system_settings_router
@@ -126,5 +127,6 @@ app.include_router(allocations_router, dependencies=[Depends(get_auth_context)])
 app.include_router(purchase_results_router, dependencies=[Depends(get_auth_context)])
 app.include_router(invoices_router, dependencies=[Depends(get_auth_context)])
 app.include_router(payables_router, dependencies=[Depends(get_auth_context)])
+app.include_router(related_documents_router, dependencies=[Depends(get_auth_context)])
 app.include_router(reports_router, dependencies=[Depends(get_auth_context)])
 app.include_router(batch_router, dependencies=[Depends(get_auth_context)])

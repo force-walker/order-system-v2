@@ -2,6 +2,7 @@ import type { EntityId } from 'shared/entityId';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
+import { RelatedDocuments } from 'components/common/RelatedDocuments';
 import { finalizeInvoiceDraft, finalizeInvoiceItemLine, getInvoiceDraftItems } from 'features/orders/services/invoiceService';
 import type { InvoiceDraftItem } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
@@ -134,6 +135,7 @@ export const InvoiceDraftDetailPage = () => {
           </div>
         )}
       </div>
+      {invoiceId ? <RelatedDocuments type="invoice" id={invoiceId} /> : null}
     </section>
   );
 };

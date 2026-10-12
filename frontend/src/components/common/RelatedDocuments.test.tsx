@@ -1,0 +1,12 @@
+// @vitest-environment jsdom
+import{cleanup,render,screen}from'@testing-library/react';import{MemoryRouter}from'react-router-dom';import{afterEach,beforeEach,expect,it,vi}from'vitest';import{RelatedDocuments}from'./RelatedDocuments';import{getRelatedDocuments}from'./relatedDocumentsService';
+vi.mock('./relatedDocumentsService',()=>({getRelatedDocuments:vi.fn()}));
+const rows={orders:[{type:'order' as const,id:'o1',number:'ORD-1',status:'invoiced'}],deliveries:[{type:'delivery' as const,id:'d1',number:'DEL-1',status:null}],invoices:[{type:'invoice' as const,id:'i1',number:'INV-1',status:'finalized'}],supplier_bills:[{type:'supplier_bill' as const,id:'b1',number:'APB-1',status:'cancelled'}]};
+beforeEach(()=>vi.mocked(getRelatedDocuments).mockResolvedValue(rows));
+afterEach(cleanup);
+it.each([
+  ['order','o1','ORD-1','/deliveries/d1'],['delivery','d1','DEL-1','/orders/o1/edit'],['invoice','i1','INV-1','/payables/b1'],['supplier_bill','b1','APB-1','/invoices/i1'],
+] as const)('renders all related links and marks the current %s',async(type,id,current,expectedHref)=>{render(<MemoryRouter><RelatedDocuments type={type} id={id}/></MemoryRouter>);expect(await screen.findByText(new RegExp(`${current}.*現在`))).toBeTruthy();expect(screen.getByRole('link',{name:new RegExp(expectedHref.includes('deliveries')?'DEL-1':expectedHref.includes('orders')?'ORD-1':expectedHref.includes('payables')?'APB-1':'INV-1')}).getAttribute('href')).toBe(expectedHref)});
+it('shows missing document groups as normal state',async()=>{vi.mocked(getRelatedDocuments).mockResolvedValue({orders:rows.orders,deliveries:[],invoices:[],supplier_bills:[]});render(<MemoryRouter><RelatedDocuments type="order" id="o1"/></MemoryRouter>);expect((await screen.findAllByText('未作成')).length).toBe(3)});
+it('links draft invoices to the draft detail route',async()=>{vi.mocked(getRelatedDocuments).mockResolvedValue({...rows,invoices:[{type:'invoice',id:'i1',number:'IVD-00000001',status:'draft'}]});render(<MemoryRouter><RelatedDocuments type="order" id="o1"/></MemoryRouter>);expect((await screen.findByRole('link',{name:/IVD-00000001/})).getAttribute('href')).toBe('/invoices/drafts/i1')});
+it('links finalized invoices to the finalized detail route',async()=>{render(<MemoryRouter><RelatedDocuments type="order" id="o1"/></MemoryRouter>);expect((await screen.findByRole('link',{name:/INV-1/})).getAttribute('href')).toBe('/invoices/i1')});

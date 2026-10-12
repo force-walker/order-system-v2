@@ -5,6 +5,7 @@ import { OrderForm } from 'features/orders/components/OrderForm';
 import { clearDirtyOrderStatus, getOrder, hasDirtyOrderStatus, listCustomers, listProducts, updateOrder } from 'features/orders/services/ordersService';
 import type { CreateOrderRequest, CustomerOption, ProductOption } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
+import { RelatedDocuments } from 'components/common/RelatedDocuments';
 
 export const OrderEditPage = () => {
   const { orderId } = useParams();
@@ -96,6 +97,7 @@ export const OrderEditPage = () => {
         initialValue={initialValue}
         submitLabel="注文を保存"
       />
+      <RelatedDocuments type="order" id={orderIdValue} />
     </section>
   );
 };

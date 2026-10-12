@@ -8,6 +8,7 @@ import { generateInvoicePdf, getInvoiceDetailView, getInvoiceHistoryNeighbors, l
 import type { InvoiceDetailView, InvoiceSummaryRow } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 import { openPdfBlob } from 'shared/pdf';
+import { RelatedDocuments } from 'components/common/RelatedDocuments';
 
 const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'HKD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -166,6 +167,7 @@ export const InvoiceDetailPage = () => {
           </table>
         </div>
       </div>
+      <RelatedDocuments type="invoice" id={String(data.invoiceId)} />
     </section>
   );
 };

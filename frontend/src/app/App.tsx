@@ -14,6 +14,7 @@ import { InvoiceDraftDetailPage } from 'features/orders/pages/InvoiceDraftDetail
 import { InvoiceDraftPage } from 'features/orders/pages/InvoiceDraftPage';
 import { InvoiceListPage } from 'features/orders/pages/InvoiceListPage';
 import { InvoiceDetailPage } from 'features/orders/pages/InvoiceDetailPage';
+import { DeliveryDetailPage } from 'features/orders/pages/DeliveryDetailPage';
 import { ProductListPage } from 'features/products/pages/ProductListPage';
 import { ProductDetailPage } from 'features/products/pages/ProductDetailPage';
 import { ProductCreatePage } from 'features/products/pages/ProductCreatePage';
@@ -62,6 +63,7 @@ export const App = () => {
         <Route path="/purchases" element={<PurchasePage />} />
         <Route path="/invoices" element={<InvoiceListPage />} />
         <Route path="/invoices/:invoiceId" element={<InvoiceDetailPage />} />
+        <Route path="/deliveries/:id" element={<DeliveryDetailPage />} />
         <Route path="/payables" element={<AccountsPayablePage />} />
         <Route path="/payables/:id" element={<SupplierBillDetailPage />} />
         <Route path="/invoices/drafts" element={<InvoiceDraftPage />} />

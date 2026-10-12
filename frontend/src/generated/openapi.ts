@@ -2079,6 +2079,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/related-documents/{document_type}/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Related Documents */
+        get: operations["get_related_documents_api_v1_related_documents__document_type___document_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/purchase-confirmation/pdf": {
         parameters: {
             query?: never;
@@ -4395,6 +4412,31 @@ export interface components {
             user_id: string;
             /** Password */
             password: string;
+        };
+        /** RelatedDocument */
+        RelatedDocument: {
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "order" | "delivery" | "invoice" | "supplier_bill";
+            /** Id */
+            id: string;
+            /** Number */
+            number: string;
+            /** Status */
+            status?: string | null;
+        };
+        /** RelatedDocumentsResponse */
+        RelatedDocumentsResponse: {
+            /** Orders */
+            orders?: components["schemas"]["RelatedDocument"][];
+            /** Deliveries */
+            deliveries?: components["schemas"]["RelatedDocument"][];
+            /** Invoices */
+            invoices?: components["schemas"]["RelatedDocument"][];
+            /** Supplier Bills */
+            supplier_bills?: components["schemas"]["RelatedDocument"][];
         };
         /** ShippingReportRow */
         ShippingReportRow: {
@@ -10705,6 +10747,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupplierOutstandingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_related_documents_api_v1_related_documents__document_type___document_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_type: "order" | "delivery" | "invoice" | "supplier_bill";
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelatedDocumentsResponse"];
                 };
             };
             /** @description Validation Error */

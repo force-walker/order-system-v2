@@ -5908,6 +5908,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/related-documents/{document_type}/{document_id}:
+    get:
+      tags:
+      - related-documents
+      summary: Get Related Documents
+      operationId: get_related_documents_api_v1_related_documents__document_type___document_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: document_type
+        in: path
+        required: true
+        schema:
+          enum:
+          - order
+          - delivery
+          - invoice
+          - supplier_bill
+          type: string
+          title: Document Type
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Document Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelatedDocumentsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/reports/purchase-confirmation/pdf:
     post:
       tags:
@@ -10937,6 +10976,57 @@ components:
       - user_id
       - password
       title: RegisterRequest
+    RelatedDocument:
+      properties:
+        type:
+          type: string
+          enum:
+          - order
+          - delivery
+          - invoice
+          - supplier_bill
+          title: Type
+        id:
+          type: string
+          title: Id
+        number:
+          type: string
+          title: Number
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      type: object
+      required:
+      - type
+      - id
+      - number
+      title: RelatedDocument
+    RelatedDocumentsResponse:
+      properties:
+        orders:
+          items:
+            $ref: '#/components/schemas/RelatedDocument'
+          type: array
+          title: Orders
+        deliveries:
+          items:
+            $ref: '#/components/schemas/RelatedDocument'
+          type: array
+          title: Deliveries
+        invoices:
+          items:
+            $ref: '#/components/schemas/RelatedDocument'
+          type: array
+          title: Invoices
+        supplier_bills:
+          items:
+            $ref: '#/components/schemas/RelatedDocument'
+          type: array
+          title: Supplier Bills
+      type: object
+      title: RelatedDocumentsResponse
     ShippingReportRow:
       properties:
         delivery_id:
