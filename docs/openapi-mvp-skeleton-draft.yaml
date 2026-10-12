@@ -7966,6 +7966,12 @@ components:
         order_item_id:
           type: string
           title: Order Item Id
+        product_sku:
+          type: string
+          title: Product Sku
+        product_name:
+          type: string
+          title: Product Name
         invoice_line_no:
           anyOf:
           - type: string
@@ -8060,6 +8066,8 @@ components:
       - uuid
       - invoice_id
       - order_item_id
+      - product_sku
+      - product_name
       - billable_qty
       - billable_uom
       - invoice_line_status

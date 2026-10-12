@@ -233,6 +233,8 @@ export type InvoiceDraftItem = {
   lineNo?: number;
   lineRef?: string;
   orderItemId: EntityId;
+  productSku: string;
+  productName: string;
   billableQty: number;
   billableUom: string;
   invoiceLineStatus: 'uninvoiced' | 'partially_invoiced' | 'invoiced' | 'cancelled';

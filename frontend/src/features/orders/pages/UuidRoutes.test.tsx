@@ -21,7 +21,7 @@ vi.mock('../services/ordersService', () => ({
 }));
 vi.mock('../services/invoiceService', () => ({
   getInvoiceDetailView: vi.fn(), listInvoiceSummaries: vi.fn(), generateInvoicePdf: vi.fn(), getInvoiceHistoryNeighbors: vi.fn(), updateInvoicePaymentStatus: vi.fn(),
-  getInvoiceDraftItems: vi.fn(), finalizeInvoiceDraft: vi.fn(), finalizeInvoiceItemLine: vi.fn(),
+  getInvoiceDraftItems: vi.fn(), getInvoiceDraftSummary: vi.fn(), finalizeInvoiceDraft: vi.fn(), finalizeInvoiceItemLine: vi.fn(),
 }));
 vi.mock('../components/OrderForm', () => ({
   OrderForm: ({ onSubmit, initialValue }: any) => <button onClick={() => onSubmit(initialValue)}>保存テスト</button>,
@@ -39,6 +39,7 @@ beforeEach(() => {
   vi.mocked(orders.updateOrder).mockResolvedValue({ id } as any);
   vi.mocked(orders.getOrderItem).mockResolvedValue(null);
   vi.mocked(invoices.getInvoiceDraftItems).mockResolvedValue([]);
+  vi.mocked(invoices.getInvoiceDraftSummary).mockResolvedValue({ id, invoiceNo: 'IVD-TEST', customerId: 1, invoiceDate: '2026-10-12', deliveryDate: '2026-10-12', itemCount: 0, subtotal: 0, taxTotal: 0, grandTotal: 0, status: 'draft' });
   vi.mocked(invoices.listInvoiceSummaries).mockResolvedValue([]);
   vi.mocked(invoices.getInvoiceDetailView).mockResolvedValue({ invoiceId: id, invoiceNo: 'INV', customerName: 'Test', invoiceDate: '', deliveryDate: '', status: 'draft', paymentStatus: 'unpaid', subtotal: 100, taxTotal: 10, grandTotal: 110, items: [] });
 });
@@ -95,7 +96,21 @@ it('loads and finalizes an invoice draft using its UUID', async () => {
   expect((await screen.findByTestId('related-documents')).textContent).toBe(`invoice:${id}`);
   await userEvent.click(await screen.findByRole('button', { name: '請求書発行' }));
   expect(invoices.getInvoiceDraftItems).toHaveBeenCalledWith(id);
+  expect(invoices.getInvoiceDraftSummary).toHaveBeenCalledWith(id);
   expect(invoices.finalizeInvoiceDraft).toHaveBeenCalledWith(id);
+});
+it('shows only the product name instead of SKU or internal identifiers', async () => {
+  vi.mocked(invoices.getInvoiceDraftItems).mockResolvedValue([{
+    id: itemId, orderItemId: 'internal-order-item-uuid', productSku: 'SKU-001', productName: 'タラ',
+    billableQty: 2, billableUom: 'kg', invoiceLineStatus: 'uninvoiced', salesUnitPrice: 10,
+    lineAmount: 20, taxAmount: 0,
+  }]);
+  show('/invoices/drafts/:invoiceId', `/invoices/drafts/${id}`, <InvoiceDraftDetailPage />);
+  expect(await screen.findByText('タラ')).toBeTruthy();
+  expect(screen.queryByRole('columnheader', { name: 'SKU' })).toBeNull();
+  expect(screen.queryByText('SKU-001')).toBeNull();
+  expect(screen.queryByText('internal-order-item-uuid')).toBeNull();
+  expect(screen.getByText('請求ドラフト詳細 IVD-TEST')).toBeTruthy();
 });
 it('keeps the selected UUID when generating a shipping PDF', async () => {
   vi.mocked(shipping.getShippingReport).mockResolvedValue([{ orderItemId: itemId, deliveryDate: '2026-09-20', supplierName: 'Test', customerName: 'Test', productName: 'Test', quantity: 2, unit: 'kg' }]);

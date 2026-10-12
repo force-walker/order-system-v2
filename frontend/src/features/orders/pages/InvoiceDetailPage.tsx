@@ -101,6 +101,7 @@ export const InvoiceDetailPage = () => {
             {pdfError ? <p className="field-error">{pdfError}</p> : null}
           </div>
           <div style={{ display: 'grid', gap: 6, justifyItems: 'end' }}>
+            <RelatedDocuments type="invoice" id={String(data.invoiceId)} />
             <Link to={`/invoices?${historyParams}`} className="order-link">← 請求履歴へ</Link>
             <PdfExportButton
               busy={pdfGenerating}
@@ -167,7 +168,6 @@ export const InvoiceDetailPage = () => {
           </table>
         </div>
       </div>
-      <RelatedDocuments type="invoice" id={String(data.invoiceId)} />
     </section>
   );
 };

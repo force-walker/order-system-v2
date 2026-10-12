@@ -23,6 +23,8 @@ type ApiInvoiceItem = {
   line_ref?: string | null;
   invoice_id: EntityId;
   order_item_id: EntityId;
+  product_sku: string;
+  product_name: string;
   billable_qty: number;
   billable_uom: string;
   invoice_line_status: 'uninvoiced' | 'partially_invoiced' | 'invoiced' | 'cancelled';
@@ -230,6 +232,8 @@ export const getInvoiceDraftItems = async (invoiceId: EntityId): Promise<Invoice
     lineNo: r.line_no ?? undefined,
     lineRef: r.line_ref ?? undefined,
     orderItemId: r.order_item_id,
+    productSku: r.product_sku,
+    productName: r.product_name,
     billableQty: r.billable_qty,
     billableUom: r.billable_uom,
     invoiceLineStatus: r.invoice_line_status,
@@ -248,6 +252,24 @@ export const getInvoiceDraftItems = async (invoiceId: EntityId): Promise<Invoice
   }));
 };
 
+export const getInvoiceDraftSummary = async (invoiceId: EntityId): Promise<InvoiceDraftSummary> => {
+  const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}`, { method: 'GET' });
+  if (!res.ok) throw await parseApiErrorPayload(res);
+  const row = (await res.json()) as ApiInvoiceSummary;
+  return {
+    id: row.id,
+    invoiceNo: row.invoice_no,
+    customerId: row.customer_id,
+    invoiceDate: row.invoice_date,
+    deliveryDate: row.delivery_date,
+    itemCount: 0,
+    subtotal: row.subtotal,
+    taxTotal: row.tax_total,
+    grandTotal: row.grand_total,
+    status: row.status,
+  };
+};
+
 export const finalizeInvoiceItemLine = async (invoiceId: EntityId, invoiceItemId: EntityId): Promise<InvoiceDraftItem> => {
   const res = await fetchWithAuth(`/api/v1/invoices/${invoiceId}/items/${invoiceItemId}/finalize`, { method: 'POST' });
   if (!res.ok) throw await parseApiErrorPayload(res);
@@ -257,6 +279,8 @@ export const finalizeInvoiceItemLine = async (invoiceId: EntityId, invoiceItemId
     lineNo: r.line_no ?? undefined,
     lineRef: r.line_ref ?? undefined,
     orderItemId: r.order_item_id,
+    productSku: r.product_sku,
+    productName: r.product_name,
     billableQty: r.billable_qty,
     billableUom: r.billable_uom,
     invoiceLineStatus: r.invoice_line_status,
@@ -368,6 +392,8 @@ export const updateInvoiceDraftItem = async (
     lineNo: r.line_no ?? undefined,
     lineRef: r.line_ref ?? undefined,
     orderItemId: r.order_item_id,
+    productSku: r.product_sku,
+    productName: r.product_name,
     billableQty: r.billable_qty,
     billableUom: r.billable_uom,
     invoiceLineStatus: r.invoice_line_status,

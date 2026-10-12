@@ -1,10 +1,10 @@
 import type { EntityId } from 'shared/entityId';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { RelatedDocuments } from 'components/common/RelatedDocuments';
-import { finalizeInvoiceDraft, finalizeInvoiceItemLine, getInvoiceDraftItems } from 'features/orders/services/invoiceService';
-import type { InvoiceDraftItem } from 'features/orders/types/order';
+import { finalizeInvoiceDraft, finalizeInvoiceItemLine, getInvoiceDraftItems, getInvoiceDraftSummary } from 'features/orders/services/invoiceService';
+import type { InvoiceDraftItem, InvoiceDraftSummary } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 
 export const InvoiceDraftDetailPage = () => {
@@ -13,6 +13,7 @@ export const InvoiceDraftDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftItem[]>([]);
+  const [summary, setSummary] = useState<InvoiceDraftSummary | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [finalizingRowId, setFinalizingRowId] = useState<EntityId | null>(null);
 
@@ -21,8 +22,9 @@ export const InvoiceDraftDetailPage = () => {
     setLoading(true);
     setError('');
     try {
-      const items = await getInvoiceDraftItems(invoiceId ?? '');
+      const [items, invoice] = await Promise.all([getInvoiceDraftItems(invoiceId ?? ''), getInvoiceDraftSummary(invoiceId ?? '')]);
       setRows(items);
+      setSummary(invoice);
     } catch (e) {
       setError(toActionableMessage(e, '請求ドラフト明細の取得に失敗しました。'));
     } finally {
@@ -69,10 +71,11 @@ export const InvoiceDraftDetailPage = () => {
       <div className="card">
         <div className="list-header">
           <div>
-            <h2>請求ドラフト詳細 #{invoiceId}</h2>
+            <h2>請求ドラフト詳細 {summary?.invoiceNo ?? ''}</h2>
             <p className="subtle">数量差異/単価調整後の値を確認し、このドラフト画面から請求書発行します。</p>
           </div>
           <div className="list-controls">
+            {invoiceId ? <RelatedDocuments type="invoice" id={invoiceId} /> : null}
             <button type="button" className="secondary" onClick={() => navigate('/invoices/drafts')}>戻る</button>
             <button type="button" onClick={() => void onFinalize()} disabled={finalizing}>{finalizing ? '発行中...' : '請求書発行'}</button>
           </div>
@@ -85,7 +88,7 @@ export const InvoiceDraftDetailPage = () => {
             <table>
               <thead>
                 <tr>
-                  <th>order_item_id</th>
+                  <th>商品名</th>
                   <th>数量</th>
                   <th>単位</th>
                   <th>単価</th>
@@ -100,7 +103,7 @@ export const InvoiceDraftDetailPage = () => {
                   const isInvoiced = r.invoiceLineStatus === 'invoiced';
                   return (
                     <tr key={r.id} style={r.priceLimitExceeded ? { backgroundColor: '#fff4e5' } : undefined}>
-                      <td><Link to={`/orders/item-allocations`}>{r.orderItemId}</Link></td>
+                      <td>{r.productName}</td>
                       <td>{r.billableQty}</td>
                       <td>{r.billableUom}</td>
                       <td>
@@ -135,7 +138,6 @@ export const InvoiceDraftDetailPage = () => {
           </div>
         )}
       </div>
-      {invoiceId ? <RelatedDocuments type="invoice" id={invoiceId} /> : null}
     </section>
   );
 };

@@ -130,6 +130,8 @@ class InvoiceItemResponse(BaseModel):
     legacy_id: int | None = None
     invoice_id: str
     order_item_id: str
+    product_sku: str
+    product_name: str
     invoice_line_no: str | None = Field(default=None, deprecated=True, description="Deprecated compatibility field; new rows mirror line_ref, not the legacy value format")
     line_no: int | None = Field(default=None, description="Immutable business line number within the Invoice")
     line_ref: str | None = Field(default=None, description="Authoritative globally unique human-readable line reference")

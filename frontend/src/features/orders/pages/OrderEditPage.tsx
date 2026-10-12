@@ -78,8 +78,8 @@ export const OrderEditPage = () => {
   }, [orderIdValue]);
 
   const handleSubmit = async (payload: CreateOrderRequest) => {
-    const updated = await updateOrder(orderIdValue, payload);
-    sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: `注文を更新しました（ID: ${updated.id}）` }));
+    await updateOrder(orderIdValue, payload);
+    sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: '注文を更新しました' }));
     navigate('/orders');
   };
 
@@ -89,6 +89,7 @@ export const OrderEditPage = () => {
 
   return (
     <section>
+      <div className="related-document-toolbar"><RelatedDocuments type="order" id={orderIdValue} /></div>
       <OrderForm
         onSubmit={handleSubmit}
         onDiscard={() => setInitialValue((prev) => (prev ? { ...prev } : prev))}
@@ -97,7 +98,6 @@ export const OrderEditPage = () => {
         initialValue={initialValue}
         submitLabel="注文を保存"
       />
-      <RelatedDocuments type="order" id={orderIdValue} />
     </section>
   );
 };

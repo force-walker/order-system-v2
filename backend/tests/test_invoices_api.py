@@ -969,6 +969,7 @@ def test_list_invoice_items_and_invoice_filters():
     items = client.get(f"/api/v1/invoices/{invoice_id}/items")
     assert items.status_code == 200
     assert len(items.json()) == 2
+    assert all(row["product_sku"] and row["product_name"] for row in items.json())
 
     filtered_by_status = client.get("/api/v1/invoices?status=draft")
     assert filtered_by_status.status_code == 200

@@ -3083,6 +3083,10 @@ export interface components {
             invoice_id: string;
             /** Order Item Id */
             order_item_id: string;
+            /** Product Sku */
+            product_sku: string;
+            /** Product Name */
+            product_name: string;
             /**
              * Invoice Line No
              * @deprecated

@@ -337,12 +337,20 @@ def _purchase_price_limit(db: Session, order_item_id: str) -> dict[str, object]:
 def _invoice_item_response(db: Session, item: InvoiceItem) -> InvoiceItemResponse:
     gross_margin_pct, gross_margin_unavailable = _draft_item_metrics(item)
     price_limit = _purchase_price_limit(db, item.order_item_id)
+    product = (
+        db.query(Product)
+        .join(OrderItem, OrderItem.product_id == Product.id)
+        .filter(OrderItem.id == item.order_item_id)
+        .first()
+    )
     return InvoiceItemResponse(
         id=item.id,
         uuid=item.uuid,
         legacy_id=item.legacy_id,
         invoice_id=item.invoice_id,
         order_item_id=item.order_item_id,
+        product_sku=(product.sku if product is not None else "-"),
+        product_name=(product.name if product is not None else "-"),
         invoice_line_no=item.invoice_line_no,
         line_no=item.line_no,
         line_ref=item.line_ref,
