@@ -6,12 +6,14 @@ import { archiveSupplier, deleteSupplier, getSupplier, listSuppliers, unarchiveS
 import type { Supplier } from 'features/suppliers/types/supplier';
 import { SupplierProductMappingPanel } from 'features/suppliers/components/SupplierProductMappingPanel';
 import { toActionableMessage } from 'shared/error';
+import { getOutstanding } from 'features/payables/payablesService';
 
 export const SupplierDetailPage = () => {
   const { supplierId } = useParams();
   const navigate = useNavigate();
   const [supplier, setSupplier] = useState<Supplier | null | undefined>(undefined);
   const [error, setError] = useState('');
+  const [outstanding, setOutstanding] = useState<number | null>(null);
   const id = Number(supplierId);
   const fallbackIds = useCallback(async () => {
     const rows: Supplier[] = [];
@@ -37,6 +39,7 @@ export const SupplierDetailPage = () => {
     try {
       const row = await getSupplier(id);
       setSupplier(row);
+      if (row) void getOutstanding(id).then((result) => setOutstanding(result.outstanding_amount)).catch(() => setOutstanding(null));
     } catch (e) {
       setError(toActionableMessage(e, '仕入先詳細の取得に失敗しました'));
     }
@@ -72,10 +75,12 @@ export const SupplierDetailPage = () => {
           <div><dt>仕入先コード</dt><dd>{supplier.supplierCode}</dd></div>
           <div><dt>仕入先名</dt><dd>{supplier.name}</dd></div>
           <div><dt>状態</dt><dd>{supplier.active ? '有効' : '無効'}</dd></div>
+          <div><dt>Outstanding AP</dt><dd>{outstanding == null ? '-' : new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(outstanding)}</dd></div>
         </dl>
         <div className="detail-actions">
           <Link to={recordNavigation.listHref} className="order-link">仕入先一覧へ戻る</Link>
           <Link to={`/suppliers/${supplier.id}/edit`} className="order-link">仕入先を編集</Link>
+          <Link to={`/payables?supplier_id=${supplier.id}`} className="order-link">買掛金を見る</Link>
           <button
             type="button"
             className="secondary"

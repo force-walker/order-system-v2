@@ -30,6 +30,8 @@ import { SupplierEditPage } from 'features/suppliers/pages/SupplierEditPage';
 import { SupplierDetailPage } from 'features/suppliers/pages/SupplierDetailPage';
 import { SupplierImportPage } from 'features/suppliers/pages/SupplierImportPage';
 import { SystemSettingsPage } from 'features/settings/pages/SystemSettingsPage';
+import { AccountsPayablePage } from 'features/payables/AccountsPayablePage';
+import { SupplierBillDetailPage } from 'features/payables/SupplierBillDetailPage';
 
 export const App = () => {
   useEffect(() => {
@@ -60,6 +62,8 @@ export const App = () => {
         <Route path="/purchases" element={<PurchasePage />} />
         <Route path="/invoices" element={<InvoiceListPage />} />
         <Route path="/invoices/:invoiceId" element={<InvoiceDetailPage />} />
+        <Route path="/payables" element={<AccountsPayablePage />} />
+        <Route path="/payables/:id" element={<SupplierBillDetailPage />} />
         <Route path="/invoices/drafts" element={<InvoiceDraftPage />} />
         <Route path="/invoices/drafts/:invoiceId" element={<InvoiceDraftDetailPage />} />
         <Route path="/reports/shipping" element={<ShippingReportPage />} />

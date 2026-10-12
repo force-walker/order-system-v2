@@ -36,6 +36,10 @@ const navigation = [
     "請求履歴"
   ],
   [
+    "/payables",
+    "買掛金"
+  ],
+  [
     "/products",
     "商品"
   ],
