@@ -297,6 +297,79 @@ class InvoicePaymentStatus(str, enum.Enum):
     paid = "paid"
 
 
+class SupplierBillStatus(str, enum.Enum):
+    draft = "draft"
+    finalized = "finalized"
+    cancelled = "cancelled"
+
+
+class SupplierBill(Base):
+    __tablename__ = "supplier_bills"
+    __table_args__ = (
+        CheckConstraint("subtotal >= 0", name="ck_supplier_bills_subtotal_non_negative"),
+        CheckConstraint("total_amount >= 0", name="ck_supplier_bills_total_non_negative"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    document_seq: Mapped[int] = mapped_column(BigInteger, unique=True, index=True, nullable=False)
+    next_line_no: Mapped[int] = mapped_column(default=10, nullable=False)
+    bill_no: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"), index=True)
+    supplier_invoice_no: Mapped[str] = mapped_column(String(128), index=True)
+    bill_date: Mapped[date] = mapped_column(Date, index=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    payment_terms_type: Mapped[PaymentTermsType | None] = mapped_column(Enum(PaymentTermsType, name="paymenttermstype", native_enum=False), nullable=True)
+    payment_terms_days: Mapped[int | None] = mapped_column(nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), default="JPY")
+    status: Mapped[SupplierBillStatus] = mapped_column(Enum(SupplierBillStatus, name="supplierbillstatus", native_enum=False), default=SupplierBillStatus.draft, index=True)
+    subtotal: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    tax: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    adjustment: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    total_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class SupplierBillItem(Base):
+    __tablename__ = "supplier_bill_items"
+    __table_args__ = (
+        UniqueConstraint("supplier_bill_id", "line_no", name="uq_supplier_bill_items_bill_line_no"),
+        CheckConstraint("line_no > 0", name="ck_supplier_bill_items_line_no_positive"),
+        CheckConstraint("quantity > 0", name="ck_supplier_bill_items_quantity_positive"),
+        CheckConstraint("unit_cost >= 0", name="ck_supplier_bill_items_unit_cost_non_negative"),
+        CheckConstraint("line_amount >= 0", name="ck_supplier_bill_items_line_amount_non_negative"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    supplier_bill_id: Mapped[str] = mapped_column(ForeignKey("supplier_bills.id", ondelete="CASCADE"), index=True)
+    line_no: Mapped[int] = mapped_column(nullable=False)
+    purchase_result_id: Mapped[int] = mapped_column(ForeignKey("purchase_results.id"), index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    sku: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(String(255))
+    quantity: Mapped[float] = mapped_column(Numeric(12, 3))
+    uom: Mapped[str] = mapped_column(String(32))
+    unit_cost: Mapped[float] = mapped_column(Numeric(14, 2))
+    line_amount: Mapped[float] = mapped_column(Numeric(14, 2))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class SupplierPayment(Base):
+    __tablename__ = "supplier_payments"
+    __table_args__ = (CheckConstraint("amount > 0", name="ck_supplier_payments_amount_positive"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    supplier_bill_id: Mapped[str] = mapped_column(ForeignKey("supplier_bills.id"), index=True)
+    payment_date: Mapped[date] = mapped_column(Date, index=True)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2))
+    reference: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    void_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
     __table_args__ = (

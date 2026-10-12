@@ -9,7 +9,7 @@ new rows only as field compatibility; their historical format is deprecated.
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.models.entities import Delivery, DeliveryItem, Invoice, InvoiceItem, Order, OrderItem
+from app.models.entities import Delivery, DeliveryItem, Invoice, InvoiceItem, Order, OrderItem, SupplierBill
 
 LEGACY_SEQUENCES = {
     "orders": "orders_legacy_id_seq",
@@ -160,3 +160,12 @@ def generate_official_invoice_no(db: Session, invoice: Invoice) -> str:
             "official_document_seq",
         )
     return f"INV-{invoice.official_document_seq:08d}"
+
+
+def ensure_supplier_bill_numbers(db: Session, bill: SupplierBill) -> None:
+    if bill.document_seq is None:
+        bill.document_seq = _next_sequence_value(db, "supplier_bill_document_seq", "supplier_bills", "document_seq")
+    if not bill.bill_no or bill.bill_no.startswith("pending-"):
+        bill.bill_no = f"APB-{bill.document_seq:08d}"
+    if bill.next_line_no is None:
+        bill.next_line_no = 10
