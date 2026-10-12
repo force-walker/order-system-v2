@@ -1907,6 +1907,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payables/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Candidates */
+        get: operations["list_candidates_api_v1_payables_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payables/bills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Bills */
+        get: operations["list_bills_api_v1_payables_bills_get"];
+        put?: never;
+        /** Create Bill */
+        post: operations["create_bill_api_v1_payables_bills_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payables/bills/{bill_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Bill */
+        get: operations["get_bill_api_v1_payables_bills__bill_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Bill */
+        patch: operations["update_bill_api_v1_payables_bills__bill_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/payables/bills/{bill_id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finalize Bill */
+        post: operations["finalize_bill_api_v1_payables_bills__bill_id__finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payables/bills/{bill_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Bill */
+        post: operations["cancel_bill_api_v1_payables_bills__bill_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payables/bills/{bill_id}/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Payment */
+        post: operations["add_payment_api_v1_payables_bills__bill_id__payments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payables/bills/{bill_id}/payments/{payment_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Payment */
+        post: operations["void_payment_api_v1_payables_bills__bill_id__payments__payment_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payables/bills/export/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Bills */
+        get: operations["export_bills_api_v1_payables_bills_export__kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payables/bills/{bill_id}/neighbors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Neighbors */
+        get: operations["neighbors_api_v1_payables_bills__bill_id__neighbors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payables/suppliers/{supplier_id}/outstanding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Supplier Outstanding */
+        get: operations["supplier_outstanding_api_v1_payables_suppliers__supplier_id__outstanding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/purchase-confirmation/pdf": {
         parameters: {
             query?: never;
@@ -3616,6 +3788,43 @@ export interface components {
             /** Items */
             items: components["schemas"]["OrderItemResponse"][];
         };
+        /** PayableCandidate */
+        PayableCandidate: {
+            /** Purchase Result Id */
+            purchase_result_id: number;
+            /**
+             * Purchase Date
+             * Format: date
+             */
+            purchase_date: string;
+            /** Supplier Id */
+            supplier_id: number;
+            /** Supplier Name */
+            supplier_name: string;
+            /** Order No */
+            order_no: string;
+            /** Line No */
+            line_no: number;
+            /** Product Id */
+            product_id: number;
+            /** Sku */
+            sku: string;
+            /** Product Name */
+            product_name: string;
+            /** Quantity */
+            quantity: number;
+            /** Uom */
+            uom: string;
+            /** Unit Cost */
+            unit_cost: number | null;
+            /** Amount */
+            amount: number | null;
+            /**
+             * Currency
+             * @default JPY
+             */
+            currency: string;
+        };
         /**
          * PaymentTermsType
          * @enum {string}
@@ -4232,6 +4441,141 @@ export interface components {
          * @enum {string}
          */
         StockoutPolicy: "backorder" | "substitute" | "cancel" | "split";
+        /** SupplierBillCreateRequest */
+        SupplierBillCreateRequest: {
+            /** Purchase Result Ids */
+            purchase_result_ids: number[];
+            /** Supplier Invoice No */
+            supplier_invoice_no: string;
+            /**
+             * Bill Date
+             * Format: date
+             */
+            bill_date: string;
+            /**
+             * Currency
+             * @default JPY
+             */
+            currency: string;
+        };
+        /** SupplierBillItemResponse */
+        SupplierBillItemResponse: {
+            /** Id */
+            id: string;
+            /** Line No */
+            line_no: number;
+            /** Purchase Result Id */
+            purchase_result_id: number;
+            /** Product Id */
+            product_id: number;
+            /** Sku */
+            sku: string;
+            /** Description */
+            description: string;
+            /** Quantity */
+            quantity: number;
+            /** Uom */
+            uom: string;
+            /** Unit Cost */
+            unit_cost: number;
+            /** Line Amount */
+            line_amount: number;
+        };
+        /** SupplierBillItemUpdate */
+        SupplierBillItemUpdate: {
+            /** Quantity */
+            quantity: number;
+            /** Unit Cost */
+            unit_cost: number;
+        };
+        /** SupplierBillListResponse */
+        SupplierBillListResponse: {
+            /** Items */
+            items: components["schemas"]["SupplierBillResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /** SupplierBillNeighborsResponse */
+        SupplierBillNeighborsResponse: {
+            /** Previous Id */
+            previous_id: string | null;
+            /** Next Id */
+            next_id: string | null;
+        };
+        /** SupplierBillResponse */
+        SupplierBillResponse: {
+            /** Id */
+            id: string;
+            /** Document Seq */
+            document_seq: number;
+            /** Bill No */
+            bill_no: string;
+            /** Supplier Id */
+            supplier_id: number;
+            /** Supplier Name */
+            supplier_name: string;
+            /** Supplier Invoice No */
+            supplier_invoice_no: string;
+            /**
+             * Bill Date
+             * Format: date
+             */
+            bill_date: string;
+            /** Due Date */
+            due_date: string | null;
+            payment_terms_type: components["schemas"]["PaymentTermsType"] | null;
+            /** Payment Terms Days */
+            payment_terms_days: number | null;
+            /** Currency */
+            currency: string;
+            status: components["schemas"]["SupplierBillStatus"];
+            /** Subtotal */
+            subtotal: number;
+            /** Tax */
+            tax: number;
+            /** Adjustment */
+            adjustment: number;
+            /** Total Amount */
+            total_amount: number;
+            /** Paid Amount */
+            paid_amount: number;
+            /** Outstanding Amount */
+            outstanding_amount: number;
+            /** Payment Status */
+            payment_status: string;
+            /** Overdue */
+            overdue: boolean;
+            /** Line Count */
+            line_count: number;
+            /** Items */
+            items?: components["schemas"]["SupplierBillItemResponse"][];
+            /** Payments */
+            payments?: components["schemas"]["SupplierPaymentResponse"][];
+        };
+        /**
+         * SupplierBillStatus
+         * @enum {string}
+         */
+        SupplierBillStatus: "draft" | "finalized" | "cancelled";
+        /** SupplierBillUpdateRequest */
+        SupplierBillUpdateRequest: {
+            /** Supplier Invoice No */
+            supplier_invoice_no?: string | null;
+            /** Bill Date */
+            bill_date?: string | null;
+            /** Tax */
+            tax?: number | null;
+            /** Adjustment */
+            adjustment?: number | null;
+            /** Items */
+            items?: {
+                [key: string]: components["schemas"]["SupplierBillItemUpdate"];
+            } | null;
+        };
         /** SupplierCreateRequest */
         SupplierCreateRequest: {
             payment_terms_type?: components["schemas"]["PaymentTermsType"] | null;
@@ -4279,6 +4623,62 @@ export interface components {
             failed: number;
             /** Errors */
             errors?: components["schemas"]["SupplierImportError"][];
+        };
+        /** SupplierOutstandingResponse */
+        SupplierOutstandingResponse: {
+            /** Supplier Id */
+            supplier_id: number;
+            /** Outstanding Amount */
+            outstanding_amount: number;
+            /**
+             * Currency
+             * @default JPY
+             */
+            currency: string;
+        };
+        /** SupplierPaymentCreateRequest */
+        SupplierPaymentCreateRequest: {
+            /**
+             * Payment Date
+             * Format: date
+             */
+            payment_date: string;
+            /** Amount */
+            amount: number;
+            /** Reference */
+            reference?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** SupplierPaymentResponse */
+        SupplierPaymentResponse: {
+            /** Id */
+            id: string;
+            /**
+             * Payment Date
+             * Format: date
+             */
+            payment_date: string;
+            /** Amount */
+            amount: number;
+            /** Reference */
+            reference: string | null;
+            /** Note */
+            note: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Voided At */
+            voided_at: string | null;
+            /** Void Reason */
+            void_reason: string | null;
+        };
+        /** SupplierPaymentVoidRequest */
+        SupplierPaymentVoidRequest: {
+            /** Reason */
+            reason: string;
         };
         /** SupplierProductCreateRequest */
         SupplierProductCreateRequest: {
@@ -9908,6 +10308,412 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    list_candidates_api_v1_payables_candidates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayableCandidate"][];
+                };
+            };
+        };
+    };
+    list_bills_api_v1_payables_bills_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                supplier_id?: number | null;
+                bill_status?: string | null;
+                payment_status?: string | null;
+                overdue?: boolean | null;
+                sort?: string;
+                direction?: string;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierBillListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_bill_api_v1_payables_bills_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplierBillCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierBillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_bill_api_v1_payables_bills__bill_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierBillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_bill_api_v1_payables_bills__bill_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplierBillUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierBillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_bill_api_v1_payables_bills__bill_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierBillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_bill_api_v1_payables_bills__bill_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierBillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_payment_api_v1_payables_bills__bill_id__payments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplierPaymentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierBillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_payment_api_v1_payables_bills__bill_id__payments__payment_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bill_id: string;
+                payment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplierPaymentVoidRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierBillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_bills_api_v1_payables_bills_export__kind__get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                supplier_id?: number | null;
+                bill_status?: string | null;
+                payment_status?: string | null;
+                overdue?: boolean | null;
+                sort?: string;
+                direction?: string;
+            };
+            header?: never;
+            path: {
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    neighbors_api_v1_payables_bills__bill_id__neighbors_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                supplier_id?: number | null;
+                bill_status?: string | null;
+                payment_status?: string | null;
+                overdue?: boolean | null;
+                sort?: string;
+                direction?: string;
+            };
+            header?: never;
+            path: {
+                bill_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierBillNeighborsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    supplier_outstanding_api_v1_payables_suppliers__supplier_id__outstanding_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                supplier_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplierOutstandingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

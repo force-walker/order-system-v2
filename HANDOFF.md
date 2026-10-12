@@ -2,6 +2,10 @@
 
 Updated: 2026-09-21
 
+## Accounts Payable
+
+Supplier Bill / Accounts Payable is available at `/payables`. It supports unbilled Purchase Result selection, `APB-########` permanent numbering, Supplier payment-term snapshots, Draft/Finalize/Cancel, derived unpaid/partial/paid and overdue state, voidable Supplier payments, history search/filter/sort/pagination, CSV exports, and Supplier outstanding balance links. See `docs/accounts-payable.md`. Migration head: `2026101201`.
+
 ## Active workspace
 
 - Repository: `/home/ikedakojiro/Documents/ChatGPT/order_system_v2`

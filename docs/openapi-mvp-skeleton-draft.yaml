@@ -5287,6 +5287,582 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/payables/candidates:
+    get:
+      tags:
+      - accounts-payable
+      summary: List Candidates
+      operationId: list_candidates_api_v1_payables_candidates_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/PayableCandidate'
+                type: array
+                title: Response List Candidates Api V1 Payables Candidates Get
+      security:
+      - HTTPBearer: []
+  /api/v1/payables/bills:
+    post:
+      tags:
+      - accounts-payable
+      summary: Create Bill
+      operationId: create_bill_api_v1_payables_bills_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierBillCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierBillResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - accounts-payable
+      summary: List Bills
+      operationId: list_bills_api_v1_payables_bills_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      - name: supplier_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Supplier Id
+      - name: bill_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bill Status
+      - name: payment_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment Status
+      - name: overdue
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Overdue
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: document_seq
+          title: Sort
+      - name: direction
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(asc|desc)$
+          default: desc
+          title: Direction
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Page Size
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierBillListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payables/bills/{bill_id}:
+    get:
+      tags:
+      - accounts-payable
+      summary: Get Bill
+      operationId: get_bill_api_v1_payables_bills__bill_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bill_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bill Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierBillResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - accounts-payable
+      summary: Update Bill
+      operationId: update_bill_api_v1_payables_bills__bill_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bill_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bill Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierBillUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierBillResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payables/bills/{bill_id}/finalize:
+    post:
+      tags:
+      - accounts-payable
+      summary: Finalize Bill
+      operationId: finalize_bill_api_v1_payables_bills__bill_id__finalize_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bill_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bill Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierBillResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payables/bills/{bill_id}/cancel:
+    post:
+      tags:
+      - accounts-payable
+      summary: Cancel Bill
+      operationId: cancel_bill_api_v1_payables_bills__bill_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bill_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bill Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierBillResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payables/bills/{bill_id}/payments:
+    post:
+      tags:
+      - accounts-payable
+      summary: Add Payment
+      operationId: add_payment_api_v1_payables_bills__bill_id__payments_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bill_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bill Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierPaymentCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierBillResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payables/bills/{bill_id}/payments/{payment_id}/void:
+    post:
+      tags:
+      - accounts-payable
+      summary: Void Payment
+      operationId: void_payment_api_v1_payables_bills__bill_id__payments__payment_id__void_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bill_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bill Id
+      - name: payment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Payment Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierPaymentVoidRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierBillResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payables/bills/export/{kind}:
+    get:
+      tags:
+      - accounts-payable
+      summary: Export Bills
+      operationId: export_bills_api_v1_payables_bills_export__kind__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Kind
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      - name: supplier_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Supplier Id
+      - name: bill_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bill Status
+      - name: payment_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment Status
+      - name: overdue
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Overdue
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: document_seq
+          title: Sort
+      - name: direction
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(asc|desc)$
+          default: desc
+          title: Direction
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payables/bills/{bill_id}/neighbors:
+    get:
+      tags:
+      - accounts-payable
+      summary: Neighbors
+      operationId: neighbors_api_v1_payables_bills__bill_id__neighbors_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: bill_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Bill Id
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      - name: supplier_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Supplier Id
+      - name: bill_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bill Status
+      - name: payment_status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment Status
+      - name: overdue
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Overdue
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: document_seq
+          title: Sort
+      - name: direction
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(asc|desc)$
+          default: desc
+          title: Direction
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierBillNeighborsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payables/suppliers/{supplier_id}/outstanding:
+    get:
+      tags:
+      - accounts-payable
+      summary: Supplier Outstanding
+      operationId: supplier_outstanding_api_v1_payables_suppliers__supplier_id__outstanding_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: supplier_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Supplier Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupplierOutstandingResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/reports/purchase-confirmation/pdf:
     post:
       tags:
@@ -8764,6 +9340,72 @@ components:
       - order
       - items
       title: OrderWithItemsCreateResponse
+    PayableCandidate:
+      properties:
+        purchase_result_id:
+          type: integer
+          title: Purchase Result Id
+        purchase_date:
+          type: string
+          format: date
+          title: Purchase Date
+        supplier_id:
+          type: integer
+          title: Supplier Id
+        supplier_name:
+          type: string
+          title: Supplier Name
+        order_no:
+          type: string
+          title: Order No
+        line_no:
+          type: integer
+          title: Line No
+        product_id:
+          type: integer
+          title: Product Id
+        sku:
+          type: string
+          title: Sku
+        product_name:
+          type: string
+          title: Product Name
+        quantity:
+          type: number
+          title: Quantity
+        uom:
+          type: string
+          title: Uom
+        unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Unit Cost
+        amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+          default: JPY
+      type: object
+      required:
+      - purchase_result_id
+      - purchase_date
+      - supplier_id
+      - supplier_name
+      - order_no
+      - line_no
+      - product_id
+      - sku
+      - product_name
+      - quantity
+      - uom
+      - unit_cost
+      - amount
+      title: PayableCandidate
     PaymentTermsType:
       type: string
       enum:
@@ -10337,6 +10979,282 @@ components:
       - cancel
       - split
       title: StockoutPolicy
+    SupplierBillCreateRequest:
+      properties:
+        purchase_result_ids:
+          items:
+            type: integer
+          type: array
+          minItems: 1
+          title: Purchase Result Ids
+        supplier_invoice_no:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Supplier Invoice No
+        bill_date:
+          type: string
+          format: date
+          title: Bill Date
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+          title: Currency
+          default: JPY
+      type: object
+      required:
+      - purchase_result_ids
+      - supplier_invoice_no
+      - bill_date
+      title: SupplierBillCreateRequest
+    SupplierBillItemResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        line_no:
+          type: integer
+          title: Line No
+        purchase_result_id:
+          type: integer
+          title: Purchase Result Id
+        product_id:
+          type: integer
+          title: Product Id
+        sku:
+          type: string
+          title: Sku
+        description:
+          type: string
+          title: Description
+        quantity:
+          type: number
+          title: Quantity
+        uom:
+          type: string
+          title: Uom
+        unit_cost:
+          type: number
+          title: Unit Cost
+        line_amount:
+          type: number
+          title: Line Amount
+      type: object
+      required:
+      - id
+      - line_no
+      - purchase_result_id
+      - product_id
+      - sku
+      - description
+      - quantity
+      - uom
+      - unit_cost
+      - line_amount
+      title: SupplierBillItemResponse
+    SupplierBillItemUpdate:
+      properties:
+        quantity:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity
+        unit_cost:
+          type: number
+          minimum: 0.0
+          title: Unit Cost
+      type: object
+      required:
+      - quantity
+      - unit_cost
+      title: SupplierBillItemUpdate
+    SupplierBillListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/SupplierBillResponse'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        page_size:
+          type: integer
+          title: Page Size
+      type: object
+      required:
+      - items
+      - total
+      - page
+      - page_size
+      title: SupplierBillListResponse
+    SupplierBillNeighborsResponse:
+      properties:
+        previous_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Previous Id
+        next_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Id
+      type: object
+      required:
+      - previous_id
+      - next_id
+      title: SupplierBillNeighborsResponse
+    SupplierBillResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        document_seq:
+          type: integer
+          title: Document Seq
+        bill_no:
+          type: string
+          title: Bill No
+        supplier_id:
+          type: integer
+          title: Supplier Id
+        supplier_name:
+          type: string
+          title: Supplier Name
+        supplier_invoice_no:
+          type: string
+          title: Supplier Invoice No
+        bill_date:
+          type: string
+          format: date
+          title: Bill Date
+        due_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Due Date
+        payment_terms_type:
+          anyOf:
+          - $ref: '#/components/schemas/PaymentTermsType'
+          - type: 'null'
+        payment_terms_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Payment Terms Days
+        currency:
+          type: string
+          title: Currency
+        status:
+          $ref: '#/components/schemas/SupplierBillStatus'
+        subtotal:
+          type: number
+          title: Subtotal
+        tax:
+          type: number
+          title: Tax
+        adjustment:
+          type: number
+          title: Adjustment
+        total_amount:
+          type: number
+          title: Total Amount
+        paid_amount:
+          type: number
+          title: Paid Amount
+        outstanding_amount:
+          type: number
+          title: Outstanding Amount
+        payment_status:
+          type: string
+          title: Payment Status
+        overdue:
+          type: boolean
+          title: Overdue
+        line_count:
+          type: integer
+          title: Line Count
+        items:
+          items:
+            $ref: '#/components/schemas/SupplierBillItemResponse'
+          type: array
+          title: Items
+        payments:
+          items:
+            $ref: '#/components/schemas/SupplierPaymentResponse'
+          type: array
+          title: Payments
+      type: object
+      required:
+      - id
+      - document_seq
+      - bill_no
+      - supplier_id
+      - supplier_name
+      - supplier_invoice_no
+      - bill_date
+      - due_date
+      - payment_terms_type
+      - payment_terms_days
+      - currency
+      - status
+      - subtotal
+      - tax
+      - adjustment
+      - total_amount
+      - paid_amount
+      - outstanding_amount
+      - payment_status
+      - overdue
+      - line_count
+      title: SupplierBillResponse
+    SupplierBillStatus:
+      type: string
+      enum:
+      - draft
+      - finalized
+      - cancelled
+      title: SupplierBillStatus
+    SupplierBillUpdateRequest:
+      properties:
+        supplier_invoice_no:
+          anyOf:
+          - type: string
+            maxLength: 128
+            minLength: 1
+          - type: 'null'
+          title: Supplier Invoice No
+        bill_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Bill Date
+        tax:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Tax
+        adjustment:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Adjustment
+        items:
+          anyOf:
+          - additionalProperties:
+              $ref: '#/components/schemas/SupplierBillItemUpdate'
+            type: object
+          - type: 'null'
+          title: Items
+      type: object
+      title: SupplierBillUpdateRequest
     SupplierCreateRequest:
       properties:
         payment_terms_type:
@@ -10440,6 +11358,108 @@ components:
       - skipped
       - failed
       title: SupplierImportResult
+    SupplierOutstandingResponse:
+      properties:
+        supplier_id:
+          type: integer
+          title: Supplier Id
+        outstanding_amount:
+          type: number
+          title: Outstanding Amount
+        currency:
+          type: string
+          title: Currency
+          default: JPY
+      type: object
+      required:
+      - supplier_id
+      - outstanding_amount
+      title: SupplierOutstandingResponse
+    SupplierPaymentCreateRequest:
+      properties:
+        payment_date:
+          type: string
+          format: date
+          title: Payment Date
+        amount:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Amount
+        reference:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+          title: Reference
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+      type: object
+      required:
+      - payment_date
+      - amount
+      title: SupplierPaymentCreateRequest
+    SupplierPaymentResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        payment_date:
+          type: string
+          format: date
+          title: Payment Date
+        amount:
+          type: number
+          title: Amount
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        voided_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Voided At
+        void_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Void Reason
+      type: object
+      required:
+      - id
+      - payment_date
+      - amount
+      - reference
+      - note
+      - created_at
+      - voided_at
+      - void_reason
+      title: SupplierPaymentResponse
+    SupplierPaymentVoidRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: SupplierPaymentVoidRequest
     SupplierProductCreateRequest:
       properties:
         product_id:

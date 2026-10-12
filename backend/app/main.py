@@ -14,6 +14,7 @@ from app.api.routes_customers import router as customers_router
 from app.api.routes_deliveries import router as deliveries_router
 from app.api.routes_invoices import router as invoices_router
 from app.api.routes_metrics import router as metrics_router
+from app.api.routes_payables import router as payables_router
 from app.api.routes_order_item_allocations import router as order_item_allocations_router
 from app.api.routes_orders import router as orders_router
 from app.api.routes_products import router as products_router
@@ -124,5 +125,6 @@ app.include_router(orders_router, dependencies=[Depends(get_auth_context)])
 app.include_router(allocations_router, dependencies=[Depends(get_auth_context)])
 app.include_router(purchase_results_router, dependencies=[Depends(get_auth_context)])
 app.include_router(invoices_router, dependencies=[Depends(get_auth_context)])
+app.include_router(payables_router, dependencies=[Depends(get_auth_context)])
 app.include_router(reports_router, dependencies=[Depends(get_auth_context)])
 app.include_router(batch_router, dependencies=[Depends(get_auth_context)])

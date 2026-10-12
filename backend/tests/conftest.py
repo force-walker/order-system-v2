@@ -66,6 +66,7 @@ LEGACY_BUSINESS_MODULES = {
     "test_order_items_api", "test_product_consistency_api", "test_products_api", "test_products_bulk_api", "test_reports_shipping_api",
     "test_supplier_product_mappings_api", "test_suppliers_api", "test_system_settings_api",
     "test_validation_boundaries_api",
+    "test_payables_api",
 }
 
 
