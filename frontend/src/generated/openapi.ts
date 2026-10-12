@@ -4477,16 +4477,16 @@ export interface components {
             /** Uom */
             uom: string;
             /** Unit Cost */
-            unit_cost: number;
+            unit_cost: number | null;
             /** Line Amount */
-            line_amount: number;
+            line_amount: number | null;
         };
         /** SupplierBillItemUpdate */
         SupplierBillItemUpdate: {
             /** Quantity */
             quantity: number;
             /** Unit Cost */
-            unit_cost: number;
+            unit_cost?: number | null;
         };
         /** SupplierBillListResponse */
         SupplierBillListResponse: {
@@ -4546,7 +4546,7 @@ export interface components {
             /** Outstanding Amount */
             outstanding_amount: number;
             /** Payment Status */
-            payment_status: string;
+            payment_status: string | null;
             /** Overdue */
             overdue: boolean;
             /** Line Count */
@@ -10339,11 +10339,11 @@ export interface operations {
                 date_from?: string | null;
                 date_to?: string | null;
                 supplier_id?: number | null;
-                bill_status?: string | null;
-                payment_status?: string | null;
+                bill_status?: components["schemas"]["SupplierBillStatus"] | null;
+                payment_status?: ("unpaid" | "partially_paid" | "paid") | null;
                 overdue?: boolean | null;
-                sort?: string;
-                direction?: string;
+                sort?: "document_seq" | "bill_date" | "due_date" | "bill_no" | "supplier_invoice_no" | "supplier" | "status" | "total";
+                direction?: "asc" | "desc";
                 page?: number;
                 page_size?: number;
             };
@@ -10612,11 +10612,11 @@ export interface operations {
                 date_from?: string | null;
                 date_to?: string | null;
                 supplier_id?: number | null;
-                bill_status?: string | null;
-                payment_status?: string | null;
+                bill_status?: components["schemas"]["SupplierBillStatus"] | null;
+                payment_status?: ("unpaid" | "partially_paid" | "paid") | null;
                 overdue?: boolean | null;
-                sort?: string;
-                direction?: string;
+                sort?: "document_seq" | "bill_date" | "due_date" | "bill_no" | "supplier_invoice_no" | "supplier" | "status" | "total";
+                direction?: "asc" | "desc";
             };
             header?: never;
             path: {
@@ -10653,11 +10653,11 @@ export interface operations {
                 date_from?: string | null;
                 date_to?: string | null;
                 supplier_id?: number | null;
-                bill_status?: string | null;
-                payment_status?: string | null;
+                bill_status?: components["schemas"]["SupplierBillStatus"] | null;
+                payment_status?: ("unpaid" | "partially_paid" | "paid") | null;
                 overdue?: boolean | null;
-                sort?: string;
-                direction?: string;
+                sort?: "document_seq" | "bill_date" | "due_date" | "bill_no" | "supplier_invoice_no" | "supplier" | "status" | "total";
+                direction?: "asc" | "desc";
             };
             header?: never;
             path: {

@@ -30,10 +30,10 @@ def upgrade() -> None:
         sa.Column("id",sa.String(36),primary_key=True),sa.Column("supplier_bill_id",sa.String(36),sa.ForeignKey("supplier_bills.id",ondelete="CASCADE"),nullable=False),
         sa.Column("line_no",sa.Integer,nullable=False),sa.Column("purchase_result_id",sa.Integer,sa.ForeignKey("purchase_results.id"),nullable=False),
         sa.Column("product_id",sa.Integer,sa.ForeignKey("products.id"),nullable=False),sa.Column("sku",sa.String(64),nullable=False),sa.Column("description",sa.String(255),nullable=False),
-        sa.Column("quantity",sa.Numeric(12,3),nullable=False),sa.Column("uom",sa.String(32),nullable=False),sa.Column("unit_cost",sa.Numeric(14,2),nullable=False),sa.Column("line_amount",sa.Numeric(14,2),nullable=False),
+        sa.Column("quantity",sa.Numeric(12,3),nullable=False),sa.Column("uom",sa.String(32),nullable=False),sa.Column("unit_cost",sa.Numeric(14,2),nullable=True),sa.Column("line_amount",sa.Numeric(14,2),nullable=True),
         sa.Column("created_at",sa.DateTime,nullable=False),sa.Column("updated_at",sa.DateTime,nullable=False),
         sa.CheckConstraint("line_no > 0",name="ck_supplier_bill_items_line_no_positive"),sa.CheckConstraint("quantity > 0",name="ck_supplier_bill_items_quantity_positive"),
-        sa.CheckConstraint("unit_cost >= 0",name="ck_supplier_bill_items_unit_cost_non_negative"),sa.CheckConstraint("line_amount >= 0",name="ck_supplier_bill_items_line_amount_non_negative"),
+        sa.CheckConstraint("unit_cost IS NULL OR unit_cost >= 0",name="ck_supplier_bill_items_unit_cost_non_negative"),sa.CheckConstraint("line_amount IS NULL OR line_amount >= 0",name="ck_supplier_bill_items_line_amount_non_negative"),
         sa.UniqueConstraint("supplier_bill_id","line_no",name="uq_supplier_bill_items_bill_line_no"))
     op.create_index("ix_supplier_bill_items_supplier_bill_id","supplier_bill_items",["supplier_bill_id"])
     op.create_index("ix_supplier_bill_items_purchase_result_id","supplier_bill_items",["purchase_result_id"])

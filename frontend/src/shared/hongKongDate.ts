@@ -3,6 +3,11 @@ const parts = (now: Date) => Object.fromEntries(new Intl.DateTimeFormat('en-US',
 }).formatToParts(now).filter(p => p.type !== 'literal').map(p => [p.type, Number(p.value)]));
 const isoUtc = (d: Date) => d.toISOString().slice(0, 10);
 
+export const hongKongToday = (now = new Date()) => {
+  const p = parts(now);
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+};
+
 export const hongKongDatePreset = (kind: 'today'|'week'|'month'|'year', now = new Date()) => {
   const p = parts(now); const current = new Date(Date.UTC(p.year, p.month - 1, p.day));
   const start = new Date(current); const end = new Date(current);

@@ -336,8 +336,8 @@ class SupplierBillItem(Base):
         UniqueConstraint("supplier_bill_id", "line_no", name="uq_supplier_bill_items_bill_line_no"),
         CheckConstraint("line_no > 0", name="ck_supplier_bill_items_line_no_positive"),
         CheckConstraint("quantity > 0", name="ck_supplier_bill_items_quantity_positive"),
-        CheckConstraint("unit_cost >= 0", name="ck_supplier_bill_items_unit_cost_non_negative"),
-        CheckConstraint("line_amount >= 0", name="ck_supplier_bill_items_line_amount_non_negative"),
+        CheckConstraint("unit_cost IS NULL OR unit_cost >= 0", name="ck_supplier_bill_items_unit_cost_non_negative"),
+        CheckConstraint("line_amount IS NULL OR line_amount >= 0", name="ck_supplier_bill_items_line_amount_non_negative"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -349,8 +349,8 @@ class SupplierBillItem(Base):
     description: Mapped[str] = mapped_column(String(255))
     quantity: Mapped[float] = mapped_column(Numeric(12, 3))
     uom: Mapped[str] = mapped_column(String(32))
-    unit_cost: Mapped[float] = mapped_column(Numeric(14, 2))
-    line_amount: Mapped[float] = mapped_column(Numeric(14, 2))
+    unit_cost: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    line_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 

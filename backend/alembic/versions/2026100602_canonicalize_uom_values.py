@@ -67,6 +67,9 @@ def upgrade() -> None:
         op.execute(f"UPDATE {table} SET {column} = {_canonical_expression(column)}{where}")
 
     if bind.dialect.name == "postgresql":
+        # UOM updates touch detail tables guarded by deferred document
+        # invariants. Drain those trigger events before ALTER TABLE below.
+        op.execute("SET CONSTRAINTS ALL IMMEDIATE")
         for table, column, nullable in UOM_COLUMNS:
             allowed = f"{column} IS NULL OR " if nullable else ""
             op.create_check_constraint(

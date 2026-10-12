@@ -10,6 +10,12 @@ def map_integrity_error(exc: IntegrityError) -> tuple[int, str, str]:
     pgcode = getattr(getattr(exc, "orig", None), "pgcode", None)
     raw = str(getattr(exc, "orig", exc)).lower()
 
+    if "purchase result already claimed" in raw:
+        return 409, "PURCHASE_RESULT_ALREADY_CLAIMED", "purchase result is already claimed"
+
+    if "supplier invoice number already exists" in raw:
+        return 409, "SUPPLIER_INVOICE_NO_EXISTS", "supplier invoice number already exists for this supplier"
+
     if pgcode == "23505" or "unique constraint" in raw or "unique failed" in raw:
         return 409, "RESOURCE_ALREADY_EXISTS", "resource already exists"
 

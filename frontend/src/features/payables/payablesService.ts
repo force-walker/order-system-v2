@@ -2,9 +2,9 @@ import { apiRequestWithAuth as fetchWithAuth } from 'shared/authenticatedApiClie
 import { parseApiErrorPayload } from 'shared/error';
 export type BillStatus='draft'|'finalized'|'cancelled';
 export type Candidate={purchase_result_id:number;purchase_date:string;supplier_id:number;supplier_name:string;order_no:string;line_no:number;product_id:number;sku:string;product_name:string;quantity:number;uom:string;unit_cost:number|null;amount:number|null;currency:string};
-export type BillItem={id:string;line_no:number;purchase_result_id:number;product_id:number;sku:string;description:string;quantity:number;uom:string;unit_cost:number;line_amount:number};
+export type BillItem={id:string;line_no:number;purchase_result_id:number;product_id:number;sku:string;description:string;quantity:number;uom:string;unit_cost:number|null;line_amount:number|null};
 export type Payment={id:string;payment_date:string;amount:number;reference:string|null;note:string|null;voided_at:string|null;void_reason:string|null};
-export type Bill={id:string;bill_no:string;supplier_id:number;supplier_name:string;supplier_invoice_no:string;bill_date:string;due_date:string|null;currency:string;status:BillStatus;subtotal:number;tax:number;adjustment:number;total_amount:number;paid_amount:number;outstanding_amount:number;payment_status:string;overdue:boolean;line_count:number;items:BillItem[];payments:Payment[]};
+export type Bill={id:string;bill_no:string;supplier_id:number;supplier_name:string;supplier_invoice_no:string;bill_date:string;due_date:string|null;payment_terms_type:string|null;payment_terms_days:number|null;currency:string;status:BillStatus;subtotal:number;tax:number;adjustment:number;total_amount:number;paid_amount:number;outstanding_amount:number;payment_status:string|null;overdue:boolean;line_count:number;items:BillItem[];payments:Payment[]};
 const json=async<T>(url:string,init?:{method?:string;body?:unknown}):Promise<T>=>{const r=await fetchWithAuth(url,init);if(!r.ok)throw await parseApiErrorPayload(r);return r.json() as Promise<T>};
 export const listCandidates=()=>json<Candidate[]>('/api/v1/payables/candidates');
 export const listBills=(query:string)=>json<{items:Bill[];total:number;page:number;page_size:number}>(`/api/v1/payables/bills?${query}`);

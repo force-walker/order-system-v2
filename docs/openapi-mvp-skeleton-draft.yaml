@@ -5379,7 +5379,7 @@ paths:
         required: false
         schema:
           anyOf:
-          - type: string
+          - $ref: '#/components/schemas/SupplierBillStatus'
           - type: 'null'
           title: Bill Status
       - name: payment_status
@@ -5387,7 +5387,11 @@ paths:
         required: false
         schema:
           anyOf:
-          - type: string
+          - enum:
+            - unpaid
+            - partially_paid
+            - paid
+            type: string
           - type: 'null'
           title: Payment Status
       - name: overdue
@@ -5402,6 +5406,15 @@ paths:
         in: query
         required: false
         schema:
+          enum:
+          - document_seq
+          - bill_date
+          - due_date
+          - bill_no
+          - supplier_invoice_no
+          - supplier
+          - status
+          - total
           type: string
           default: document_seq
           title: Sort
@@ -5409,8 +5422,10 @@ paths:
         in: query
         required: false
         schema:
+          enum:
+          - asc
+          - desc
           type: string
-          pattern: ^(asc|desc)$
           default: desc
           title: Direction
       - name: page
@@ -5688,7 +5703,7 @@ paths:
         required: false
         schema:
           anyOf:
-          - type: string
+          - $ref: '#/components/schemas/SupplierBillStatus'
           - type: 'null'
           title: Bill Status
       - name: payment_status
@@ -5696,7 +5711,11 @@ paths:
         required: false
         schema:
           anyOf:
-          - type: string
+          - enum:
+            - unpaid
+            - partially_paid
+            - paid
+            type: string
           - type: 'null'
           title: Payment Status
       - name: overdue
@@ -5711,6 +5730,15 @@ paths:
         in: query
         required: false
         schema:
+          enum:
+          - document_seq
+          - bill_date
+          - due_date
+          - bill_no
+          - supplier_invoice_no
+          - supplier
+          - status
+          - total
           type: string
           default: document_seq
           title: Sort
@@ -5718,8 +5746,10 @@ paths:
         in: query
         required: false
         schema:
+          enum:
+          - asc
+          - desc
           type: string
-          pattern: ^(asc|desc)$
           default: desc
           title: Direction
       responses:
@@ -5788,7 +5818,7 @@ paths:
         required: false
         schema:
           anyOf:
-          - type: string
+          - $ref: '#/components/schemas/SupplierBillStatus'
           - type: 'null'
           title: Bill Status
       - name: payment_status
@@ -5796,7 +5826,11 @@ paths:
         required: false
         schema:
           anyOf:
-          - type: string
+          - enum:
+            - unpaid
+            - partially_paid
+            - paid
+            type: string
           - type: 'null'
           title: Payment Status
       - name: overdue
@@ -5811,6 +5845,15 @@ paths:
         in: query
         required: false
         schema:
+          enum:
+          - document_seq
+          - bill_date
+          - due_date
+          - bill_no
+          - supplier_invoice_no
+          - supplier
+          - status
+          - total
           type: string
           default: document_seq
           title: Sort
@@ -5818,8 +5861,10 @@ paths:
         in: query
         required: false
         schema:
+          enum:
+          - asc
+          - desc
           type: string
-          pattern: ^(asc|desc)$
           default: desc
           title: Direction
       responses:
@@ -11035,10 +11080,14 @@ components:
           type: string
           title: Uom
         unit_cost:
-          type: number
+          anyOf:
+          - type: number
+          - type: 'null'
           title: Unit Cost
         line_amount:
-          type: number
+          anyOf:
+          - type: number
+          - type: 'null'
           title: Line Amount
       type: object
       required:
@@ -11060,13 +11109,14 @@ components:
           exclusiveMinimum: 0.0
           title: Quantity
         unit_cost:
-          type: number
-          minimum: 0.0
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
           title: Unit Cost
       type: object
       required:
       - quantity
-      - unit_cost
       title: SupplierBillItemUpdate
     SupplierBillListResponse:
       properties:
@@ -11171,7 +11221,9 @@ components:
           type: number
           title: Outstanding Amount
         payment_status:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Payment Status
         overdue:
           type: boolean
