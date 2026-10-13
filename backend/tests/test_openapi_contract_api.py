@@ -217,13 +217,18 @@ def test_openapi_phase2_query_filters_are_exposed():
     assert {"include_inactive"}.issubset(customer_list_params)
 
     order_list_params = {p["name"] for p in spec["paths"]["/api/v1/orders"]["get"].get("parameters", [])}
-    assert {"stale_delivery_only"}.issubset(order_list_params)
+    assert {"stale_delivery_only", "date_from", "date_to"}.issubset(order_list_params)
 
     mapping_list_params = {p["name"] for p in spec["paths"]["/api/v1/supplier-product-mappings"]["get"]["parameters"]}
     assert {"supplier_id", "product_id"}.issubset(mapping_list_params)
 
     worklist_params = {p["name"] for p in spec["paths"]["/api/v1/order-item-allocations"]["get"]["parameters"]}
-    assert {"unallocated_only", "delivery_date", "order_status", "supplier_id", "product_name", "customer_name", "limit", "offset"}.issubset(worklist_params)
+    assert {"unallocated_only", "delivery_date", "date_from", "date_to", "order_status", "supplier_id", "product_name", "customer_name", "limit", "offset"}.issubset(worklist_params)
+
+    draft_list_params = {p["name"] for p in spec["paths"]["/api/v1/invoices/draft-list"]["get"]["parameters"]}
+    draft_candidate_params = {p["name"] for p in spec["paths"]["/api/v1/invoices/draft-candidates"]["get"]["parameters"]}
+    assert {"date_from", "date_to"}.issubset(draft_list_params)
+    assert {"delivery_date", "date_from", "date_to"}.issubset(draft_candidate_params)
 
     shipping_report_params = {p["name"] for p in spec["paths"]["/api/v1/reports/shipping"]["get"]["parameters"]}
     assert {"delivery_date", "mode"}.issubset(shipping_report_params)

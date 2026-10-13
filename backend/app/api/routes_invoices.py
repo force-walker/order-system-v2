@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.order_lookup import get_order_or_404 as _get_order_or_404
 from app.core.audit import AuditAction, write_audit_log
+from app.core.date_range import validate_date_range
 from app.core.product_consistency import normalize_product_uom
 from app.core.deliveries import ensure_delivery_document
 from app.core.invoice_pdf import InvoicePdfDocument, InvoicePdfLine, build_invoice_pdf
@@ -697,7 +698,12 @@ def list_invoices(
 
 
 @router.get("/draft-list", response_model=list[InvoiceDraftListRow])
-def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftListRow]:
+def list_invoice_draft_rows(
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> list[InvoiceDraftListRow]:
+    validate_date_range(date_from, date_to)
     rows = (
         db.query(Invoice, InvoiceItem, Customer, Product, Order)
         .join(InvoiceItem, InvoiceItem.invoice_id == Invoice.id)
@@ -706,9 +712,12 @@ def list_invoice_draft_rows(db: Session = Depends(get_db)) -> list[InvoiceDraftL
         .join(Product, Product.id == OrderItem.product_id)
         .join(Customer, Customer.id == Invoice.customer_id)
         .filter(Invoice.status == InvoiceStatus.draft)
-        .order_by(Invoice.document_seq.desc(), InvoiceItem.line_no.asc(), InvoiceItem.id.asc())
-        .all()
     )
+    if date_from is not None:
+        rows = rows.filter(Invoice.invoice_date >= date_from)
+    if date_to is not None:
+        rows = rows.filter(Invoice.invoice_date <= date_to)
+    rows = rows.order_by(Invoice.document_seq.desc(), InvoiceItem.line_no.asc(), InvoiceItem.id.asc()).all()
 
     result: list[InvoiceDraftListRow] = []
     for inv, item, customer, product, order in rows:
@@ -999,9 +1008,12 @@ def _unclaimed_complete_result_ids(db: Session, item: OrderItem) -> list[int] | 
 @router.get("/draft-candidates", response_model=list[InvoiceDraftCandidate])
 def list_invoice_draft_candidates(
     delivery_date: date | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
     customer_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
 ) -> list[InvoiceDraftCandidate]:
+    validate_date_range(date_from, date_to)
     settings = get_system_settings_or_404(db)
     query = (
         db.query(Order, Customer)
@@ -1010,6 +1022,10 @@ def list_invoice_draft_candidates(
     )
     if delivery_date is not None:
         query = query.filter(Order.delivery_date == delivery_date)
+    if date_from is not None:
+        query = query.filter(Order.delivery_date >= date_from)
+    if date_to is not None:
+        query = query.filter(Order.delivery_date <= date_to)
     if customer_id is not None:
         query = query.filter(Order.customer_id == customer_id)
 

@@ -1,6 +1,6 @@
 import type { EntityId } from 'shared/entityId';
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   bulkSaveOrderItemAllocations,
@@ -13,6 +13,8 @@ import {
 } from 'features/orders/services/orderItemAllocationsService';
 import { ServiceError, toActionableMessage } from 'shared/error';
 import type { OrderStatus } from 'features/orders/types/order';
+import { WorkflowDateRangeFilter } from 'components/common/WorkflowDateRangeFilter';
+import { presetRange, useWorkflowDateRange } from 'shared/workflowDateRange';
 import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
 import {
   createSupplierProductMappingGlobal,
@@ -51,6 +53,8 @@ const hasSameQuantityAxis = (row: OrderItemAllocationWorkItem) =>
   row.orderUom.trim().toLocaleLowerCase() === row.purchaseUom.trim().toLocaleLowerCase();
 
 export const OrderItemBulkAllocationPage = () => {
+  const location = useLocation();
+  const returnTo = `${location.pathname}${location.search}`;
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -62,7 +66,7 @@ export const OrderItemBulkAllocationPage = () => {
   const [lastSelectedId, setLastSelectedId] = useState<EntityId | null>(null);
 
   const [unallocatedOnly, setUnallocatedOnly] = useState(false);
-  const [deliveryDate, setDeliveryDate] = useState(getDefaultDeliveryDate);
+  const { range: deliveryRange, update: setDeliveryRange, isValid: isDeliveryRangeValid } = useWorkflowDateRange();
   const [orderStatuses, setOrderStatuses] = useState<OrderStatus[]>(DEFAULT_ORDER_STATUSES);
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [productFilter, setProductFilter] = useState('');
@@ -80,17 +84,27 @@ export const OrderItemBulkAllocationPage = () => {
     candidates: SupplierMappingCandidate[];
   } | null>(null);
   const [saving, setSaving] = useState(false);
+  const loadGeneration = useRef(0);
+  const loadCriteriaRef = useRef({ isValid: isDeliveryRangeValid, unallocatedOnly, range: deliveryRange, orderStatuses, supplierId });
+  loadCriteriaRef.current = { isValid: isDeliveryRangeValid, unallocatedOnly, range: deliveryRange, orderStatuses, supplierId };
 
   const load = async () => {
+    const generation = ++loadGeneration.current;
+    const criteria = loadCriteriaRef.current;
+    if (!criteria.isValid) {
+      if (generation === loadGeneration.current) setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
       const [rows, supplierOptions] = await Promise.all([
         listOrderItemAllocationWorkItems({
-          unallocatedOnly,
-          deliveryDate: deliveryDate || undefined,
-          orderStatuses,
-          supplierId: supplierId || undefined,
+          unallocatedOnly: criteria.unallocatedOnly,
+          dateFrom: criteria.range.from,
+          dateTo: criteria.range.to,
+          orderStatuses: criteria.orderStatuses,
+          supplierId: criteria.supplierId || undefined,
         }),
         listSupplierFilterOptions(),
       ]);
@@ -100,6 +114,7 @@ export const OrderItemBulkAllocationPage = () => {
           (await listProductSupplierMappings(productId)).length,
         ] as const),
       );
+      if (generation !== loadGeneration.current) return;
       setItems(rows);
       setSuppliers(supplierOptions);
       setMappingCountByProduct(Object.fromEntries(mappingEntries));
@@ -120,15 +135,17 @@ export const OrderItemBulkAllocationPage = () => {
         ),
       );
     } catch (e) {
+      if (generation !== loadGeneration.current) return;
       setError(toActionableMessage(e, '受注アイテム一覧の取得に失敗しました。'));
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     void load();
-  }, [unallocatedOnly, deliveryDate, orderStatuses, supplierId]);
+    return () => { loadGeneration.current += 1; };
+  }, [unallocatedOnly, deliveryRange.from, deliveryRange.to, isDeliveryRangeValid, orderStatuses, supplierId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -282,7 +299,7 @@ export const OrderItemBulkAllocationPage = () => {
 
   const resetFilters = () => {
     setUnallocatedOnly(false);
-    setDeliveryDate(getDefaultDeliveryDate());
+    setDeliveryRange(presetRange('week'));
     setOrderStatuses(DEFAULT_ORDER_STATUSES);
     setSupplierId('');
     setProductFilter('');
@@ -500,7 +517,7 @@ export const OrderItemBulkAllocationPage = () => {
   };
 
   if (error) return <ErrorState title="受注アイテム一覧の取得に失敗しました" description={error} actionLabel="再試行" onAction={load} />;
-  if (loading) return <LoadingState title="受注アイテム一括割当を読み込み中" description="しばらくお待ちください。" />;
+  if (loading && items.length === 0) return <LoadingState title="受注アイテム一括割当を読み込み中" description="しばらくお待ちください。" />;
 
   return (
     <section>
@@ -559,18 +576,18 @@ export const OrderItemBulkAllocationPage = () => {
             <p className="subtle">ラベルPDF生成対象: {selectedOrderItemIds.length}件</p>
           </div>
           <div className="list-controls">
-            <button type="button" className="secondary" onClick={() => void applyAutomaticAllocation()}>仕入先・数量を自動割当</button>
-            <button type="button" onClick={() => void saveBulk()} disabled={saving}>選択行を一括保存</button>
+            <button type="button" className="secondary" onClick={() => void applyAutomaticAllocation()} disabled={!isDeliveryRangeValid}>仕入先・数量を自動割当</button>
+            <button type="button" onClick={() => void saveBulk()} disabled={!isDeliveryRangeValid || saving}>選択行を一括保存</button>
             <button
               type="button"
               className="secondary"
               onClick={() => void generateLabelPdf()}
-              disabled={selectedOrderItemIds.length === 0 || labelGenerating}
+              disabled={!isDeliveryRangeValid || selectedOrderItemIds.length === 0 || labelGenerating}
               title={selectedOrderItemIds.length === 0 ? '明細を選択してください' : undefined}
             >
               {labelGenerating ? '茶屋札PDF作成中...' : '茶屋札PDF作成'}
             </button>
-            <button type="button" className="secondary" onClick={moveToPurchaseResult}>保存済み行を納品確認へ進める</button>
+            <button type="button" className="secondary" onClick={moveToPurchaseResult} disabled={!isDeliveryRangeValid}>保存済み行を納品確認へ進める</button>
           </div>
         </div>
 
@@ -584,10 +601,7 @@ export const OrderItemBulkAllocationPage = () => {
               </label>
             ))}
           </fieldset>
-          <label className="filter-label">
-            納品日
-            <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
-          </label>
+          <WorkflowDateRangeFilter range={deliveryRange} onChange={setDeliveryRange} label="納品日" />
           <label className="filter-label">
             仕入先
             <select value={supplierId} onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : '')}>
@@ -634,12 +648,14 @@ export const OrderItemBulkAllocationPage = () => {
               {suppliers.map((s) => <option key={s.id} value={s.label} />)}
             </datalist>
           </label>
-          <button type="button" className="secondary" onClick={applyBulkSupplier}>一括割当</button>
+          <button type="button" className="secondary" onClick={applyBulkSupplier} disabled={!isDeliveryRangeValid}>一括割当</button>
         </div>
 
         <p className="subtle" style={{ marginBottom: 12 }}>※ ヘッダークリックで昇順/降順を切替。選択操作は表示中の行のみ対象。</p>
 
-        <div className="table-wrap">
+        {!isDeliveryRangeValid ? (
+          <div className="state-box" role="status">有効な日付範囲を入力してください</div>
+        ) : <div className="table-wrap">
           <table className="bulk-allocation-table">
               <thead>
                 <tr>
@@ -720,7 +736,7 @@ export const OrderItemBulkAllocationPage = () => {
                       </td>
                       <td className="cell-order-no" title={row.orderNo}>
                         {row.orderId ? (
-                          <Link to={`/orders/${row.orderId}/edit`} className="order-link text-ellipsis-inline" title={row.orderNo}>
+                          <Link to={`/orders/${row.orderId}/edit`} state={{ returnTo }} className="order-link text-ellipsis-inline" title={row.orderNo}>
                             {row.orderNo}
                           </Link>
                         ) : (
@@ -788,7 +804,7 @@ export const OrderItemBulkAllocationPage = () => {
                 })}
               </tbody>
             </table>
-          </div>
+          </div>}
       </div>
     </section>
   );

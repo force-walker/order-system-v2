@@ -1,13 +1,14 @@
 import type { EntityId } from 'shared/entityId';
 import { newestOrderFirst } from 'shared/entityId';
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import { bulkCancelOrders, confirmOrder, clearDirtyOrderStatus, hasDirtyOrderStatus, listOrders } from 'features/orders/services/ordersService';
 import type { OrderStatus, OrderSummary } from 'features/orders/types/order';
 import { toActionableMessage } from 'shared/error';
 import { useFocusNavigation } from 'shared/useFocusNavigation';
-import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
+import { WorkflowDateRangeFilter } from 'components/common/WorkflowDateRangeFilter';
+import { useWorkflowDateRange } from 'shared/workflowDateRange';
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   new: '新規',
@@ -30,10 +31,12 @@ const DEFAULT_STATUS_FILTERS: OrderStatus[] = ['new', 'confirmed'];
 const STATUS_OPTIONS = (Object.keys(STATUS_LABEL) as OrderStatus[]).map((value) => ({ value, label: STATUS_LABEL[value] }));
 
 export const OrderListPage = () => {
+  const location = useLocation();
+  const returnTo = `${location.pathname}${location.search}`;
   const [orders, setOrders] = useState<OrderSummary[] | null>(null);
   const [error, setError] = useState<string>('');
   const [statusFilters, setStatusFilters] = useState<OrderStatus[]>(DEFAULT_STATUS_FILTERS);
-  const [deliveryDateFilter, setDeliveryDateFilter] = useState(getDefaultDeliveryDate);
+  const { range: deliveryRange, update: setDeliveryRange, isValid: isDeliveryRangeValid } = useWorkflowDateRange();
   const [keyword, setKeyword] = useState('');
   const [sortMode, setSortMode] = useState<'newest' | 'deliveryAsc' | 'deliveryDesc'>('newest');
   const [toast, setToast] = useState<ToastPayload | null>(null);
@@ -41,16 +44,27 @@ export const OrderListPage = () => {
   const [selectedByOrderId, setSelectedByOrderId] = useState<RowSelect>({});
   const [lastSelectedOrderId, setLastSelectedOrderId] = useState<EntityId | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const loadGeneration = useRef(0);
+  const loadCriteriaRef = useRef({ isValid: isDeliveryRangeValid, staleOnly, range: deliveryRange });
+  loadCriteriaRef.current = { isValid: isDeliveryRangeValid, staleOnly, range: deliveryRange };
   const { focusNavRef, onFocusNavKeyDownCapture } = useFocusNavigation();
 
   const load = async () => {
+    const generation = ++loadGeneration.current;
+    const criteria = loadCriteriaRef.current;
+    if (!criteria.isValid) {
+      setOrders((current) => current ?? []);
+      return;
+    }
     try {
-      const data = await listOrders(staleOnly);
+      const data = await listOrders(criteria.staleOnly, { dateFrom: criteria.range.from, dateTo: criteria.range.to });
+      if (generation !== loadGeneration.current) return;
       const sorted = [...data].sort(newestOrderFirst);
       setOrders(sorted);
       setSelectedByOrderId((prev) => Object.fromEntries(sorted.map((o) => [o.id, prev[o.id] ?? false])));
       clearDirtyOrderStatus();
     } catch (e) {
+      if (generation !== loadGeneration.current) return;
       setError(toActionableMessage(e, '一覧取得に失敗しました'));
     }
   };
@@ -68,7 +82,8 @@ export const OrderListPage = () => {
         sessionStorage.removeItem('osv2_toast');
       }
     }
-  }, [staleOnly]);
+    return () => { loadGeneration.current += 1; };
+  }, [staleOnly, deliveryRange.from, deliveryRange.to, isDeliveryRangeValid]);
 
   useEffect(() => {
     if (!toast) return;
@@ -88,7 +103,7 @@ export const OrderListPage = () => {
       window.removeEventListener('focus', reloadIfDirty);
       window.removeEventListener('pageshow', reloadIfDirty);
     };
-  }, [staleOnly]);
+  }, [staleOnly, deliveryRange.from, deliveryRange.to, isDeliveryRangeValid]);
 
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
@@ -96,14 +111,10 @@ export const OrderListPage = () => {
     const normalizedKeyword = keyword.trim().toLowerCase();
 
     const byStatus = orders.filter((order) => statusFilters.includes(order.status));
-    const byDeliveryDate = deliveryDateFilter
-      ? byStatus.filter((order) => order.deliveryDate === deliveryDateFilter)
-      : byStatus;
-
     const byKeyword =
       normalizedKeyword.length === 0
-        ? byDeliveryDate
-        : byDeliveryDate.filter((order) => {
+        ? byStatus
+        : byStatus.filter((order) => {
             const target = `${order.orderNo} ${order.customerName}`.toLowerCase();
             return target.includes(normalizedKeyword);
           });
@@ -117,7 +128,7 @@ export const OrderListPage = () => {
       sorted.sort(newestOrderFirst);
     }
     return sorted;
-  }, [orders, statusFilters, deliveryDateFilter, keyword, sortMode]);
+  }, [orders, statusFilters, keyword, sortMode]);
 
   const toggleStatusFilter = (status: OrderStatus) => {
     setStatusFilters((current) => current.includes(status) ? current.filter((value) => value !== status) : [...current, status]);
@@ -227,10 +238,10 @@ export const OrderListPage = () => {
           <p className="subtle">新しい注文順で表示しています。</p>
         </div>
         <div className="list-controls">
-          <button type="button" onClick={() => void executeConfirm()} disabled={submitting || confirmTargets.length === 0}>
+          <button type="button" onClick={() => void executeConfirm()} disabled={!isDeliveryRangeValid || submitting || confirmTargets.length === 0}>
             選択した新規注文を確定 ({confirmTargets.length})
           </button>
-          <button type="button" className="danger" onClick={() => void executeBulkCancel()} disabled={submitting}>
+          <button type="button" className="danger" onClick={() => void executeBulkCancel()} disabled={!isDeliveryRangeValid || submitting}>
             選択注文を一括Cancel
           </button>
         </div>
@@ -256,10 +267,7 @@ export const OrderListPage = () => {
             ))}
           </fieldset>
 
-          <label className="filter-label">
-            納品日
-            <input type="date" value={deliveryDateFilter} onChange={(e) => setDeliveryDateFilter(e.target.value)} />
-          </label>
+          <WorkflowDateRangeFilter range={deliveryRange} onChange={setDeliveryRange} label="納品日" />
 
           <label className="filter-label">
             並び順
@@ -276,7 +284,9 @@ export const OrderListPage = () => {
           </label>
         </div>
 
-      <div className="table-wrap">
+      {!isDeliveryRangeValid ? (
+        <div className="state-box" role="status">有効な日付範囲を入力してください</div>
+      ) : <div className="table-wrap">
         <table>
           <thead>
             <tr>
@@ -311,7 +321,7 @@ export const OrderListPage = () => {
                   </td>
                   <td>{order.id}</td>
                   <td>
-                    <Link to={`/orders/${order.id}/edit`} className="order-link">{order.orderNo}</Link>
+                    <Link to={`/orders/${order.id}/edit`} state={{ returnTo }} className="order-link">{order.orderNo}</Link>
                   </td>
                   <td>{order.customerName}</td>
                   <td>{order.deliveryDate}</td>
@@ -321,7 +331,7 @@ export const OrderListPage = () => {
                   <td>{order.items.length}</td>
                   <td>
                     {firstItem ? (
-                      <Link to={`/orders/${order.id}/items/${firstItem.id}`}>先頭アイテム</Link>
+                      <Link to={`/orders/${order.id}/items/${firstItem.id}`} state={{ returnTo }}>先頭アイテム</Link>
                     ) : (
                       <span>-</span>
                     )}
@@ -331,7 +341,7 @@ export const OrderListPage = () => {
             })}
           </tbody>
         </table>
-      </div>
+      </div>}
       </div>
     </section>
   );

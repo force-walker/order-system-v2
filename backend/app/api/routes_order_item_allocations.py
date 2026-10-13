@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.allocation_completion import evaluate_order_allocation_completion, synchronize_confirmed_order_allocation_status
 from app.core.auth import AuthContext, get_auth_context
 from app.core.audit import AuditAction, write_audit_log
+from app.core.date_range import validate_date_range
 from app.db.session import get_db
 from app.models.entities import Customer, Order, OrderItem, OrderStatus, Product, PurchaseResult, Supplier, SupplierAllocation, SupplierProduct
 from app.schemas.common import ApiErrorResponse
@@ -63,6 +64,8 @@ def _item_has_purchase_result(db: Session, order_item_id: str) -> bool:
 def list_order_item_allocation_work_items(
     unallocated_only: bool = Query(default=False),
     delivery_date: date | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
     order_status: list[OrderStatus] | None = Query(default=None),
     supplier_id: int | None = Query(default=None, gt=0),
     product_name: str | None = Query(default=None, min_length=1, max_length=255),
@@ -71,6 +74,7 @@ def list_order_item_allocation_work_items(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[OrderItemAllocationWorkItem]:
+    validate_date_range(date_from, date_to)
     query = (
         db.query(OrderItem, Order, Product, Customer)
         .join(Order, OrderItem.order_id == Order.id)
@@ -81,6 +85,10 @@ def list_order_item_allocation_work_items(
 
     if delivery_date is not None:
         query = query.filter(Order.delivery_date == delivery_date)
+    if date_from is not None:
+        query = query.filter(Order.delivery_date >= date_from)
+    if date_to is not None:
+        query = query.filter(Order.delivery_date <= date_to)
     if order_status:
         query = query.filter(Order.status.in_(order_status))
     if product_name is not None:

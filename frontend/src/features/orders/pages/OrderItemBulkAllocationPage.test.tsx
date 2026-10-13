@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { OrderItemBulkAllocationPage } from './OrderItemBulkAllocationPage';
@@ -16,6 +16,7 @@ import {
   listProductSupplierMappings,
 } from 'features/suppliers/services/suppliersService';
 import { ServiceError } from 'shared/error';
+import { presetRange } from 'shared/workflowDateRange';
 
 vi.mock('../services/orderItemAllocationsService', () => ({
   listOrderItemAllocationWorkItems: vi.fn(),
@@ -57,7 +58,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('defaults to confirmed and allocated orders on the shared delivery date', async () => {
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+};
+
+it('defaults to confirmed and allocated orders in the shared delivery week', async () => {
   render(<MemoryRouter><OrderItemBulkAllocationPage /></MemoryRouter>);
 
   await screen.findByText('条件に合う受注アイテムがありません。');
@@ -65,11 +72,14 @@ it('defaults to confirmed and allocated orders on the shared delivery date', asy
   expect((screen.getByRole('checkbox', { name: '引当済' }) as HTMLInputElement).checked).toBe(true);
   expect(screen.queryByRole('checkbox', { name: '新規' })).toBeNull();
   expect(screen.getByRole('button', { name: '茶屋札PDF作成' })).toBeTruthy();
-  expect((screen.getByLabelText('納品日') as HTMLInputElement).value).toBe(getDefaultDeliveryDate());
+  const range = presetRange('week');
+  expect((screen.getByLabelText('納品日 開始日') as HTMLInputElement).value).toBe(range.from);
+  expect((screen.getByLabelText('納品日 終了日') as HTMLInputElement).value).toBe(range.to);
 
   await waitFor(() => expect(listOrderItemAllocationWorkItems).toHaveBeenCalledWith({
     unallocatedOnly: false,
-    deliveryDate: getDefaultDeliveryDate(),
+    dateFrom: range.from,
+    dateTo: range.to,
     orderStatuses: ['confirmed', 'allocated'],
     supplierId: undefined,
   }));
@@ -98,6 +108,44 @@ const savedRow = {
   manualSupplierId: 1,
   manualQty: 2,
 };
+
+it('hides stale allocation rows and blocks actions while the date range is invalid, then reloads', async () => {
+  vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([savedRow]);
+  render(<MemoryRouter><OrderItemBulkAllocationPage /></MemoryRouter>);
+  expect(await screen.findByText('ORD-1')).toBeTruthy();
+  const callCount = vi.mocked(listOrderItemAllocationWorkItems).mock.calls.length;
+
+  fireEvent.change(screen.getByLabelText('納品日 開始日'), { target: { value: '2099-10-20' } });
+  expect(await screen.findByText('有効な日付範囲を入力してください')).toBeTruthy();
+  expect(screen.queryByText('ORD-1')).toBeNull();
+  expect((screen.getByRole('button', { name: '仕入先・数量を自動割当' }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole('button', { name: '選択行を一括保存' }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole('button', { name: '保存済み行を納品確認へ進める' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(listOrderItemAllocationWorkItems).toHaveBeenCalledTimes(callCount);
+
+  fireEvent.change(screen.getByLabelText('納品日 終了日'), { target: { value: '2099-10-31' } });
+  await waitFor(() => expect(listOrderItemAllocationWorkItems).toHaveBeenCalledTimes(callCount + 1));
+  expect(await screen.findByText('ORD-1')).toBeTruthy();
+});
+
+it('keeps the newest allocation range when an older request finishes last', async () => {
+  vi.mocked(listOrderItemAllocationWorkItems).mockResolvedValue([savedRow]);
+  render(<MemoryRouter><OrderItemBulkAllocationPage /></MemoryRouter>);
+  await screen.findByText('ORD-1');
+  const requestA = deferred<Awaited<ReturnType<typeof listOrderItemAllocationWorkItems>>>();
+  const requestB = deferred<Awaited<ReturnType<typeof listOrderItemAllocationWorkItems>>>();
+  vi.mocked(listOrderItemAllocationWorkItems).mockImplementationOnce(() => requestA.promise).mockImplementationOnce(() => requestB.promise);
+
+  const startDate = screen.getByLabelText('納品日 開始日');
+  fireEvent.change(startDate, { target: { value: '2026-10-13' } });
+  fireEvent.change(startDate, { target: { value: '2026-10-14' } });
+  requestB.resolve([{ ...savedRow, orderItemId: 'item-new', orderNo: 'ORD-NEW' }]);
+  expect(await screen.findByText('ORD-NEW')).toBeTruthy();
+
+  requestA.resolve([{ ...savedRow, orderItemId: 'item-old', orderNo: 'ORD-OLD' }]);
+  await waitFor(() => expect(screen.queryByText('ORD-OLD')).toBeNull());
+  expect(screen.getByText('ORD-NEW')).toBeTruthy();
+});
 
 it('does not show an overwrite warning for the first save of an unsaved allocation', async () => {
   const actor = userEvent.setup();

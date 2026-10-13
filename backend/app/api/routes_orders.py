@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from io import BytesIO
@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.api.order_lookup import get_order_or_404 as _get_order_by_identifier_or_404
 from app.core.allocation_completion import evaluate_order_allocation_completion
 from app.core.audit import AuditAction, write_audit_log
+from app.core.date_range import validate_date_range
 from app.core.deliveries import ensure_delivery_document
 from app.core.numbering import ensure_order_delivery_number, ensure_order_header_numbers, ensure_order_item_number
 from app.db.session import get_db
@@ -323,12 +324,19 @@ def _stale_cutoff_delivery_date(now_hk: datetime) -> datetime.date:
 @router.get("", response_model=list[OrderResponse])
 def list_orders(
     stale_delivery_only: bool = Query(default=False),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> list[OrderResponse]:
+    validate_date_range(date_from, date_to)
     query = db.query(Order)
     if stale_delivery_only:
         cutoff = _stale_cutoff_delivery_date(_now_hk())
         query = query.filter(Order.delivery_date < cutoff, Order.status.in_([OrderStatus.new, OrderStatus.confirmed, OrderStatus.allocated]))
+    if date_from is not None:
+        query = query.filter(Order.delivery_date >= date_from)
+    if date_to is not None:
+        query = query.filter(Order.delivery_date <= date_to)
 
     rows = query.order_by(Order.document_seq.desc(), Order.id.desc()).all()
     return [OrderResponse.model_validate(r) for r in rows]

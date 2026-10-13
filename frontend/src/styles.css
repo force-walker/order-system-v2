@@ -191,6 +191,28 @@ th, td {
   font-size: 0.875rem;
 }
 
+.workflow-date-range {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workflow-date-range label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.875rem;
+}
+
+.workflow-date-presets {
+  display: flex;
+  gap: 4px;
+}
+
+.workflow-date-range button {
+  white-space: nowrap;
+}
+
 .filter-label {
   min-width: 180px;
 }

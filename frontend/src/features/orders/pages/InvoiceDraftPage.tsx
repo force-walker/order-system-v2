@@ -1,7 +1,7 @@
 import type { EntityId } from 'shared/entityId';
 import { compareIds, newestInvoiceFirst } from 'shared/entityId';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   finalizeInvoiceDraftsBatch,
@@ -12,7 +12,9 @@ import {
 import { listCustomers } from 'features/orders/services/ordersService';
 import { generateDraftInvoiceFromPurchase } from 'features/orders/services/purchaseService';
 import type { CustomerOption, InvoiceDraftCandidate, InvoiceDraftListRow, InvoiceStatus } from 'features/orders/types/order';
-import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
+import { WorkflowDateRangeFilter } from 'components/common/WorkflowDateRangeFilter';
+import { useWorkflowDateRange } from 'shared/workflowDateRange';
+import { hongKongToday } from 'shared/hongKongDate';
 import { toActionableMessage } from 'shared/error';
 
 const currency = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'HKD', maximumFractionDigits: 2 });
@@ -59,6 +61,8 @@ const formatGrossMargin = (row: Pick<InvoiceDraftListRow, 'grossMarginPct' | 'gr
 };
 
 export const InvoiceDraftPage = () => {
+  const location = useLocation();
+  const returnTo = `${location.pathname}${location.search}`;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftListRow[]>([]);
@@ -66,7 +70,8 @@ export const InvoiceDraftPage = () => {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS_LABEL);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
-  const [dateFilter, setDateFilter] = useState(getDefaultDeliveryDate);
+  const { range: candidateRange, update: setCandidateRange, isValid: isCandidateRangeValid } = useWorkflowDateRange('candidate');
+  const { range: draftRange, update: setDraftRange, isValid: isDraftRangeValid } = useWorkflowDateRange('draft');
   const [statusFilter, setStatusFilter] = useState<InvoiceViewStatus>('');
   const [selectedByInvoiceId, setSelectedByInvoiceId] = useState<RowSelect>({});
   const [selectedByCandidateItemId, setSelectedByCandidateItemId] = useState<RowSelect>({});
@@ -76,16 +81,36 @@ export const InvoiceDraftPage = () => {
   const [bulkFinalizing, setBulkFinalizing] = useState(false);
   const [creatingOrderId, setCreatingOrderId] = useState<EntityId | null>(null);
   const [toast, setToast] = useState<ToastPayload | null>(null);
+  const loadGeneration = useRef(0);
+  const loadCriteriaRef = useRef({
+    candidateIsValid: isCandidateRangeValid,
+    draftIsValid: isDraftRangeValid,
+    candidateRange,
+    draftRange,
+  });
+  loadCriteriaRef.current = {
+    candidateIsValid: isCandidateRangeValid,
+    draftIsValid: isDraftRangeValid,
+    candidateRange,
+    draftRange,
+  };
 
   const load = async () => {
+    const generation = ++loadGeneration.current;
+    const criteria = loadCriteriaRef.current;
+    if (!criteria.candidateIsValid || !criteria.draftIsValid) {
+      if (generation === loadGeneration.current) setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
       const [nextRows, nextCandidates, customerOptions] = await Promise.all([
-        listInvoiceDraftListRows(),
-        listInvoiceDraftCandidates(),
+        listInvoiceDraftListRows({ dateFrom: criteria.draftRange.from, dateTo: criteria.draftRange.to }),
+        listInvoiceDraftCandidates({ dateFrom: criteria.candidateRange.from, dateTo: criteria.candidateRange.to }),
         listCustomers(true),
       ]);
+      if (generation !== loadGeneration.current) return;
       setRows(nextRows);
       setCandidates(nextCandidates);
       setCustomers(customerOptions);
@@ -100,15 +125,17 @@ export const InvoiceDraftPage = () => {
         nextCandidates.flatMap((candidate) => candidate.items.map((item) => [item.orderItemId, prev[item.orderItemId] ?? String(item.salesUnitPrice)])),
       ));
     } catch (e) {
+      if (generation !== loadGeneration.current) return;
       setError(toActionableMessage(e, '請求ドラフト一覧の取得に失敗しました。'));
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     void load();
-  }, []);
+    return () => { loadGeneration.current += 1; };
+  }, [candidateRange.from, candidateRange.to, draftRange.from, draftRange.to, isCandidateRangeValid, isDraftRangeValid]);
 
   useEffect(() => {
     if (!toast) return;
@@ -131,7 +158,6 @@ export const InvoiceDraftPage = () => {
     return rows
       .filter((row) => {
         if (statusFilter && row.status !== statusFilter) return false;
-        if (dateFilter && row.deliveryDate !== dateFilter) return false;
         const rowCustomerName = row.customerName.toLocaleLowerCase();
         if (selectedCustomerName && rowCustomerName !== selectedCustomerName) return false;
         if (
@@ -144,7 +170,7 @@ export const InvoiceDraftPage = () => {
         return true;
       })
       .sort((a, b) => newestInvoiceFirst(a, b) || compareIds(a.invoiceItemId, b.invoiceItemId));
-  }, [rows, customers, customerFilter, selectedCustomerId, dateFilter, statusFilter]);
+  }, [rows, customers, customerFilter, selectedCustomerId, statusFilter]);
 
   const filteredCandidates = useMemo(() => {
     if (statusFilter && statusFilter !== 'uncreated') return [];
@@ -160,7 +186,6 @@ export const InvoiceDraftPage = () => {
         : [],
     );
     return candidates.filter((candidate) => {
-      if (dateFilter && candidate.deliveryDate !== dateFilter) return false;
       const name = candidate.customerName.toLocaleLowerCase();
       if (selectedCustomerName && name !== selectedCustomerName) return false;
       if (
@@ -172,7 +197,7 @@ export const InvoiceDraftPage = () => {
       ) return false;
       return true;
     });
-  }, [candidates, customers, customerFilter, selectedCustomerId, dateFilter, statusFilter]);
+  }, [candidates, customers, customerFilter, selectedCustomerId, statusFilter]);
 
   const resetCustomerFilter = () => {
     setSelectedCustomerId(null);
@@ -296,7 +321,7 @@ export const InvoiceDraftPage = () => {
     try {
       await generateDraftInvoiceFromPurchase({
         orderId: candidate.orderId,
-        invoiceDate: new Date().toISOString().slice(0, 10),
+        invoiceDate: hongKongToday(),
         purchaseResultIds: items.flatMap((item) => item.purchaseResultIds),
         salesUnitPrices,
       });
@@ -379,7 +404,7 @@ export const InvoiceDraftPage = () => {
   };
 
   if (error) return <ErrorState title="請求ドラフト一覧の取得に失敗しました" description={error} />;
-  if (loading) return <LoadingState title="請求ドラフト一覧を読み込み中" description="しばらくお待ちください。" />;
+  if (loading && rows.length === 0 && candidates.length === 0) return <LoadingState title="請求ドラフト一覧を読み込み中" description="しばらくお待ちください。" />;
 
   return (
     <section>
@@ -406,10 +431,8 @@ export const InvoiceDraftPage = () => {
           </datalist>
         </label>
         <button type="button" className="secondary" onClick={resetCustomerFilter}>全取引先</button>
-        <label className="filter-label">
-          納品日
-          <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-        </label>
+        <div><small>請求候補: 納品日</small><WorkflowDateRangeFilter range={candidateRange} onChange={setCandidateRange} label="候補納品日" /></div>
+        <div><small>請求ドラフト: 請求日</small><WorkflowDateRangeFilter range={draftRange} onChange={setDraftRange} label="ドラフト請求日" /></div>
         <label className="filter-label">
           状態
           <select value={statusFilter} onChange={(e) => setStatusFilter((e.target.value || '') as InvoiceViewStatus)}>
@@ -429,20 +452,22 @@ export const InvoiceDraftPage = () => {
             <p className="subtle">未作成の注文と作成済みDraftを同じ一覧で確認します。Deliveryの作成は必要ありません。</p>
           </div>
           <div className="list-controls">
-            <button type="button" className="secondary" onClick={() => void onCreateSelectedDrafts()} disabled={creatingOrderId !== null || selectedCandidateItems.length === 0}>
+            <button type="button" className="secondary" onClick={() => void onCreateSelectedDrafts()} disabled={!isCandidateRangeValid || !isDraftRangeValid || creatingOrderId !== null || selectedCandidateItems.length === 0}>
               {creatingOrderId !== null ? 'ドラフト作成中...' : `選択した候補からドラフト作成${selectedCandidateItems.length > 0 ? ` (${selectedCandidateItems.length})` : ''}`}
             </button>
-            <button type="button" onClick={() => void onFinalizeBulk()} disabled={bulkFinalizing || selectedDraftIds.length === 0}>
+            <button type="button" onClick={() => void onFinalizeBulk()} disabled={!isCandidateRangeValid || !isDraftRangeValid || bulkFinalizing || selectedDraftIds.length === 0}>
               {bulkFinalizing ? '一括発行中...' : `選択した請求ドラフトを発行${selectedDraftIds.length > 0 ? ` (${selectedDraftIds.length})` : ''}`}
             </button>
           </div>
         </div>
 
-        <div className="subtle" style={{ marginBottom: 12 }}>
-          draft 件数: {draftInvoiceIds.length} / finalized 件数: {finalizedInvoiceIds.length}
-        </div>
-
-        <div className="table-wrap">
+        {!isCandidateRangeValid || !isDraftRangeValid ? (
+          <div className="state-box" role="status">有効な日付範囲を入力してください</div>
+        ) : <>
+          <div className="subtle" style={{ marginBottom: 12 }}>
+            draft 件数: {draftInvoiceIds.length} / finalized 件数: {finalizedInvoiceIds.length}
+          </div>
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -567,7 +592,7 @@ export const InvoiceDraftPage = () => {
                           }}
                         />
                       </td>
-                      <td><Link to={`/invoices/drafts/${row.invoiceId}`}>詳細</Link></td>
+                      <td><Link to={`/invoices/drafts/${row.invoiceId}`} state={{ returnTo }}>詳細</Link></td>
                       <td>{row.invoiceNo}</td>
                       <td>{row.lineRef ?? '-'}</td>
                       <td>{row.customerName}</td>
@@ -619,7 +644,8 @@ export const InvoiceDraftPage = () => {
               )}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>}
       </div>
     </section>
   );

@@ -2287,6 +2287,24 @@ paths:
             format: date
           - type: 'null'
           title: Delivery Date
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
       - name: order_status
         in: query
         required: false
@@ -2447,6 +2465,24 @@ paths:
           type: boolean
           default: false
           title: Stale Delivery Only
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
       responses:
         '200':
           description: Successful Response
@@ -3572,6 +3608,16 @@ paths:
             exclusiveMinimum: 0
           - type: 'null'
           title: Supplier Id
+      - name: allocation_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          title: Allocation Ids
       - name: limit
         in: query
         required: false
@@ -3863,19 +3909,44 @@ paths:
       - invoices
       summary: List Invoice Draft Rows
       operationId: list_invoice_draft_rows_api_v1_invoices_draft_list_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
+                type: array
                 items:
                   $ref: '#/components/schemas/InvoiceDraftListRow'
-                type: array
                 title: Response List Invoice Draft Rows Api V1 Invoices Draft List
                   Get
-      security:
-      - HTTPBearer: []
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/invoices/history:
     get:
       tags:
@@ -4245,6 +4316,24 @@ paths:
             format: date
           - type: 'null'
           title: Delivery Date
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
       - name: customer_id
         in: query
         required: false

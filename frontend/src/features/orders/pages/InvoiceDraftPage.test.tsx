@@ -9,6 +9,7 @@ import { finalizeInvoiceDraftsBatch, listInvoiceDraftCandidates, listInvoiceDraf
 import { generateDraftInvoiceFromPurchase } from '../services/purchaseService';
 import { listCustomers } from '../services/ordersService';
 import type { InvoiceDraftCandidate, InvoiceDraftListRow } from '../types/order';
+import { presetRange } from 'shared/workflowDateRange';
 
 vi.mock('../services/invoiceService', () => ({
   finalizeInvoiceDraftsBatch: vi.fn(),
@@ -54,6 +55,12 @@ const rows = [
   row('other', 'Other Corp'),
   row('abc-trading-later', 'ABC Trading', nextDate),
 ];
+
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+};
 
 const candidate = (orderId: string, itemIds = ['item-1']): InvoiceDraftCandidate => ({
   orderId,
@@ -131,6 +138,50 @@ it('shows a purchased order without a Delivery as an invoice candidate and creat
   expect(screen.queryAllByText('ORD-PURCHASED')).toHaveLength(0);
 });
 
+it('hides stale invoice rows and blocks writes while either date range is invalid, then reloads', async () => {
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([candidate('PURCHASED')]);
+  renderPage();
+  expect(await screen.findByText('IVD-abc-trading')).toBeTruthy();
+  const candidateCalls = vi.mocked(listInvoiceDraftCandidates).mock.calls.length;
+  const draftCalls = vi.mocked(listInvoiceDraftListRows).mock.calls.length;
+
+  fireEvent.change(screen.getByLabelText('候補納品日 開始日'), { target: { value: '2099-10-20' } });
+  expect(await screen.findByText('有効な日付範囲を入力してください')).toBeTruthy();
+  expect(screen.queryByText('IVD-abc-trading')).toBeNull();
+  expect((screen.getByRole('button', { name: /選択した候補からドラフト作成/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole('button', { name: /選択した請求ドラフトを発行/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect(listInvoiceDraftCandidates).toHaveBeenCalledTimes(candidateCalls);
+  expect(listInvoiceDraftListRows).toHaveBeenCalledTimes(draftCalls);
+
+  fireEvent.change(screen.getByLabelText('候補納品日 終了日'), { target: { value: '2099-10-31' } });
+  await waitFor(() => expect(listInvoiceDraftCandidates).toHaveBeenCalledTimes(candidateCalls + 1));
+  await waitFor(() => expect(listInvoiceDraftListRows).toHaveBeenCalledTimes(draftCalls + 1));
+  expect(await screen.findByText('IVD-abc-trading')).toBeTruthy();
+});
+
+it('keeps the newest candidate and draft range combination when older requests finish last', async () => {
+  renderPage();
+  await screen.findByText('IVD-abc-trading');
+  const rowsA = deferred<InvoiceDraftListRow[]>();
+  const rowsB = deferred<InvoiceDraftListRow[]>();
+  const candidatesA = deferred<InvoiceDraftCandidate[]>();
+  const candidatesB = deferred<InvoiceDraftCandidate[]>();
+  vi.mocked(listInvoiceDraftListRows).mockImplementationOnce(() => rowsA.promise).mockImplementationOnce(() => rowsB.promise);
+  vi.mocked(listInvoiceDraftCandidates).mockImplementationOnce(() => candidatesA.promise).mockImplementationOnce(() => candidatesB.promise);
+
+  const startDate = screen.getByLabelText('候補納品日 開始日');
+  fireEvent.change(startDate, { target: { value: '2026-10-13' } });
+  fireEvent.change(startDate, { target: { value: '2026-10-14' } });
+  rowsB.resolve([row('new-range', 'Newest Customer')]);
+  candidatesB.resolve([candidate('NEW-RANGE')]);
+  expect(await screen.findByText('IVD-new-range')).toBeTruthy();
+
+  rowsA.resolve([row('old-range', 'Old Customer')]);
+  candidatesA.resolve([candidate('OLD-RANGE')]);
+  await waitFor(() => expect(screen.queryByText('IVD-old-range')).toBeNull());
+  expect(screen.getByText('IVD-new-range')).toBeTruthy();
+});
+
 it('shows the backend UOM validation reason when candidate draft creation fails', async () => {
   const actor = userEvent.setup();
   const invalid = candidate('SKU-9');
@@ -201,9 +252,29 @@ it('shows purchase price ceiling warnings without disabling invoice actions', as
   expect((screen.getByRole('button', { name: '選択した候補からドラフト作成 (1)' }) as HTMLButtonElement).disabled).toBe(false);
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const renderPage = () => render(<MemoryRouter><InvoiceDraftPage /></MemoryRouter>);
+
+it('uses the Hong Kong business date when generating a draft', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date('2026-10-12T16:30:00Z'));
+  vi.mocked(listInvoiceDraftListRows).mockResolvedValue([]);
+  vi.mocked(listInvoiceDraftCandidates).mockResolvedValue([candidate('HK-DATE')]);
+  vi.mocked(generateDraftInvoiceFromPurchase).mockResolvedValue('invoice-hk');
+  renderPage();
+
+  const checkbox = await screen.findByRole('checkbox', { name: 'ORD-HK-DATE SKU-1 を選択' });
+  fireEvent.click(checkbox);
+  fireEvent.click(screen.getByRole('button', { name: '選択した候補からドラフト作成 (1)' }));
+
+  await waitFor(() => expect(generateDraftInvoiceFromPurchase).toHaveBeenCalledWith(expect.objectContaining({
+    invoiceDate: '2026-10-13',
+  })));
+});
 
 it('starts with all customers and does not apply a customer filter', async () => {
   renderPage();
@@ -212,7 +283,8 @@ it('starts with all customers and does not apply a customer filter', async () =>
   expect((screen.getByLabelText('取引先') as HTMLInputElement).value).toBe('全取引先');
   expect(screen.getByText('IVD-abc-foods')).toBeTruthy();
   expect(screen.getByText('IVD-other')).toBeTruthy();
-  expect(listInvoiceDraftListRows).toHaveBeenCalledWith();
+  const range = presetRange('week');
+  expect(listInvoiceDraftListRows).toHaveBeenCalledWith({ dateFrom: range.from, dateTo: range.to });
   expect(listCustomers).toHaveBeenCalledWith(true);
 });
 
@@ -266,11 +338,12 @@ it('combines the customer and delivery-date filters with AND semantics', async (
   const filter = screen.getByLabelText('取引先');
   await actor.clear(filter);
   await actor.type(filter, 'CUST-ABC');
-  fireEvent.change(screen.getByLabelText('納品日'), { target: { value: nextDate } });
+  vi.mocked(listInvoiceDraftListRows).mockResolvedValue([row('abc-trading-later', 'ABC Trading', nextDate)]);
+  fireEvent.change(screen.getByLabelText('候補納品日 開始日'), { target: { value: nextDate } });
+  await screen.findByLabelText('候補納品日 終了日');
+  fireEvent.change(screen.getByLabelText('候補納品日 終了日'), { target: { value: nextDate } });
 
-  expect(screen.getByText('IVD-abc-trading-later')).toBeTruthy();
-  expect(screen.queryByText('IVD-abc-trading')).toBeNull();
-  expect(screen.queryByText('IVD-abc-foods')).toBeNull();
+  await waitFor(() => expect(listInvoiceDraftCandidates).toHaveBeenLastCalledWith({ dateFrom: nextDate, dateTo: nextDate }));
 });
 
 it('keeps the existing invoice draft finalization flow working', async () => {

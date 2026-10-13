@@ -197,6 +197,31 @@ def test_worklist_suggest_and_bulk_save_flow():
     db.close()
 
 
+def test_worklist_filters_order_delivery_date_range_inclusively():
+    first_item, _, _, first_order = _seed_order_item(product_name="Range First")
+    second_item, _, _, second_order = _seed_order_item(product_name="Range Second")
+    db = TestingSessionLocal()
+    db.query(Order).filter(Order.id == first_order).one().delivery_date = date(2026, 10, 10)
+    db.query(Order).filter(Order.id == second_order).one().delivery_date = date(2026, 11, 10)
+    db.commit()
+    db.close()
+
+    response = _client().get(
+        "/api/v1/order-item-allocations",
+        params={"date_from": "2026-10-01", "date_to": "2026-10-31"},
+    )
+    assert response.status_code == 200
+    returned = {row["order_item_id"] for row in response.json()}
+    assert first_item in returned
+    assert second_item not in returned
+    invalid = _client().get(
+        "/api/v1/order-item-allocations",
+        params={"date_from": "2026-11-01", "date_to": "2026-10-01"},
+    )
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"]["code"] == "INVALID_DATE_RANGE"
+
+
 def test_worklist_defaults_to_newest_document_then_source_line_order():
     older_order_id, older_items, _ = _seed_order_with_items(item_count=2)
     newer_order_id, newer_items, _ = _seed_order_with_items(item_count=2)

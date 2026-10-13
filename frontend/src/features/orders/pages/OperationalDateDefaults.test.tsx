@@ -8,6 +8,8 @@ import { getDefaultDeliveryDate } from '../utils/deliveryDate';
 import { getShippingReport } from '../services/shippingReportService';
 import { listInvoiceDraftCandidates, listInvoiceDraftListRows } from '../services/invoiceService';
 import { listCustomers } from '../services/ordersService';
+import { MemoryRouter } from 'react-router-dom';
+import { presetRange } from 'shared/workflowDateRange';
 
 vi.mock('../services/shippingReportService', () => ({ getShippingReport: vi.fn(), generatePurchaseConfirmationPdf: vi.fn() }));
 vi.mock('../services/invoiceService', () => ({
@@ -38,8 +40,12 @@ it('uses the shared delivery-date default and supplier-product mode on the shipp
   await waitFor(() => expect(getShippingReport).toHaveBeenLastCalledWith(getDefaultDeliveryDate(), 'customer'));
 });
 
-it('uses the shared delivery-date default for the invoice draft delivery-date filter', async () => {
-  render(<InvoiceDraftPage />);
+it('uses the shared delivery-week defaults for invoice candidates and drafts', async () => {
+  render(<MemoryRouter><InvoiceDraftPage /></MemoryRouter>);
   await waitFor(() => expect(listInvoiceDraftListRows).toHaveBeenCalled());
-  expect((screen.getByLabelText('納品日') as HTMLInputElement).value).toBe(getDefaultDeliveryDate());
+  const range = presetRange('week');
+  expect((screen.getByLabelText('候補納品日 開始日') as HTMLInputElement).value).toBe(range.from);
+  expect((screen.getByLabelText('候補納品日 終了日') as HTMLInputElement).value).toBe(range.to);
+  expect((screen.getByLabelText('ドラフト請求日 開始日') as HTMLInputElement).value).toBe(range.from);
+  expect((screen.getByLabelText('ドラフト請求日 終了日') as HTMLInputElement).value).toBe(range.to);
 });

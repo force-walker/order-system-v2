@@ -14,6 +14,7 @@ import {
 } from 'features/orders/services/purchaseService';
 import { getProductDetail } from 'features/products/services/productsService';
 import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
+import { presetRange } from 'shared/workflowDateRange';
 
 vi.mock('features/orders/services/orderItemAllocationsService', () => ({
   listOrderItemAllocationWorkItems: vi.fn(),
@@ -73,6 +74,12 @@ afterEach(() => {
 
 const renderPurchasePage = () => render(<MemoryRouter><PurchasePage /></MemoryRouter>);
 
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+};
+
 it('shows both orders on the same delivery date when there is no handoff filter', async () => {
   renderPurchasePage();
 
@@ -85,6 +92,40 @@ it('does not render the duplicate purchase work queue section', async () => {
   renderPurchasePage();
   await screen.findByText('ORD-A');
   expect(screen.queryByText('作業キュー（納品確認）')).toBeNull();
+});
+
+it('hides stale purchase rows and blocks saving while the date range is invalid, then reloads', async () => {
+  renderPurchasePage();
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+  const callCount = vi.mocked(listOrderItemAllocationWorkItems).mock.calls.length;
+
+  fireEvent.change(screen.getByLabelText('納品日 開始日'), { target: { value: '2099-10-20' } });
+  expect(await screen.findByText('有効な日付範囲を入力してください')).toBeTruthy();
+  expect(screen.queryByText('ORD-A')).toBeNull();
+  expect((screen.getByRole('button', { name: /選択行を保存/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect(listOrderItemAllocationWorkItems).toHaveBeenCalledTimes(callCount);
+
+  fireEvent.change(screen.getByLabelText('納品日 終了日'), { target: { value: '2099-10-31' } });
+  await waitFor(() => expect(listOrderItemAllocationWorkItems).toHaveBeenCalledTimes(callCount + 1));
+  expect(await screen.findByText('ORD-A')).toBeTruthy();
+});
+
+it('does not let an older multi-step load replace the newest purchase range', async () => {
+  renderPurchasePage();
+  await screen.findByText('ORD-A');
+  const requestA = deferred<Awaited<ReturnType<typeof listOrderItemAllocationWorkItems>>>();
+  const requestB = deferred<Awaited<ReturnType<typeof listOrderItemAllocationWorkItems>>>();
+  vi.mocked(listOrderItemAllocationWorkItems).mockImplementationOnce(() => requestA.promise).mockImplementationOnce(() => requestB.promise);
+
+  const startDate = screen.getByLabelText('納品日 開始日');
+  fireEvent.change(startDate, { target: { value: '2026-10-13' } });
+  fireEvent.change(startDate, { target: { value: '2026-10-14' } });
+  requestB.resolve([{ ...rows[0], orderItemId: 'item-new', orderNo: 'ORD-NEW', allocationId: 33 }]);
+  expect(await screen.findByText('ORD-NEW')).toBeTruthy();
+
+  requestA.resolve([{ ...rows[0], orderItemId: 'item-old', orderNo: 'ORD-OLD', allocationId: 44 }]);
+  await waitFor(() => expect(screen.queryByText('ORD-OLD')).toBeNull());
+  expect(screen.getByText('ORD-NEW')).toBeTruthy();
 });
 
 it('keeps an allocated uom_count CTN line visible without requiring actual weight', async () => {
@@ -255,16 +296,19 @@ it('marks a same-unit result filled against allocation quantity rather than orde
   ]));
 });
 
-it('uses the shared delivery date and allocated plus purchased as its default API filters', async () => {
+it('uses the shared delivery week and allocated plus purchased as its default API filters', async () => {
   renderPurchasePage();
   await screen.findByText('ORD-A');
 
-  expect((screen.getByLabelText('納品日') as HTMLInputElement).value).toBe(getDefaultDeliveryDate());
+  const range = presetRange('week');
+  expect((screen.getByLabelText('納品日 開始日') as HTMLInputElement).value).toBe(range.from);
+  expect((screen.getByLabelText('納品日 終了日') as HTMLInputElement).value).toBe(range.to);
   expect((screen.getByRole('checkbox', { name: 'Allocated' }) as HTMLInputElement).checked).toBe(true);
   expect((screen.getByRole('checkbox', { name: 'Purchased' }) as HTMLInputElement).checked).toBe(true);
   expect(listOrderItemAllocationWorkItems).toHaveBeenCalledWith({
     unallocatedOnly: false,
-    deliveryDate: getDefaultDeliveryDate(),
+    dateFrom: range.from,
+    dateTo: range.to,
     orderStatuses: ['allocated', 'purchased'],
   });
 });
@@ -275,12 +319,14 @@ it('combines delivery date and selected status in the backend query', async () =
   await screen.findByText('ORD-A');
 
   await actor.click(screen.getByRole('checkbox', { name: 'Purchased' }));
-  await actor.clear(screen.getByLabelText('納品日'));
-  await actor.type(screen.getByLabelText('納品日'), '2026-09-29');
+  fireEvent.change(screen.getByLabelText('納品日 開始日'), { target: { value: '2026-09-29' } });
+  await screen.findByLabelText('納品日 終了日');
+  fireEvent.change(screen.getByLabelText('納品日 終了日'), { target: { value: '2026-10-02' } });
 
   await waitFor(() => expect(listOrderItemAllocationWorkItems).toHaveBeenLastCalledWith({
     unallocatedOnly: false,
-    deliveryDate: '2026-09-29',
+    dateFrom: '2026-09-29',
+    dateTo: '2026-10-02',
     orderStatuses: ['allocated'],
   }));
 });
@@ -394,6 +440,10 @@ it('does not ask for overwrite confirmation when a saved purchase result is unch
   vi.mocked(listPurchaseResults).mockResolvedValue({ items: [persistedResult()], total: 1 });
   vi.mocked(bulkUpsertPurchaseResults).mockResolvedValue({ count: 1, resultIds: [101] });
   renderPurchasePage();
+
+  await waitFor(() => expect(listPurchaseResults).toHaveBeenCalledWith({ allocationIds: [11, 22] }));
+  expect((await screen.findByRole('spinbutton', { name: 'Product A 実数量' }) as HTMLInputElement).value).toBe('18.2');
+  expect((document.querySelector('input[data-unitcost-row="0"]') as HTMLInputElement).value).toBe('10');
 
   const row = (await screen.findByText('ORD-A')).closest('tr')!;
   await actor.click(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!);

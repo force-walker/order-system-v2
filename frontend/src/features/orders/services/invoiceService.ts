@@ -296,8 +296,10 @@ export const finalizeInvoiceItemLine = async (invoiceId: EntityId, invoiceItemId
   };
 };
 
-export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]> => {
-  const rowsRes = await fetchWithAuth('/api/v1/invoices/draft-list', { method: 'GET' });
+export const listInvoiceDraftListRows = async (range?: { dateFrom: string; dateTo: string }): Promise<InvoiceDraftListRow[]> => {
+  const query = new URLSearchParams();
+  if (range) { query.set('date_from', range.dateFrom); query.set('date_to', range.dateTo); }
+  const rowsRes = await fetchWithAuth(`/api/v1/invoices/draft-list?${query}`, { method: 'GET' });
   if (!rowsRes.ok) throw await parseApiErrorPayload(rowsRes);
   const rows = (await rowsRes.json()) as ApiInvoiceDraftListRow[];
 
@@ -329,8 +331,10 @@ export const listInvoiceDraftListRows = async (): Promise<InvoiceDraftListRow[]>
   }));
 };
 
-export const listInvoiceDraftCandidates = async (): Promise<InvoiceDraftCandidate[]> => {
-  const res = await fetchWithAuth('/api/v1/invoices/draft-candidates', { method: 'GET' });
+export const listInvoiceDraftCandidates = async (range?: { dateFrom: string; dateTo: string }): Promise<InvoiceDraftCandidate[]> => {
+  const query = new URLSearchParams();
+  if (range) { query.set('date_from', range.dateFrom); query.set('date_to', range.dateTo); }
+  const res = await fetchWithAuth(`/api/v1/invoices/draft-candidates?${query}`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const rows = (await res.json()) as ApiInvoiceDraftCandidate[];
   return rows.map((row) => ({

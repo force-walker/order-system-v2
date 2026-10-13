@@ -207,10 +207,12 @@ const mapApiOrderItem = (item: ApiOrderItemResponse) => {
   };
 };
 
-const listOrdersApi = async (staleDeliveryOnly = false): Promise<OrderSummary[]> => {
+const listOrdersApi = async (staleDeliveryOnly = false, range?: { dateFrom: string; dateTo: string }): Promise<OrderSummary[]> => {
   await Promise.all([loadCustomersApi(), loadProductsApi()]);
-  const query = staleDeliveryOnly ? '?stale_delivery_only=true' : '';
-  const res = await fetchWithAuth(`/api/v1/orders${query}`, { method: 'GET' });
+  const query = new URLSearchParams();
+  if (staleDeliveryOnly) query.set('stale_delivery_only', 'true');
+  if (range) { query.set('date_from', range.dateFrom); query.set('date_to', range.dateTo); }
+  const res = await fetchWithAuth(`/api/v1/orders?${query}`, { method: 'GET' });
   if (!res.ok) throw await parseApiErrorPayload(res);
   const data = (await res.json()) as ApiOrderResponse[];
 
@@ -800,8 +802,8 @@ export const getCustomerImportFormat = async (): Promise<ImportFormat> => {
   return toImportFormat((await res.json()) as ApiImportFormatResponse);
 };
 
-export const listOrders = async (staleDeliveryOnly = false): Promise<OrderSummary[]> =>
-  (USE_MOCK ? listOrdersMock(staleDeliveryOnly) : listOrdersApi(staleDeliveryOnly));
+export const listOrders = async (staleDeliveryOnly = false, range?: { dateFrom: string; dateTo: string }): Promise<OrderSummary[]> =>
+  (USE_MOCK ? listOrdersMock(staleDeliveryOnly).then((rows) => range ? rows.filter((row) => row.deliveryDate >= range.dateFrom && row.deliveryDate <= range.dateTo) : rows) : listOrdersApi(staleDeliveryOnly, range));
 
 export const getOrder = async (orderId: EntityId): Promise<OrderDetail | null> => {
   if (USE_MOCK) {

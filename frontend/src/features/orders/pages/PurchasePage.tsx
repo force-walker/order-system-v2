@@ -1,6 +1,6 @@
 import type { EntityId } from 'shared/entityId';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ErrorState, LoadingState } from 'components/common/AsyncState';
 import {
   listOrderItemAllocationWorkItems,
@@ -13,7 +13,8 @@ import {
   listPurchaseResults,
 } from 'features/orders/services/purchaseService';
 import type { OrderStatus, PurchaseResultItem } from 'features/orders/types/order';
-import { getDefaultDeliveryDate } from 'features/orders/utils/deliveryDate';
+import { WorkflowDateRangeFilter } from 'components/common/WorkflowDateRangeFilter';
+import { useWorkflowDateRange } from 'shared/workflowDateRange';
 import { getProductDetail } from 'features/products/services/productsService';
 import { toActionableMessage } from 'shared/error';
 
@@ -53,6 +54,8 @@ const consumePurchaseTargetAllocationIds = (): number[] | null => {
 };
 
 export const PurchasePage = () => {
+  const location = useLocation();
+  const returnTo = `${location.pathname}${location.search}`;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -68,11 +71,14 @@ export const PurchasePage = () => {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [lastSelectedId, setLastSelectedId] = useState<EntityId | null>(null);
-  const [deliveryDate, setDeliveryDate] = useState(getDefaultDeliveryDate);
+  const { range: deliveryRange, update: setDeliveryRange, isValid: isDeliveryRangeValid } = useWorkflowDateRange();
   const [orderStatuses, setOrderStatuses] = useState<OrderStatus[]>(DEFAULT_PURCHASE_ORDER_STATUSES);
   const [targetAllocationIds, setTargetAllocationIds] = useState<number[] | null>(null);
   const targetAllocationIdsRef = useRef<number[] | null>(null);
   const handoffConsumedRef = useRef(false);
+  const loadGeneration = useRef(0);
+  const loadCriteriaRef = useRef({ isValid: isDeliveryRangeValid, range: deliveryRange, orderStatuses });
+  loadCriteriaRef.current = { isValid: isDeliveryRangeValid, range: deliveryRange, orderStatuses };
 
   const supplierNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -84,6 +90,12 @@ export const PurchasePage = () => {
   }, [suppliers]);
 
   const load = async () => {
+    const generation = ++loadGeneration.current;
+    const criteria = loadCriteriaRef.current;
+    if (!criteria.isValid) {
+      if (generation === loadGeneration.current) setLoading(false);
+      return;
+    }
     if (!handoffConsumedRef.current) {
       handoffConsumedRef.current = true;
       const consumedIds = consumePurchaseTargetAllocationIds();
@@ -94,12 +106,17 @@ export const PurchasePage = () => {
     setLoading(true);
     setError('');
     try {
-      const [all, supplierOptions, persisted] = await Promise.all([
-        listOrderItemAllocationWorkItems({ unallocatedOnly: false, deliveryDate, orderStatuses }),
+      const [all, supplierOptions] = await Promise.all([
+        listOrderItemAllocationWorkItems({ unallocatedOnly: false, dateFrom: criteria.range.from, dateTo: criteria.range.to, orderStatuses: criteria.orderStatuses }),
         listSupplierFilterOptions(),
-        listPurchaseResults({ limit: 500, offset: 0 }),
       ]);
-      setSuppliers(supplierOptions);
+
+      const allocationIds = [...new Set(
+        all.map((row) => row.allocationId).filter((id): id is number => typeof id === 'number'),
+      )];
+      const persisted = allocationIds.length > 0
+        ? await listPurchaseResults({ allocationIds })
+        : { items: [], total: 0 };
 
       const unitCostByAllocationId = new Map<number, number | undefined>();
       const persistedByAllocationId: Record<number, PurchaseResultItem> = {};
@@ -107,8 +124,6 @@ export const PurchasePage = () => {
         unitCostByAllocationId.set(q.allocationId, q.unitCost);
         persistedByAllocationId[q.allocationId] = q;
       });
-      setPurchaseResultByAllocationId(persistedByAllocationId);
-
       const allocated = all.filter((r) => r.allocationStatus === 'allocated' && r.allocationId != null);
       const validAllocationIds = new Set(
         allocated
@@ -116,12 +131,7 @@ export const PurchasePage = () => {
           .filter((allocationId): allocationId is number => typeof allocationId === 'number'),
       );
       const requestedIds = targetAllocationIdsRef.current;
-      if (requestedIds?.some((allocationId) => !validAllocationIds.has(allocationId))) {
-        targetAllocationIdsRef.current = null;
-        setTargetAllocationIds(null);
-      }
-
-      setRows(allocated);
+      const shouldClearTargetIds = requestedIds?.some((allocationId) => !validAllocationIds.has(allocationId)) ?? false;
 
       const productIds = [...new Set(allocated.map((r) => r.productId))];
       const unitEntries = await Promise.all(
@@ -142,6 +152,15 @@ export const PurchasePage = () => {
         }),
       );
       const unitsByProductIdLocal = Object.fromEntries(unitEntries);
+      if (generation !== loadGeneration.current) return;
+
+      setSuppliers(supplierOptions);
+      setPurchaseResultByAllocationId(persistedByAllocationId);
+      if (shouldClearTargetIds) {
+        targetAllocationIdsRef.current = null;
+        setTargetAllocationIds(null);
+      }
+      setRows(allocated);
       setUnitsByProductId(unitsByProductIdLocal);
 
       setEditByItemId((prev) =>
@@ -165,15 +184,17 @@ export const PurchasePage = () => {
         ),
       );
     } catch (e) {
+      if (generation !== loadGeneration.current) return;
       setError(toActionableMessage(e, '納品確認対象の取得に失敗しました。'));
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     void load();
-  }, [deliveryDate, orderStatuses]);
+    return () => { loadGeneration.current += 1; };
+  }, [deliveryRange.from, deliveryRange.to, isDeliveryRangeValid, orderStatuses]);
 
   useEffect(() => {
     if (!toast) return;
@@ -382,7 +403,7 @@ export const PurchasePage = () => {
   };
 
   if (error) return <ErrorState title="納品確認対象の取得に失敗しました" description={error} actionLabel="再試行" onAction={load} />;
-  if (loading) return <LoadingState title="納品確認ページを読み込み中" description="しばらくお待ちください。" />;
+  if (loading && rows.length === 0) return <LoadingState title="納品確認ページを読み込み中" description="しばらくお待ちください。" />;
 
   return (
     <section>
@@ -394,7 +415,7 @@ export const PurchasePage = () => {
             <p className="subtle">一括割当で保存済みの行を、そのまま一覧で確認・登録できます。</p>
           </div>
           <div className="list-controls">
-            <button type="button" onClick={() => void saveBulk()} disabled={saving}>{saving ? '保存中...' : `選択行を保存 (${selectedCount})`}</button>
+            <button type="button" onClick={() => void saveBulk()} disabled={!isDeliveryRangeValid || saving}>{saving ? '保存中...' : `選択行を保存 (${selectedCount})`}</button>
           </div>
         </div>
 
@@ -406,10 +427,7 @@ export const PurchasePage = () => {
         ) : null}
 
         <div className="list-controls" style={{ marginBottom: 12 }}>
-          <label className="filter-label">
-            納品日
-            <input type="date" value={deliveryDate} onChange={(event) => setDeliveryDate(event.target.value)} />
-          </label>
+          <WorkflowDateRangeFilter range={deliveryRange} onChange={setDeliveryRange} label="納品日" />
           <fieldset className="status-filter-group">
             <legend>注文状態</legend>
             {(['allocated', 'purchased'] as OrderStatus[]).map((status) => (
@@ -437,7 +455,9 @@ export const PurchasePage = () => {
           <button type="button" className="secondary" onClick={() => { setCustomerFilter(''); setProductFilter(''); setSupplierFilter(''); }}>フィルター解除</button>
         </div>
 
-        <div className="table-wrap">
+        {!isDeliveryRangeValid ? (
+          <div className="state-box" role="status">有効な日付範囲を入力してください</div>
+        ) : <div className="table-wrap">
           <table className="purchase-result-table">
               <thead>
                 <tr>
@@ -476,7 +496,7 @@ export const PurchasePage = () => {
                         />
                       </td>
                       <td className="col-order-no">
-                        {r.orderId ? <Link to={`/orders/${r.orderId}/edit`} className="order-link">{r.orderNo}</Link> : r.orderNo}
+                        {r.orderId ? <Link to={`/orders/${r.orderId}/edit`} state={{ returnTo }} className="order-link">{r.orderNo}</Link> : r.orderNo}
                       </td>
                       <td className="col-customer">{r.customerName}</td>
                       <td className="col-product">{r.productName}</td>
@@ -550,7 +570,7 @@ export const PurchasePage = () => {
                 })}
               </tbody>
             </table>
-        </div>
+        </div>}
       </div>
     </section>
   );

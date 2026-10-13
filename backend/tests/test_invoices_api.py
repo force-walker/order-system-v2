@@ -1625,6 +1625,29 @@ def test_invoice_draft_list_margin_formula_and_edge_cases():
     assert float(row["gross_margin_pct"]) == 25.0
     assert row["gross_margin_unavailable"] is False
 
+    in_range = client.get(
+        "/api/v1/invoices/draft-list",
+        params={"date_from": str(date.today()), "date_to": str(date.today())},
+    )
+    assert any(item["invoice_id"] == invoice_id for item in in_range.json())
+    out_of_range = client.get(
+        "/api/v1/invoices/draft-list",
+        params={"date_from": "2099-01-01", "date_to": "2099-01-31"},
+    )
+    assert all(item["invoice_id"] != invoice_id for item in out_of_range.json())
+    invalid_drafts = client.get(
+        "/api/v1/invoices/draft-list",
+        params={"date_from": "2026-11-01", "date_to": "2026-10-01"},
+    )
+    assert invalid_drafts.status_code == 422
+    assert invalid_drafts.json()["detail"]["code"] == "INVALID_DATE_RANGE"
+    invalid_candidates = client.get(
+        "/api/v1/invoices/draft-candidates",
+        params={"date_from": "2026-11-01", "date_to": "2026-10-01"},
+    )
+    assert invalid_candidates.status_code == 422
+    assert invalid_candidates.json()["detail"]["code"] == "INVALID_DATE_RANGE"
+
     # 請求単価=0 は計算不可
     invoice_item_id = row["invoice_item_id"]
     patched = client.patch(

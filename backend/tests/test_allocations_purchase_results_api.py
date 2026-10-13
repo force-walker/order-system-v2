@@ -730,6 +730,15 @@ def test_purchase_result_work_queue_and_history_separation():
     assert active_id in hist_ids
     assert deferred_id in hist_ids
 
+    # allocation_ids is an exact screen-data lookup and must not be truncated by
+    # the generic history page limit (the former UI used an arbitrary 500 rows).
+    selected = client.get(
+        "/api/v1/purchase-results/queue/history",
+        params=[("allocation_ids", str(aid)), ("limit", "1")],
+    )
+    assert selected.status_code == 200
+    assert {row["id"] for row in selected.json()} == {active_id, deferred_id}
+
 
 def test_purchase_result_invoice_qty_is_server_managed():
     aid = _seed_allocation(final_qty=10)

@@ -81,9 +81,12 @@ const toItem = (row: ApiPurchaseResultResponse): PurchaseResultItem => ({
 const toQuery = (filter: PurchaseResultFilter): string => {
   const params = new URLSearchParams();
   if (filter.allocationId) params.set('allocation_id', String(filter.allocationId));
+  filter.allocationIds?.forEach((allocationId) => params.append('allocation_ids', String(allocationId)));
   if (filter.supplierId) params.set('supplier_id', String(filter.supplierId));
-  params.set('limit', String(filter.limit ?? 100));
-  params.set('offset', String(filter.offset ?? 0));
+  if (!filter.allocationIds) {
+    params.set('limit', String(filter.limit ?? 100));
+    params.set('offset', String(filter.offset ?? 0));
+  }
   return params.toString();
 };
 

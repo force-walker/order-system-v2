@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { apiRequestWithAuth } from 'shared/authenticatedApiClient';
-import { bulkUpsertPurchaseResults, generateDraftInvoiceFromPurchase } from './purchaseService';
+import { bulkUpsertPurchaseResults, generateDraftInvoiceFromPurchase, listPurchaseResults } from './purchaseService';
 
 vi.mock('shared/authenticatedApiClient', () => ({ apiRequestWithAuth: vi.fn() }));
 
@@ -46,6 +46,18 @@ it('maps bulk-upsert response IDs to the frontend contract', async () => {
   });
   const body = request.mock.calls[0][1]?.body as { items: Array<Record<string, unknown>> };
   expect(body.items[0]).not.toHaveProperty('invoice_qty');
+});
+
+it('requests all persisted results for the visible allocation IDs in one call', async () => {
+  request.mockResolvedValueOnce(Response.json([]));
+  const allocationIds = Array.from({ length: 501 }, (_, index) => index + 11);
+  await listPurchaseResults({ allocationIds });
+  const url = String(request.mock.calls[0][0]);
+  const params = new URL(url, 'http://test').searchParams;
+  const serializedIds = params.getAll('allocation_ids');
+  expect(serializedIds).toHaveLength(501);
+  expect(serializedIds[serializedIds.length - 1]).toBe('511');
+  expect(request).toHaveBeenCalledTimes(1);
 });
 
 it('sends purchase-result IDs and consumes invoice_id without a frontend draft number', async () => {

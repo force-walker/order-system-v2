@@ -359,6 +359,30 @@ def test_create_order_success_and_list():
     assert uuid_detail_res.json()["id"] == order_id
 
 
+def test_list_orders_filters_delivery_date_range_inclusively():
+    cid = _seed_customer("CUST-ORDER-DATE-RANGE")
+    client = _client()
+    ids = []
+    for delivery_date in ("2026-10-01", "2026-10-15", "2026-11-01"):
+        created = _create_order_with_required_item(client, {
+            "customer_id": cid,
+            "delivery_date": delivery_date,
+            "note": f"range-{delivery_date}",
+        })
+        assert created.status_code == 201
+        ids.append(created.json()["id"])
+
+    response = client.get("/api/v1/orders", params={"date_from": "2026-10-01", "date_to": "2026-10-31"})
+    assert response.status_code == 200
+    returned = {row["id"] for row in response.json()}
+    assert ids[0] in returned
+    assert ids[1] in returned
+    assert ids[2] not in returned
+    invalid = client.get("/api/v1/orders", params={"date_from": "2026-11-01", "date_to": "2026-10-01"})
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"]["code"] == "INVALID_DATE_RANGE"
+
+
 def test_default_delivery_date_boundary_rule_hk_tz():
     # Tuesday before cutoff stays Tuesday; at cutoff Wednesday is skipped.
     assert _default_delivery_date_by_hk_time(datetime(2026, 4, 14, 12, 59, tzinfo=HK_TZ)) == date(2026, 4, 14)

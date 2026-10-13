@@ -1,6 +1,6 @@
 import type { EntityId } from 'shared/entityId';
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { RelatedDocuments } from 'components/common/RelatedDocuments';
 import { finalizeInvoiceDraft, finalizeInvoiceItemLine, getInvoiceDraftItems, getInvoiceDraftSummary } from 'features/orders/services/invoiceService';
@@ -10,6 +10,8 @@ import { toActionableMessage } from 'shared/error';
 export const InvoiceDraftDetailPage = () => {
   const { invoiceId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? '/invoices/drafts';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rows, setRows] = useState<InvoiceDraftItem[]>([]);
@@ -41,7 +43,7 @@ export const InvoiceDraftDetailPage = () => {
     setFinalizing(true);
     try {
       await finalizeInvoiceDraft(invoiceId ?? '');
-      navigate('/invoices/drafts');
+      navigate(returnTo);
     } catch (e) {
       setError(toActionableMessage(e, '請求確定に失敗しました。'));
     } finally {
@@ -76,7 +78,7 @@ export const InvoiceDraftDetailPage = () => {
           </div>
           <div className="list-controls">
             {invoiceId ? <RelatedDocuments type="invoice" id={invoiceId} /> : null}
-            <button type="button" className="secondary" onClick={() => navigate('/invoices/drafts')}>戻る</button>
+            <button type="button" className="secondary" onClick={() => navigate(returnTo)}>戻る</button>
             <button type="button" onClick={() => void onFinalize()} disabled={finalizing}>{finalizing ? '発行中...' : '請求書発行'}</button>
           </div>
         </div>

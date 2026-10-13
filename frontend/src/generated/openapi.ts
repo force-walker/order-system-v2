@@ -7442,6 +7442,8 @@ export interface operations {
             query?: {
                 unallocated_only?: boolean;
                 delivery_date?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
                 order_status?: components["schemas"]["OrderStatus"][] | null;
                 supplier_id?: number | null;
                 product_name?: string | null;
@@ -7563,6 +7565,8 @@ export interface operations {
         parameters: {
             query?: {
                 stale_delivery_only?: boolean;
+                date_from?: string | null;
+                date_to?: string | null;
             };
             header?: never;
             path?: never;
@@ -8665,6 +8669,7 @@ export interface operations {
                 customer_id?: number | null;
                 product_id?: number | null;
                 supplier_id?: number | null;
+                allocation_ids?: number[] | null;
                 limit?: number;
                 offset?: number;
             };
@@ -8959,7 +8964,10 @@ export interface operations {
     };
     list_invoice_draft_rows_api_v1_invoices_draft_list_get: {
         parameters: {
-            query?: never;
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8973,6 +8981,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvoiceDraftListRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -9139,6 +9156,8 @@ export interface operations {
         parameters: {
             query?: {
                 delivery_date?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
                 customer_id?: number | null;
             };
             header?: never;

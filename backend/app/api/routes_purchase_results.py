@@ -384,6 +384,7 @@ def list_purchase_result_history(
     customer_id: int | None = Query(default=None, gt=0),
     product_id: int | None = Query(default=None, gt=0),
     supplier_id: int | None = Query(default=None, gt=0),
+    allocation_ids: list[int] | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -408,8 +409,13 @@ def list_purchase_result_history(
         query = query.filter(Product.id == product_id)
     if supplier_id is not None:
         query = query.filter(PurchaseResult.supplier_id == supplier_id)
+    if allocation_ids is not None:
+        if not allocation_ids or any(allocation_id <= 0 for allocation_id in allocation_ids):
+            raise HTTPException(status_code=422, detail={"code": "VALIDATION_ERROR", "message": "allocation_ids must contain positive IDs"})
+        query = query.filter(PurchaseResult.allocation_id.in_(set(allocation_ids)))
 
-    rows = query.order_by(PurchaseResult.recorded_at.desc(), PurchaseResult.id.desc()).offset(offset).limit(limit).all()
+    ordered = query.order_by(PurchaseResult.recorded_at.desc(), PurchaseResult.id.desc())
+    rows = ordered.all() if allocation_ids is not None else ordered.offset(offset).limit(limit).all()
     return [_to_purchase_result_response(db, row) for row in rows]
 
 

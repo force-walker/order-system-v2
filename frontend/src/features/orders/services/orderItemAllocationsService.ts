@@ -109,12 +109,16 @@ export const listSupplierFilterOptions = async (): Promise<SupplierFilterOption[
 export const listOrderItemAllocationWorkItems = async (params: {
   unallocatedOnly: boolean;
   deliveryDate?: string;
+  dateFrom?: string;
+  dateTo?: string;
   orderStatuses?: OrderStatus[];
   supplierId?: number;
 }): Promise<OrderItemAllocationWorkItem[]> => {
   const query = new URLSearchParams();
   if (params.unallocatedOnly) query.set('unallocated_only', 'true');
   if (params.deliveryDate) query.set('delivery_date', params.deliveryDate);
+  if (params.dateFrom) query.set('date_from', params.dateFrom);
+  if (params.dateTo) query.set('date_to', params.dateTo);
   params.orderStatuses?.forEach((status) => query.append('order_status', status));
   if (params.supplierId) query.set('supplier_id', String(params.supplierId));
 

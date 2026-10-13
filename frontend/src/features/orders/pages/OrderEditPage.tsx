@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState } from 'components/common/AsyncState';
 import { OrderForm } from 'features/orders/components/OrderForm';
 import { clearDirtyOrderStatus, getOrder, hasDirtyOrderStatus, listCustomers, listProducts, updateOrder } from 'features/orders/services/ordersService';
@@ -10,6 +10,8 @@ import { RelatedDocuments } from 'components/common/RelatedDocuments';
 export const OrderEditPage = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo ?? '/orders';
 
   const [customers, setCustomers] = useState<CustomerOption[] | null>(null);
   const [products, setProducts] = useState<ProductOption[] | null>(null);
@@ -80,7 +82,7 @@ export const OrderEditPage = () => {
   const handleSubmit = async (payload: CreateOrderRequest) => {
     await updateOrder(orderIdValue, payload);
     sessionStorage.setItem('osv2_toast', JSON.stringify({ type: 'success', message: '注文を更新しました' }));
-    navigate('/orders');
+    navigate(returnTo);
   };
 
   if (error) return <ErrorState title="データの取得に失敗しました" description={error} actionLabel="再試行" onAction={() => window.location.reload()} />;

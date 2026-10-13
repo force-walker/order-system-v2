@@ -192,6 +192,7 @@ export type PurchaseResultItem = {
 
 export type PurchaseResultFilter = {
   allocationId?: number;
+  allocationIds?: number[];
   supplierId?: number;
   keyword?: string;
   limit?: number;
